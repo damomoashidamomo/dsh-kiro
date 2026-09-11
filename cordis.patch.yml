@@ -101,6 +101,31 @@
 - id: tool-web
   disabled: false
 
+# ── DSH 0.1.2-rc.1 has internal version drift between dsh-base plugins:
+# dsh-session-persistence-jsonl imports DEFAULT_PREPARED_SESSION_CACHE_SIZE
+# from dsh-session-persistence, but the persistence package at this version
+# doesn't export it. dsh-subagent and dsh-tool-subagent import
+# admitPromptContent from dsh-attachment, but the attachment package
+# at this version doesn't export it either. The kiro TUI is a single-session
+# surface that doesn't need subagent orchestration, so disable those rows.
+- id: session-persistence-jsonl
+  disabled: true
+
+- id: subagent
+  disabled: true
+
+- id: tool-subagent
+  disabled: true
+
+- id: tool-subagent-fork
+  disabled: true
+
+- id: tool-subagent-control
+  disabled: true
+
+- id: tool-subagent-list-agents
+  disabled: true
+
 # The goal-rounds lifecycle lives in the host plane even when the agent plane
 # owns the per-agent rows; the Web surface moves the same rows behind presets,
 # but the TUI does not run presets.
