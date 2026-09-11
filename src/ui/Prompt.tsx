@@ -29,9 +29,13 @@ export interface PromptProps {
   /** Submit handler — receives the trimmed text and pending images. */
   readonly onSubmit: (text: string, images: readonly PendingImage[]) => void
   /** Notify the parent when a special prefix is active (`/`, `@`, `!`). */
-  readonly onPrefix?: (prefix: '/' | '@' | '!' | undefined) => void
+  readonly onPrefix?: (prefix: '/' | '@' | '!' | undefined, query: string) => void
   /** Initial history to seed the buffer with. */
   readonly history?: readonly string[]
+  /** Move the autocomplete highlight by `delta` (typically ±1 on arrow keys). */
+  readonly onAutocompleteMove?: (delta: number) => void
+  /** Commit the currently highlighted autocomplete entry. */
+  readonly onAutocompleteCommit?: () => void
 }
 
 /** Render the prompt input row. */
@@ -41,6 +45,8 @@ export function Prompt({
   onSubmit,
   onPrefix,
   history = [],
+  onAutocompleteMove,
+  onAutocompleteCommit,
 }: PromptProps): JSX.Element {
   const [buffer, setBuffer] = useState<PromptBuffer>(() => emptyBuffer(history))
 
@@ -54,7 +60,9 @@ export function Prompt({
         Promise.resolve().then(() => onSubmit(text, images))
         return emptyBuffer(next.history)
       }
-      onPrefix?.(detectPrefix(next.text))
+      const prefix = detectPrefix(next.text)
+      const query = prefix !== undefined ? next.text.slice(1) : ''
+      onPrefix?.(prefix, query)
       return next
     })
   }, [onSubmit, onPrefix])
@@ -70,6 +78,10 @@ export function Prompt({
     }
     if (key.backspace || key.delete || input === '\b' || input === '\x7f') {
       handle(key.delete ? { kind: 'delete' } : { kind: 'backspace' })
+      return
+    }
+    if (key.tab && !key.shift) {
+      onAutocompleteCommit?.()
       return
     }
     if (key.leftArrow && key.meta) {
@@ -89,10 +101,18 @@ export function Prompt({
       return
     }
     if (key.upArrow) {
+      if (onAutocompleteMove !== undefined) {
+        onAutocompleteMove(-1)
+        return
+      }
       handle({ kind: 'history-prev' })
       return
     }
     if (key.downArrow) {
+      if (onAutocompleteMove !== undefined) {
+        onAutocompleteMove(+1)
+        return
+      }
       handle({ kind: 'history-next' })
       return
     }
@@ -105,10 +125,9 @@ export function Prompt({
       return
     }
     if (key.ctrl) {
-      // Other Ctrl chords are reserved for keybindings.
       return
     }
-    if (key.escape || key.tab || key.pageUp || key.pageDown || key.meta) {
+    if (key.escape || key.pageUp || key.pageDown || key.meta) {
       return
     }
     if (input.length > 0) {
@@ -119,6 +138,9 @@ export function Prompt({
   const draft = buffer.text
   const prefix = detectPrefix(draft)
   const placeholderText = draft === '' ? placeholder : ''
+  const lines = draft.split('\n')
+  const cursorLine = lines.length - 1
+  void cursorLine
 
   return (
     <Box flexDirection="column" borderStyle="round" borderColor={palette.enabled ? 'green' : undefined} paddingX={1} marginTop={1}>
@@ -131,12 +153,12 @@ export function Prompt({
             {prefix !== undefined ? (
               <>
                 <Text color={palette.enabled ? 'green' : undefined}>{prefix}</Text>
-                <Text>{draft.slice(1)}</Text>
+                <Text>{draft.slice(1) || palette.muted('_')}</Text>
               </>
             ) : draft === '' && placeholderText !== '' ? (
               <Text dimColor>{placeholderText}</Text>
             ) : (
-              <Text>{draft}</Text>
+              <Text>{draft || palette.muted('_')}</Text>
             )}
           </Text>
         </Box>

@@ -17,9 +17,13 @@ export interface PromptProps {
     /** Submit handler — receives the trimmed text and pending images. */
     readonly onSubmit: (text: string, images: readonly PendingImage[]) => void;
     /** Notify the parent when a special prefix is active (`/`, `@`, `!`). */
-    readonly onPrefix?: (prefix: '/' | '@' | '!' | undefined) => void;
+    readonly onPrefix?: (prefix: '/' | '@' | '!' | undefined, query: string) => void;
     /** Initial history to seed the buffer with. */
     readonly history?: readonly string[];
+    /** Move the autocomplete highlight by `delta` (typically ±1 on arrow keys). */
+    readonly onAutocompleteMove?: (delta: number) => void;
+    /** Commit the currently highlighted autocomplete entry. */
+    readonly onAutocompleteCommit?: () => void;
 }
 /** Render the prompt input row. */
-export declare function Prompt({ busy, placeholder, onSubmit, onPrefix, history, }: PromptProps): JSX.Element;
+export declare function Prompt({ busy, placeholder, onSubmit, onPrefix, history, onAutocompleteMove, onAutocompleteCommit, }: PromptProps): JSX.Element;

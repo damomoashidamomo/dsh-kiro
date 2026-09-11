@@ -18,6 +18,7 @@ import { parseCommand } from '@deepseek-ai/dsh-commands'
 import { App } from '../ui/App'
 import { SessionController } from './session-controller'
 import type { KiroStartup } from '../startup'
+import { parseShellCommand, runShell } from '../utils/shell'
 
 /** Stable Cordis plugin name. */
 export const name = 'kiro-runtime'
@@ -31,7 +32,6 @@ export function apply(ctx: Context): void {
   if (startup === undefined) {
     throw new Error('kiro-runtime: the launcher must provide ctx.kiroStartup before the tree mounts')
   }
-
   // Resolve the controlled agent asynchronously after the loader settles so
   // sibling plugins (commands, agents, steering) finish mounting.
   void mount(ctx, startup).catch((error: unknown) => {
@@ -81,6 +81,30 @@ async function mount(ctx: Context, startup: KiroStartup): Promise<void> {
   const submit = (text: string): void => {
     const trimmed = text.trim()
     if (trimmed === '') return
+
+    // Shell escape: `!cmd` runs a host shell command and reports the result
+    // as a system message instead of going to the model.
+    const shellCommand = parseShellCommand(trimmed)
+    if (shellCommand !== undefined) {
+      controller.pushSystem(`$ ${shellCommand}`)
+      controller.patchAgent({ status: 'running' })
+      void runShell(shellCommand)
+        .then((result) => {
+          const header = result.exitCode === 0 ? '✓' : result.exitCode === null ? '!' : '✗'
+          const line1 = `${header} exit=${result.exitCode ?? '?'}  duration=${result.durationMs}ms${result.truncated ? '  truncated' : ''}`
+          const body = result.output === '' ? '(no output)' : result.output
+          controller.pushSystem([line1, body].join('\n'))
+        })
+        .catch((error: unknown) => {
+          controller.pushSystem(`shell error: ${error instanceof Error ? error.message : String(error)}`)
+        })
+        .finally(() => {
+          controller.patchAgent({ status: 'idle' })
+        })
+      return
+    }
+
+    // Slash command dispatch.
     const parsed = parseCommand(trimmed)
     if (parsed !== undefined && commands !== undefined) {
       commands.execute(agent, trimmed, [], new AbortController().signal)
@@ -100,6 +124,8 @@ async function mount(ctx: Context, startup: KiroStartup): Promise<void> {
         })
       return
     }
+
+    // Plain text → agent followup.
     agent.followup(createUserMessage({
       content: [{ type: 'text', text: trimmed }],
       source: { kind: 'user' },
