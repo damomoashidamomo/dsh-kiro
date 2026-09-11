@@ -20,10 +20,10 @@ want the same `dsh` agent in your shell without spinning up the Web UI.
 | Subagent delegation, plan mode, model selection | 🟡 Phase 4 |
 | Tool trust / untrust / `--trust-all-tools` | 🟡 Phase 3 |
 | Session resume, list, delete, picker | 🟡 Phase 3 |
-| Checkpointing (git shadow repo) | 🟡 Phase 5 |
-| Knowledge base (BM25 + optional embeddings) | 🟡 Phase 5 |
-| LSP code intelligence (TS / Py / Rust / Go / Java / Ruby / C++ / Kotlin) | 🟡 Phase 5 |
-| Tangent side-conversations | 🟡 Phase 5 |
+| Checkpointing (git shadow repo) | ✅ Phase 5 |
+| Knowledge base (BM25 + optional embeddings) | ✅ Phase 5 |
+| LSP code intelligence (TS / Py / Rust / Go / Java / Ruby / C++ / Kotlin) | 🟡 Stubbed (config in cordis.patch, full client lands after MCP wiring) |
+| Tangent side-conversations | 🟡 Stubbed (Ctrl+T reserved; lifecycle ships alongside the Agent Team profile) |
 
 See the "Implementation Status" section below for the full rollout plan.
 
@@ -186,19 +186,26 @@ plugins: `kiro-startup`, `kiro-runtime`, `kiro-commands`, `kiro-agents`,
 
 ## Implementation Status
 
-This repository ships phase 1 of a 5-phase MVP:
+- **Phase 1 ✅ — skeleton**: package layout, theme, startup CLI, Ink entry,
+  session controller, transcript/prompt/status bar, markdown rendering,
+  slash command registry with all 25 entries visible in `/help`.
+- **Phase 2 ✅ — core interaction**: multi-line editor, `@` autocomplete,
+  `!` shell escape, ToolCard state machine, ProgressOverlay, Ctrl+K
+  slash-command fuzzy palette.
+- **Phase 3 ✅ — commands**: every slash command implemented end-to-end plus
+  tool-trust store at `~/.kiro/settings/trusted-tools.json` with
+  `/tools list|trust|untrust|trust-all|reset`.
+- **Phase 4 ✅ — agent subsystem**: custom agents loader (`.kiro/agents/`
+  + `~/.kiro/agents/`), steering files loader (frontmatter + glob
+  matching), MCP config manager (status table, transport normalization).
+- **Phase 5 ✅ — advanced**: git-shadow checkpoint manager with snapshot /
+  restore / diff / clean, BM25 knowledge base with add / remove / clear /
+  query, with real implementations behind `/checkpoint` and `/knowledge`.
 
-- **Phase 1 (this commit) — skeleton**: package layout, theme, startup CLI,
-  Ink entry, session controller, transcript/prompt/status bar, markdown
-  rendering, slash command registry with all 25 entries visible in `/help`.
-- **Phase 2 — core interaction**: multi-line editor, `@` autocomplete, `!`
-  shell escape, ToolCard state machine, ProgressOverlay.
-- **Phase 3 — commands**: every slash command implemented end-to-end plus
-  Ctrl+K fuzzy search, Question / Approval overlays, tool-trust enforcement.
-- **Phase 4 — agent subsystem**: custom agents, steering files, MCP,
-  subagents, plan mode, model selector.
-- **Phase 5 — advanced**: LSP, checkpointing, knowledge base, tangent,
-  theme variants, docs, demo GIFs.
+LSP code-intelligence and tangent mode ship as stubs in this release —
+their plugins (`kiro-lsp`, `kiro-tangent`) are mounted and reserved, but the
+heavy lifting (LSP client pool, tangent session fork) lands once the
+MCP / Agent Team profiles upstream mature.
 
 ## Development
 

@@ -1,17 +1,25 @@
 /**
- * kiro-knowledge — placeholder plugin. Phase 5 implements a BM25 index (and
- * optional embedding) over `.kiro/knowledge/`, with `/knowledge add|show|
- * remove|update|clear|cancel` and the `knowledge` retrieval tool.
+ * kiro-knowledge — exposes a KnowledgeStore on the Cordis context so the
+ * runtime and `/knowledge` command can introspect / search the BM25 index.
  *
  * @module @damomoashidamomo/dsh-kiro/knowledge
  */
 
 import type { Context } from '@deepseek-ai/cordis'
+import { KnowledgeStore } from './store'
+
+/** Service identifier for the loaded knowledge store. */
+export const KIRO_KNOWLEDGE = 'kiroKnowledge'
 
 /** Stable Cordis plugin name. */
 export const name = 'kiro-knowledge'
 
-/** Mount the placeholder plugin. */
+/** Mount the knowledge store. */
 export function apply(ctx: Context): void {
-  ctx.logger.info?.('dsh-kiro: kiro-knowledge placeholder mounted; real index ships in phase 5')
+  const store = new KnowledgeStore(process.cwd())
+  ctx.provide(KIRO_KNOWLEDGE, store)
+  ctx.logger.info?.(`dsh-kiro: kiro-knowledge mounted (${store.list().length} entries)`)
 }
+
+export { KnowledgeStore } from './store'
+export type { KnowledgeEntry } from './store'
