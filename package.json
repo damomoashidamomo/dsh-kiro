@@ -70,6 +70,7 @@
     "clean": "rm -rf lib *.tsbuildinfo"
   },
   "dependencies": {
+    "@deepseek-ai/dsh-base": ">=0.1.2-rc.1",
     "@modelcontextprotocol/sdk": "^1.0.4",
     "chalk": "^5.3.0",
     "commander": "^12.1.0",
