@@ -29,6 +29,8 @@ export declare class SessionController {
     subscribe(listener: StateListener): () => void;
     /** Snapshot of the current state. */
     getState(): SessionRenderState;
+    /** Wipe the visible transcript without touching the durable session log. */
+    clearTranscript(): void;
     /** Replace the controlled agent and rebind session events. */
     bindAgent(ctx: Context, agent: Agent): void;
     /** Detach the controlled agent. */

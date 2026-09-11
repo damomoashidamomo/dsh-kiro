@@ -104,6 +104,12 @@ export class SessionController {
     return this.state
   }
 
+  /** Wipe the visible transcript without touching the durable session log. */
+  clearTranscript(): void {
+    this.state = { ...this.state, messages: [] }
+    this.publish()
+  }
+
   /** Replace the controlled agent and rebind session events. */
   bindAgent(ctx: Context, agent: Agent): void {
     if (this.agent === agent) return

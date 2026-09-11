@@ -1,0 +1,1 @@
+{"version":3,"file":"compact.js","sourceRoot":"","sources":["../../src/commands/compact.ts"],"names":[],"mappings":"AAEA,MAAM,CAAC,MAAM,cAAc,GAAsB;IAC/C,IAAI,EAAE,SAAS;IACf,WAAW,EAAE,6DAA6D;IAC1E,OAAO,EAAE,KAAK,IAAI,EAAE;QAClB,OAAO;YACL,IAAI,EAAE,SAAS;YACf,IAAI,EAAE,oGAAoG;SAC3G,CAAA;IACH,CAAC;CACF,CAAA"}

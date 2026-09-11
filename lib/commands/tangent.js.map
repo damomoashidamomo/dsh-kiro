@@ -1,1 +1,1 @@
-{"version":3,"file":"tangent.js","sourceRoot":"","sources":["../../src/commands/tangent.ts"],"names":[],"mappings":"AAAA,OAAO,EAAE,WAAW,EAAE,MAAM,QAAQ,CAAA;AAEpC,MAAM,CAAC,MAAM,cAAc,GAAG,WAAW,CACvC,SAAS,EACT,wFAAwF,CACzF,CAAA"}
+{"version":3,"file":"tangent.js","sourceRoot":"","sources":["../../src/commands/tangent.ts"],"names":[],"mappings":"AAEA;;;;GAIG;AAEH,MAAM,CAAC,MAAM,cAAc,GAAsB;IAC/C,IAAI,EAAE,SAAS;IACf,WAAW,EAAE,wFAAwF;IACrG,OAAO,EAAE,KAAK,IAAI,EAAE;QAClB,OAAO;YACL,IAAI,EAAE,SAAS;YACf,IAAI,EAAE,kGAAkG;SACzG,CAAA;IACH,CAAC;CACF,CAAA"}

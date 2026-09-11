@@ -1,1 +1,2 @@
-export declare const todoCommand: import("@deepseek-ai/dsh-commands").CommandDefinition;
+import type { CommandDefinition } from '@deepseek-ai/dsh-commands';
+export declare const todoCommand: CommandDefinition;

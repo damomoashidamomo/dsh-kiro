@@ -1,1 +1,2 @@
-export declare const issueCommand: import("@deepseek-ai/dsh-commands").CommandDefinition;
+import type { CommandDefinition } from '@deepseek-ai/dsh-commands';
+export declare const issueCommand: CommandDefinition;

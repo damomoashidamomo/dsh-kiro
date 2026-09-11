@@ -19,6 +19,7 @@ import { modeCommand } from './mode'
 import { editorCommand } from './editor'
 import { replyCommand } from './reply'
 import { planCommand } from './plan'
+import { compactCommand } from './compact'
 import { todoCommand } from './todos'
 import { toolsCommand } from './tools'
 import { mcpCommand } from './mcp'
@@ -48,6 +49,7 @@ export const ALL_COMMANDS: readonly CommandDefinition[] = [
   editorCommand,
   replyCommand,
   planCommand,
+  compactCommand,
   todoCommand,
   toolsCommand,
   mcpCommand,

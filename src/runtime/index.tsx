@@ -113,6 +113,8 @@ async function mount(ctx: Context, startup: KiroStartup): Promise<void> {
             controller.pushSystem(`Unknown command: /${parsed.name}`)
             return
           }
+          // /clear additionally wipes the visible transcript.
+          if (parsed.name === 'clear') controller.clearTranscript()
           if (outcome.result.kind === 'success' && outcome.result.text !== undefined) {
             controller.pushSystem(outcome.result.text)
           } else if (outcome.result.kind === 'error') {
