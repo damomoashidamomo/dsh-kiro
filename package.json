@@ -14,15 +14,21 @@
       "types": "./lib/startup.d.ts",
       "default": "./lib/startup.js"
     },
+    "./*": {
+      "types": "./lib/types/*.d.ts",
+      "default": "./lib/*.js"
+    },
     "./cordis.patch.yml": "./cordis.patch.yml",
     "./src/*": "./src/*",
     "./package.json": "./package.json"
   },
   "files": [
-    "lib/index.js",
-    "lib/startup.js",
+    "lib/**/*.js",
+    "lib/**/*.js.map",
+    "lib/**/*.d.ts",
     "cordis.patch.yml",
-    "lib/types/**/*.d.ts"
+    "README.md",
+    "README.zh.md"
   ],
   "engines": {
     "node": ">=22"
