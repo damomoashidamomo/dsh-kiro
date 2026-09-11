@@ -24,7 +24,7 @@ import { parseShellCommand, runShell } from '../utils/shell'
 export const name = 'kiro-runtime'
 
 /** Core services required before the TUI can mount. */
-export const inject = ['kiroStartup', 'agents', 'agentDefaultModel', 'sessions', 'commands']
+export const inject = ['loader', 'kiroStartup', 'agents', 'agentDefaultModel', 'sessions', 'commands']
 
 /** Mount the Ink render loop. */
 export function apply(ctx: Context): void {
