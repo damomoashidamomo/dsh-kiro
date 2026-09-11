@@ -2,13 +2,14 @@
 # layer. Applied AFTER dsh-base's insert; rows here override base rows by id,
 # with the profile's own cordis.patch.yml and any --patch overlays still to come.
 #
+# dsh-base at this version already enables every core row (tools, goal,
+# plan-mode, compaction, subagents, workflow, session persistence), so this
+# patch is deliberately minimal: it only restates the surface-specific config
+# the TUI owns (persona, session-query, tool mode), disables the one Web-only
+# gateway row that dsh-base mounts, and inserts the dsh-kiro plugins.
+#
 # A patch replaces the targeted row's whole `config`, so each row below
 # restates every key it owns.
-#
-# Unlike the Web surface, the TUI is single-session and composes its agent
-# process-wide, so all the base rows that the Web surface disables must be
-# re-enabled here. We also disable every Web-only row (browser roster, host
-# webserver, frontend transport) since the TUI owns its own presentation.
 
 # ── dsh-base surface-specific values ────────────────────────────────────────
 
@@ -18,7 +19,8 @@
       You are a coding agent powered by the {{model}} model, running inside the
       Kiro TUI for DeepSeek Harness. Your working directory is {{cwd}}.
 
-# Full-text session search is opt-in; keep it on for /chat list and /resume.
+# Full-text session search is opt-in; the TUI keeps its own in-memory surface
+# for /chat list and /resume, so the sqlite index is never opened on disk.
 - id: session-query-sqlite
   config:
     path: ':memory:'
@@ -28,171 +30,11 @@
   config:
     mode: !!js process.env.DSH_TOOLS_MODE
 
-# ── re-enable the base rows the Web surface disables ────────────────────────
-# The TUI is a single Agent owned by the host process; it does not run agent
-# presets, so the host plane owns the agent plane entirely.
-
-- id: tool-bash
-  disabled: false
-
-- id: tool-pwsh
-  disabled: false
-
-- id: tool-jobs
-  disabled: false
-
-- id: tool-fs
-  disabled: false
-
-- id: tool-fs-search
-  disabled: false
-
-- id: tool-str-replace-editor
-  disabled: false
-
-- id: skill-filesystem
-  disabled: false
-
-- id: tool-skill
-  disabled: false
-
-- id: command-goal
-  disabled: false
-
-- id: tool-goal
-  disabled: false
-
-- id: plan-mode
-  disabled: false
-
-- id: compaction-basic
-  disabled: false
-
-- id: command-compact
-  disabled: false
-
-- id: tool-result-pruner
-  disabled: false
-
-- id: tool-subagent-control
-  disabled: false
-
-- id: tool-subagent-list-agents
-  disabled: false
-
-- id: tool-subagent
-  disabled: false
-
-- id: workflow-worker-thread
-  disabled: false
-
-- id: tool-workflow
-  disabled: false
-
-- id: tool-ralph
-  disabled: false
-
-- id: agent-instructions
-  disabled: false
-
-- id: tool-todo
-  disabled: false
-
-- id: tool-web
-  disabled: false
-
-# ── DSH 0.1.2-rc.1 has internal version drift between dsh-base plugins:
-# dsh-session-persistence-jsonl imports DEFAULT_PREPARED_SESSION_CACHE_SIZE
-# from dsh-session-persistence, but the persistence package at this version
-# doesn't export it. dsh-subagent and dsh-tool-subagent import
-# admitPromptContent from dsh-attachment, but the attachment package
-# at this version doesn't export it either. The kiro TUI is a single-session
-# surface that doesn't need subagent orchestration, so add empty shadow
-# entries at the top level that override and disable the broken dsh-base rows.
-# The cordis loader keys plugins by id, so a top-level row with the same id
-# shadows the inner one inserted by dsh-base.
-- id: session-persistence-jsonl
-  disabled: true
-
-- id: subagent
-  disabled: true
-
-- id: subagent-spawn-in-process
-  disabled: true
-
-- id: subagent-fork-in-process
-  disabled: true
-
-- id: tool-subagent-control
-  disabled: true
-
-- id: tool-subagent-list-agents
-  disabled: true
-
-- id: tool-subagent
-  disabled: true
-
-- id: tool-subagent-fork
-  disabled: true
-
-# The goal-rounds lifecycle lives in the host plane even when the agent plane
-# owns the per-agent rows; the Web surface moves the same rows behind presets,
-# but the TUI does not run presets.
-- id: goal
-  disabled: false
-
-- id: goal-round-driver
-  disabled: false
-
 # ── disable the Web-only host rows ──────────────────────────────────────────
-
-- id: client-hmr
-  disabled: true
-
-- id: modules
-  disabled: true
-
-- id: cordis-host-runner
-  disabled: true
-
-- id: cordis-client-runner
-  disabled: true
-
-- id: web-runtime
-  disabled: true
-
-- id: webserver
-  disabled: true
-
-- id: workspace
-  disabled: true
-
-- id: directory-picker
-  disabled: true
-
-- id: plugin-inventory
-  disabled: true
-
-- id: session-controller
-  disabled: true
-
-- id: settings-controller
-  disabled: true
-
-- id: workspace-controller
-  disabled: true
-
-- id: api-remotes
-  disabled: true
 
 # The Web surface's API gateway serves the browser; the TUI subscribes to the
 # Cordis event bus directly through the host plane.
 - id: typert-gateway
-  disabled: true
-
-# The agent-presets roster does not apply: the TUI composes its agent
-# process-wide from this bundle and the kiro-agents plugin.
-- id: agent-presets
   disabled: true
 
 # ── the dsh-kiro plugins ───────────────────────────────────────────────────

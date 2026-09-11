@@ -23,17 +23,23 @@ import { parseShellCommand, runShell } from '../utils/shell'
 /** Stable Cordis plugin name. */
 export const name = 'kiro-runtime'
 
-/** Core services required before the TUI can mount. */
-export const inject = ['loader', 'kiroStartup', 'agents', 'agentDefaultModel', 'sessions', 'commands']
+/**
+ * Declaring the app services in `inject` makes Cordis withhold this plugin's
+ * `apply` until every one of them exists, which is the only reliable ordering
+ * signal: `ctx.inject(['loader'], …)` fires as soon as the Loader itself
+ * exists — long before the bundle patches have created the dsh-base rows.
+ */
+export const inject = ['kiroStartup', 'agents', 'agentDefaultModel', 'sessions', 'commands']
 
-/** Mount the Ink render loop. */
+/** Mount the Ink render loop once every required service is live. */
 export function apply(ctx: Context): void {
   const startup = ctx.get('kiroStartup')
   if (startup === undefined) {
     throw new Error('kiro-runtime: the launcher must provide ctx.kiroStartup before the tree mounts')
   }
-  // Resolve the controlled agent asynchronously after the loader settles so
-  // sibling plugins (commands, agents, steering) finish mounting.
+  // Fire-and-forget exactly like the shipped headless runner: `apply` returns
+  // synchronously so the Loader can keep activating rows, and the awaited
+  // body resolves once the tree has settled.
   void mount(ctx, startup).catch((error: unknown) => {
     process.stderr.write(`dsh-kiro: ${error instanceof Error ? error.message : String(error)}\n`)
     process.exit(1)
@@ -41,6 +47,8 @@ export function apply(ctx: Context): void {
 }
 
 async function mount(ctx: Context, startup: KiroStartup): Promise<void> {
+  // Belt and braces: `inject` already guarantees the services, but the loader
+  // await also drains any rows that activate behind us.
   await ctx.get('loader')?.await()
 
   const agents = ctx.get('agents')
@@ -48,7 +56,15 @@ async function mount(ctx: Context, startup: KiroStartup): Promise<void> {
   const sessions = ctx.get('sessions')
   const commands = ctx.get('commands')
   if (agents === undefined || defaultModel === undefined || sessions === undefined) {
-    process.stderr.write('dsh-kiro: required services are not available (agents / agentDefaultModel / sessions)\n')
+    const loader = ctx.get('loader')
+    const entryIds = loader !== undefined
+      ? [...loader.entries()].map((e) => e.options.id).filter((id): id is string => id !== undefined)
+      : []
+    process.stderr.write(
+      `dsh-kiro: required services are not available after inject resolved `
+      + `(agents=${String(agents !== undefined)}, agentDefaultModel=${String(defaultModel !== undefined)}, `
+      + `sessions=${String(sessions !== undefined)}); loader entries: ${entryIds.slice(0, 20).join(', ')}\n`,
+    )
     process.exit(1)
     return
   }

@@ -212,21 +212,24 @@ function validate(startup: KiroStartup, program: Command): void {
 
 /** Print --list-models and exit. */
 async function printModels(ctx: Context, exit: AppExit): Promise<void> {
-  const agents = ctx.get('agents')
+  void ctx.get('agents') // Reserved for future /agent integration.
   const defaultModel = ctx.get('agentDefaultModel')
   if (defaultModel === undefined) {
     process.stderr.write('dsh-kiro: agentDefaultModel service is not available\n')
     exit(1)
     return
   }
+  // dsh-agent-default-model exposes currentSelection() and a settings-backed
+  // source. It does not advertise a model catalog method directly; print the
+  // current selection and reference the underlying dsh-llm registry for the
+  // full list.
   const selection = defaultModel.currentSelection()
   const lines: string[] = []
-  lines.push('Available models (* = default):')
-  for (const candidate of defaultModel.catalog()) {
-    const marker = candidate.provider === selection.provider && candidate.model === selection.model ? '*' : ' '
-    lines.push(` ${marker} ${candidate.provider}/${candidate.model}   ${candidate.description ?? ''}`)
-  }
-  void agents // Reserved for future /agent integration.
+  lines.push('Default selection:')
+  lines.push(` * ${selection.provider}/${selection.model}`)
+  lines.push('')
+  lines.push('(See /model <provider/model> to override; the live catalog is published')
+  lines.push(' by the @deepseek-ai/dsh-llm plugins mounted by dsh-base.)')
   process.stdout.write(`${lines.join('\n')}\n`)
   exit(0)
 }
