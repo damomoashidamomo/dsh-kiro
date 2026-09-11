@@ -107,23 +107,32 @@
 # doesn't export it. dsh-subagent and dsh-tool-subagent import
 # admitPromptContent from dsh-attachment, but the attachment package
 # at this version doesn't export it either. The kiro TUI is a single-session
-# surface that doesn't need subagent orchestration, so disable those rows.
+# surface that doesn't need subagent orchestration, so add empty shadow
+# entries at the top level that override and disable the broken dsh-base rows.
+# The cordis loader keys plugins by id, so a top-level row with the same id
+# shadows the inner one inserted by dsh-base.
 - id: session-persistence-jsonl
   disabled: true
 
 - id: subagent
   disabled: true
 
-- id: tool-subagent
+- id: subagent-spawn-in-process
   disabled: true
 
-- id: tool-subagent-fork
+- id: subagent-fork-in-process
   disabled: true
 
 - id: tool-subagent-control
   disabled: true
 
 - id: tool-subagent-list-agents
+  disabled: true
+
+- id: tool-subagent
+  disabled: true
+
+- id: tool-subagent-fork
   disabled: true
 
 # The goal-rounds lifecycle lives in the host plane even when the agent plane
