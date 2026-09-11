@@ -1,0 +1,26 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "ES2022",
+    "moduleResolution": "Bundler",
+    "lib": ["ES2022", "DOM"],
+    "jsx": "react-jsx",
+    "strict": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "forceConsistentCasingInFileNames": true,
+    "resolveJsonModule": true,
+    "allowSyntheticDefaultImports": true,
+    "noUncheckedIndexedAccess": false,
+    "declaration": true,
+    "declarationMap": false,
+    "sourceMap": true,
+    "outDir": "lib",
+    "rootDir": "src",
+    "isolatedModules": true,
+    "verbatimModuleSyntax": false,
+    "allowImportingTsExtensions": false
+  },
+  "include": ["src/**/*"],
+  "exclude": ["node_modules", "lib", "tests"]
+}

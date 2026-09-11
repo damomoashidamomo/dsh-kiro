@@ -1,0 +1,214 @@
+# dsh-kiro bundle patch: the Kiro-CLI-equivalent TUI surface over the dsh-base
+# layer. Applied AFTER dsh-base's insert; rows here override base rows by id,
+# with the profile's own cordis.patch.yml and any --patch overlays still to come.
+#
+# A patch replaces the targeted row's whole `config`, so each row below
+# restates every key it owns.
+#
+# Unlike the Web surface, the TUI is single-session and composes its agent
+# process-wide, so all the base rows that the Web surface disables must be
+# re-enabled here. We also disable every Web-only row (browser roster, host
+# webserver, frontend transport) since the TUI owns its own presentation.
+
+# ── dsh-base surface-specific values ────────────────────────────────────────
+
+- id: system-prompt
+  config:
+    persona: >-
+      You are a coding agent powered by the {{model}} model, running inside the
+      Kiro TUI for DeepSeek Harness. Your working directory is {{cwd}}.
+
+# Full-text session search is opt-in; keep it on for /chat list and /resume.
+- id: session-query-sqlite
+  config:
+    path: ':memory:'
+    openAt: never
+
+- id: tools
+  config:
+    mode: !!js process.env.DSH_TOOLS_MODE
+
+# ── re-enable the base rows the Web surface disables ────────────────────────
+# The TUI is a single Agent owned by the host process; it does not run agent
+# presets, so the host plane owns the agent plane entirely.
+
+- id: tool-bash
+  disabled: false
+
+- id: tool-pwsh
+  disabled: false
+
+- id: tool-jobs
+  disabled: false
+
+- id: tool-fs
+  disabled: false
+
+- id: tool-fs-search
+  disabled: false
+
+- id: tool-str-replace-editor
+  disabled: false
+
+- id: skill-filesystem
+  disabled: false
+
+- id: tool-skill
+  disabled: false
+
+- id: command-goal
+  disabled: false
+
+- id: tool-goal
+  disabled: false
+
+- id: plan-mode
+  disabled: false
+
+- id: compaction-basic
+  disabled: false
+
+- id: command-compact
+  disabled: false
+
+- id: tool-result-pruner
+  disabled: false
+
+- id: tool-subagent-control
+  disabled: false
+
+- id: tool-subagent-list-agents
+  disabled: false
+
+- id: tool-subagent
+  disabled: false
+
+- id: workflow-worker-thread
+  disabled: false
+
+- id: tool-workflow
+  disabled: false
+
+- id: tool-ralph
+  disabled: false
+
+- id: agent-instructions
+  disabled: false
+
+- id: tool-todo
+  disabled: false
+
+- id: tool-web
+  disabled: false
+
+# The goal-rounds lifecycle lives in the host plane even when the agent plane
+# owns the per-agent rows; the Web surface moves the same rows behind presets,
+# but the TUI does not run presets.
+- id: goal
+  disabled: false
+
+- id: goal-round-driver
+  disabled: false
+
+# ── disable the Web-only host rows ──────────────────────────────────────────
+
+- id: client-hmr
+  disabled: true
+
+- id: modules
+  disabled: true
+
+- id: cordis-host-runner
+  disabled: true
+
+- id: cordis-client-runner
+  disabled: true
+
+- id: web-runtime
+  disabled: true
+
+- id: webserver
+  disabled: true
+
+- id: workspace
+  disabled: true
+
+- id: directory-picker
+  disabled: true
+
+- id: plugin-inventory
+  disabled: true
+
+- id: session-controller
+  disabled: true
+
+- id: settings-controller
+  disabled: true
+
+- id: workspace-controller
+  disabled: true
+
+- id: api-remotes
+  disabled: true
+
+# The Web surface's API gateway serves the browser; the TUI subscribes to the
+# Cordis event bus directly through the host plane.
+- id: typert-gateway
+  disabled: true
+
+# The agent-presets roster does not apply: the TUI composes its agent
+# process-wide from this bundle and the kiro-agents plugin.
+- id: agent-presets
+  disabled: true
+
+# ── the dsh-kiro plugins ───────────────────────────────────────────────────
+
+- insert:
+    # CLI startup. The host's kiroStartup provider feeds both the runtime and
+    # the commands row through Cordis service lookup.
+    - id: kiro-startup
+      name: '@damomoashidamomo/dsh-kiro/startup'
+
+    # Ink render loop, session-event projection, keybindings, prompt lifecycle.
+    - id: kiro-runtime
+      name: '@damomoashidamomo/dsh-kiro/runtime'
+      inject: [kiroStartup]
+
+    # Slash command registry. Reads kiroStartup for resume/list-sessions choices
+    # and ctx.commands for /help-style discovery.
+    - id: kiro-commands
+      name: '@damomoashidamomo/dsh-kiro/commands'
+      inject: [kiroStartup]
+
+    # Custom agents loader. Reads .kiro/agents/ and ~/.kiro/agents/, registers
+    # one agent preset per discovered JSON.
+    - id: kiro-agents
+      name: '@damomoashidamomo/dsh-kiro/agents'
+
+    # Steering files. Loads .kiro/steering/*.md into system-prompt sections.
+    - id: kiro-steering
+      name: '@damomoashidamomo/dsh-kiro/steering'
+
+    # MCP server manager. Reads .kiro/settings/mcp.json and starts each entry.
+    - id: kiro-mcp
+      name: '@damomoashidamomo/dsh-kiro/mcp'
+
+    # Tool-trust store. /tools trust|untrust|reset persists to ~/.kiro/.
+    - id: kiro-trust
+      name: '@damomoashidamomo/dsh-kiro/trust'
+
+    # LSP client pool. Spawns one language server per detected language.
+    - id: kiro-lsp
+      name: '@damomoashidamomo/dsh-kiro/lsp'
+
+    # Checkpoint manager. Maintains a git shadow repo under .kiro/checkpoints/.
+    - id: kiro-checkpoint
+      name: '@damomoashidamomo/dsh-kiro/checkpoint'
+
+    # Knowledge base. Indexes files into a BM25 store at .kiro/knowledge/.
+    - id: kiro-knowledge
+      name: '@damomoashidamomo/dsh-kiro/knowledge'
+
+    # Tangent (side-conversation) mode. Owns tangent lifecycle.
+    - id: kiro-tangent
+      name: '@damomoashidamomo/dsh-kiro/tangent'
