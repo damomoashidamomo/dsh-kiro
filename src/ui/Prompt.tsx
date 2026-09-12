@@ -66,6 +66,9 @@ export function Prompt({
         || outcome.kind === 'delete'
         || outcome.kind === 'newline'
       ) {
+        const prefix = detectPrefix(next.text)
+        const query = prefix !== undefined ? next.text.slice(1) : ''
+        onPrefix?.(prefix, query)
         return { ...next, cursor: next.text.length }
       }
       if (outcome.kind === 'submit') {
