@@ -68,3 +68,22 @@ describe('CheckpointManager', () => {
     expect(existsSync(mgr.shadowDir)).toBe(false)
   })
 })
+
+describe('checkpoint listText', () => {
+  it('renders an empty listing with a hint', async () => {
+    const { listText } = await import('../src/commands/checkpoint')
+    expect(listText([])).toContain('no checkpoints')
+  })
+
+  it('formats checkpoints with id, short hash, date, and optional label', async () => {
+    const { listText } = await import('../src/commands/checkpoint')
+    const out = listText([
+      { id: 1, ref: 'refs/kiro/checkpoints/1', createdAt: 1700000000000, label: '', shortHash: 'abc12345', hash: 'abc12345full' },
+      { id: 2, ref: 'refs/kiro/checkpoints/2', createdAt: 1700000060000, label: 'before refactor', shortHash: 'def67890', hash: 'def67890full' },
+    ])
+    expect(out).toContain('2 checkpoint(s)')
+    expect(out).toContain('#1  abc12345')
+    expect(out).toContain('before refactor')
+    expect(out.split('\n').length).toBeGreaterThanOrEqual(3)
+  })
+})

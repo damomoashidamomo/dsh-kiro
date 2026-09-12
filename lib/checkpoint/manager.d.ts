@@ -47,6 +47,10 @@ export declare class CheckpointManager {
     /**
      * Snapshot the current working tree state. Returns the new checkpoint.
      * @param label - optional human-readable label.
+     * @throws when the working tree has no changes to record and there is no
+     *   prior checkpoint to deduplicate against. Snapshots of an empty tree
+     *   carry no information, so the manager refuses rather than fabricating a
+     *   zero-commit.
      */
     snapshot(label?: string): Checkpoint;
     /** Restore the working tree to a checkpoint by id (1-based). */
