@@ -3,8 +3,17 @@
  *
  * The Kiro CLI ships a purple palette; dsh-kiro swaps it for a dark-green
  * (墨绿/海绿/森林绿) family that reads well on both dark and light terminal
- * backgrounds. Color detection follows chalk's `supportsColor` rules so a
- * non-TTY environment (CI, redirect) automatically drops color codes.
+ * backgrounds. Color detection is explicit and predictable rather than
+ * deferred to chalk's auto-detection (which silently degrades to a no-op in
+ * many CI / TTY-masquerading environments, leaving the user with a blank
+ * white TUI):
+ *
+ *   - `NO_COLOR=1`              — force off
+ *   - `DSH_KIRO_COLOR=16|256|truecolor` — force a level
+ *   - otherwise                  — trust chalk (which checks TTY, TERM, CI, …)
+ *
+ * Set `DSH_KIRO_COLOR` when launching through a wrapper that hides chalk's
+ * TTY detection (CI runners, VS Code tasks, SSH mux, etc.).
  *
  * @module @damomoashidamomo/dsh-kiro/theme/palette
  */
@@ -52,8 +61,27 @@ export interface Palette {
     /** Reasoning-text tint. */
     readonly reasoning: ChalkInstance;
 }
-/** Frozen semantic palette for the current process. */
-export declare const palette: Palette;
+/**
+ * Semantic palette singleton for the current process.
+ *
+ * A live binding, not a frozen const: {@link resetPalette} reassigns it, and
+ * ESM importers observe the new value without re-importing. Each token is a
+ * chalk instance (or a color-swallowing proxy when color is disabled), so
+ * callers invoke them as functions: `palette.accent('text')`.
+ */
+export declare let palette: Palette;
+/**
+ * Rebuild the singleton against the current environment. Call this after
+ * setting `FORCE_COLOR` / `NO_COLOR` / `DSH_KIRO_COLOR` so colors are picked
+ * up even when the bundle imported `palette` before the env was settled.
+ */
+export declare function resetPalette(): Palette;
+/**
+ * Resolved color level for the current process (0–3). Re-reads the
+ * environment on every call; unlike `chalk.supportsColor` this is not a
+ * stale module-load snapshot.
+ */
+export declare function colorLevel(): number;
 /**
  * Render a banner-style gradient across the dsh-kiro ASCII art. The palette's
  * `accent` anchors the left and `accent2` anchors the right; the function uses

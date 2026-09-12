@@ -77,10 +77,10 @@ export function App({ controller, seedTask, activeAgentName, onSubmit }: AppProp
 
   return (
     <Box flexDirection="column" height="100%">
-      <Box flexDirection="column" paddingX={1} marginTop={1}>
-        <Text>{splash}</Text>
-      </Box>
-      <Transcript messages={state.messages} />
+      <Transcript
+        messages={state.messages}
+        header={{ kind: 'splash', key: 'splash', content: splash }}
+      />
       <ProgressOverlay
         toolName={activeToolName}
         busy={state.agent.status === 'running'}

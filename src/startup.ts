@@ -20,7 +20,7 @@ import {
   parseCmdline,
   type AppExit,
 } from '@deepseek-ai/dsh-cmdline'
-import { banner } from './theme/palette'
+import { banner, resetPalette, colorLevel } from './theme/palette'
 import { BANNER } from './theme/banner'
 
 declare module '@deepseek-ai/cordis' {
@@ -236,6 +236,31 @@ async function printModels(ctx: Context, exit: AppExit): Promise<void> {
 
 /** Mount the kiro-startup plugin. */
 export function apply(ctx: Context): void {
+  // --- Color initialization -------------------------------------------------
+  // chalk's `supportsColor` is unreliable in three common scenarios:
+  //   - launched from VS Code's terminal task runner (which masquerades as a
+  //     pipe but is actually a TTY),
+  //   - inside pnpm/node `npm exec` scripts (process.stdout.isTTY is false
+  //     even when the user's outer terminal IS a TTY),
+  //   - sandbox / CI agents that strip TTY detection.
+  // Be aggressive: on a real TTY without an explicit NO_COLOR / DSH_KIRO_COLOR=0
+  // override, force truecolor so the TUI never silently renders as blank white.
+  if (
+    process.stdout.isTTY === true
+    && process.env.NO_COLOR === undefined
+    && process.env.DSH_KIRO_COLOR === undefined
+  ) {
+    process.env.FORCE_COLOR = '3'
+  }
+  // The palette singleton was built at import time before we could see
+  // FORCE_COLOR; rebuild it now that the env is settled.
+  resetPalette()
+  // Diagnostic: report the RESOLVED level (env-aware) — chalk's
+  // `supportsColor` is a stale module-load snapshot and can't be trusted here.
+  const level = colorLevel()
+  const label = level === 3 ? 'truecolor' : level === 2 ? '256-color' : level === 1 ? '16-color' : 'no color'
+  process.stderr.write(`[dsh-kiro] color level: ${String(level)} (${label})\n`)
+
   const program = kiroCommand()
   program.action(() => {
     const startup = readStartup(program)
