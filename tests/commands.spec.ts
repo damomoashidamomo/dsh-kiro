@@ -102,3 +102,37 @@ describe('input helpers', () => {
     expect(buffer.cursor).toBe(6)
   })
 })
+
+describe('parseModel', () => {
+  it('splits provider and model on the first slash', async () => {
+    const { parseModel } = await import('../src/commands/model')
+    expect(parseModel('deepseek-official/deepseek-v4-flash')).toEqual({
+      provider: 'deepseek-official',
+      model: 'deepseek-v4-flash',
+    })
+  })
+
+  it('preserves slashes in the model name', async () => {
+    const { parseModel } = await import('../src/commands/model')
+    expect(parseModel('provider/a/b/c')).toEqual({
+      provider: 'provider',
+      model: 'a/b/c',
+    })
+  })
+
+  it('returns undefined for empty, missing slash, or empty halves', async () => {
+    const { parseModel } = await import('../src/commands/model')
+    expect(parseModel('')).toBeUndefined()
+    expect(parseModel('no-slash')).toBeUndefined()
+    expect(parseModel('/leading-slash')).toBeUndefined()
+    expect(parseModel('trailing-slash/')).toBeUndefined()
+  })
+
+  it('trims surrounding whitespace from both halves', async () => {
+    const { parseModel } = await import('../src/commands/model')
+    expect(parseModel('  provider / model  ')).toEqual({
+      provider: 'provider',
+      model: 'model',
+    })
+  })
+})

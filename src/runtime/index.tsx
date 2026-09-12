@@ -92,6 +92,10 @@ async function mount(ctx: Context, startup: KiroStartup): Promise<void> {
     activeProvider: selection.provider,
     contextLimitTokens: 128_000,
   })
+  // Expose the controller as a Cordis service so slash commands can update
+  // the status bar (e.g. /model <provider>/<model> after persisting the new
+  // selection) without needing a back-reference to this closure.
+  ctx.provide('kiroController', controller)
 
   // Slash command dispatch: every text submission routes through the parser.
   const submit = (text: string): void => {
