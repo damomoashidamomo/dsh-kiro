@@ -199,11 +199,13 @@ plugins: `kiro-startup`, `kiro-runtime`, `kiro-commands`, `kiro-agents`,
   + `~/.kiro/agents/`), steering files loader (frontmatter + glob
   matching), MCP config manager (status table, transport normalization).
 - **Phase 5 ✅ — advanced**: git-shadow checkpoint manager with snapshot /
-  restore / diff / clean, and a real BM25 knowledge base behind
-  `/knowledge`: recursive directory indexing, ranked search with snippets
-  (ASCII + CJK-aware tokenization, true IDF + length normalization),
-  update / remove / clear, plus automatic RAG — the top hits for each user
-  message are injected into the model context when the base is non-empty.
+  restore / diff / clean, a real BM25 knowledge base behind `/knowledge`
+  (recursive directory indexing, ranked search with snippets — ASCII +
+  CJK-aware tokenization, true IDF + length normalization — update /
+  remove / clear, and automatic RAG injection of the top hits into the
+  model context), plus `/todos` — the model's whole-list todo snapshots
+  (dsh-tool-todo `todo/write`) surfaced as view / resume / clear-finished /
+  delete.
 
 LSP code-intelligence and tangent mode ship as stubs in this release —
 their plugins (`kiro-lsp`, `kiro-tangent`) are mounted and reserved, but the
