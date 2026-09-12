@@ -53,6 +53,21 @@ export function Prompt({
   const handle = useCallback((outcome: InputOutcome) => {
     setBuffer(prev => {
       const next = applyOutcome(prev, outcome)
+      // The TUI prompt is a single-line shell: every keystroke that mutates
+      // the text also snaps the cursor to the end. Without this, the forward-
+      // delete key (the macOS "Delete" / "Backspace" key, which sends \x7f
+      // and reports as key.delete in Ink) would be a no-op whenever the
+      // cursor is already at the end of the draft, and the same keypress on
+      // Linux would delete the wrong character. Snapping makes backspace
+      // and forward-delete behave identically from the user's perspective.
+      if (
+        outcome.kind === 'insert'
+        || outcome.kind === 'backspace'
+        || outcome.kind === 'delete'
+        || outcome.kind === 'newline'
+      ) {
+        return { ...next, cursor: next.text.length }
+      }
       if (outcome.kind === 'submit') {
         const text = prev.text.trim()
         const images = prev.images
@@ -72,8 +87,14 @@ export function Prompt({
     // below, otherwise a Ctrl-modified keystroke (Ctrl+H from WSL, etc.)
     // gets swallowed by the general modifier early-returns and the user
     // cannot edit the draft.
+    //
+    // Both `key.backspace` (Ctrl+H / Linux / Windows Terminal) and
+    // `key.delete` (macOS, the "Delete" key that sends \x7f) are treated
+    // as "delete the char before the cursor" — in a single-line prompt
+    // that means deleting the last typed character from either end, since
+    // the handle() callback snaps the cursor to the end on every edit.
     if (key.backspace || key.delete || input === '\b' || input === '\x7f') {
-      handle(key.delete ? { kind: 'delete' } : { kind: 'backspace' })
+      handle({ kind: 'backspace' })
       return
     }
     if (key.return && !key.shift) {
@@ -135,7 +156,23 @@ export function Prompt({
       return
     }
     if (input.length > 0) {
-      handle({ kind: 'insert', text: input })
+      // When the terminal delivers a multi-byte chunk (PTY batching, fast
+      // key-repeat, some keyboard layouts), Ink fires useInput once with the
+      // full string and no per-character key flags. A chunk like "\b\bh" or
+      // "\x7fh" would otherwise be inserted as literal text and clutter the
+      // draft. Process each byte: backspace/delete bytes cancel the most
+      // recent character; everything else becomes a typed character.
+      if (input.length > 1 && /[\b\x7f]/.test(input)) {
+        for (const ch of input) {
+          if (ch === '\b' || ch === '\x7f') {
+            handle({ kind: 'backspace' })
+          } else {
+            handle({ kind: 'insert', text: ch })
+          }
+        }
+      } else {
+        handle({ kind: 'insert', text: input })
+      }
     }
   }, { isActive: true })
 
