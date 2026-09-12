@@ -68,16 +68,20 @@ export function Prompt({
   }, [onSubmit, onPrefix])
 
   useInput((input, key) => {
+    // Backspace / delete handling must run BEFORE the modifier shortcuts
+    // below, otherwise a Ctrl-modified keystroke (Ctrl+H from WSL, etc.)
+    // gets swallowed by the general modifier early-returns and the user
+    // cannot edit the draft.
+    if (key.backspace || key.delete || input === '\b' || input === '\x7f') {
+      handle(key.delete ? { kind: 'delete' } : { kind: 'backspace' })
+      return
+    }
     if (key.return && !key.shift) {
       handle({ kind: 'submit', text: buffer.text.trim(), images: buffer.images })
       return
     }
     if (key.return && key.shift) {
       handle({ kind: 'newline' })
-      return
-    }
-    if (key.backspace || key.delete || input === '\b' || input === '\x7f') {
-      handle(key.delete ? { kind: 'delete' } : { kind: 'backspace' })
       return
     }
     if (key.tab && !key.shift) {
@@ -124,9 +128,9 @@ export function Prompt({
       handle({ kind: 'cursor-end' })
       return
     }
-    if (key.ctrl) {
-      return
-    }
+    // Any other Ctrl-chord is a global shortcut (handled in App.tsx via
+    // mapKey); let it propagate instead of swallowing it here.
+    if (key.ctrl) return
     if (key.escape || key.pageUp || key.pageDown || key.meta) {
       return
     }
@@ -138,9 +142,6 @@ export function Prompt({
   const draft = buffer.text
   const prefix = detectPrefix(draft)
   const placeholderText = draft === '' ? placeholder : ''
-  const lines = draft.split('\n')
-  const cursorLine = lines.length - 1
-  void cursorLine
 
   return (
     <Box flexDirection="column" borderStyle="round" borderColor={palette.enabled ? 'green' : undefined} paddingX={1} marginTop={1}>
@@ -149,18 +150,16 @@ export function Prompt({
           {busy ? palette.warning(`${ICONS.agent} `) : palette.accent('> ')}
         </Text>
         <Box flexGrow={1} flexDirection="row">
-          <Text>
-            {prefix !== undefined ? (
-              <>
-                <Text color={palette.enabled ? 'green' : undefined}>{prefix}</Text>
-                <Text>{draft.slice(1) || palette.muted('_')}</Text>
-              </>
-            ) : draft === '' && placeholderText !== '' ? (
-              <Text dimColor>{placeholderText}</Text>
-            ) : (
-              <Text>{draft || palette.muted('_')}</Text>
-            )}
-          </Text>
+          {prefix !== undefined ? (
+            <Text>
+              <Text color={palette.enabled ? 'green' : undefined}>{prefix}</Text>
+              <Text>{draft.slice(1) || palette.muted('_')}</Text>
+            </Text>
+          ) : draft === '' && placeholderText !== '' ? (
+            <Text dimColor>{placeholderText}</Text>
+          ) : (
+            <Text>{draft || palette.muted('_')}</Text>
+          )}
         </Box>
       </Box>
       {buffer.images.length > 0 ? (
