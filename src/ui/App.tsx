@@ -6,12 +6,13 @@
  */
 
 import { Box, Text, useApp, useInput, useStdout } from 'ink'
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { Transcript } from './Transcript'
 import { Prompt } from './Prompt'
 import { StatusBar } from './StatusBar'
 import { ProgressOverlay } from './ProgressOverlay'
 import { SlashMenu } from './SlashMenu'
+import { PickerOverlay } from './PickerOverlay'
 import { Autocomplete, slashCandidates } from './Autocomplete'
 import { banner, palette } from '../theme/palette'
 import { BANNER } from '../theme/banner'
@@ -36,8 +37,18 @@ export function App({ controller, seedTask, activeAgentName, onSubmit }: AppProp
   const [slashMenuOpen, setSlashMenuOpen] = useState<boolean>(false)
   const [prefixQuery, setPrefixQuery] = useState<string>('')
   const [autocompleteSelected, setAutocompleteSelected] = useState<number>(0)
+  // kiro-style two-stage Ctrl+C: first press cancels the running turn, a
+  // second press while still cancelling exits the TUI back to the shell.
+  const interruptArmed = useRef<boolean>(false)
 
   useEffect(() => controller.subscribe(setState), [controller])
+
+  // Returning to idle disarms the two-stage exit (the cancel completed).
+  useEffect(() => {
+    if (state.agent.status === 'idle') {
+      interruptArmed.current = false
+    }
+  }, [state.agent.status])
 
   useEffect(() => {
     if (seeded) return
@@ -51,12 +62,25 @@ export function App({ controller, seedTask, activeAgentName, onSubmit }: AppProp
   // routes key events to all `useInput` subscribers in registration order.
   useInput((input, key) => {
     if (slashMenuOpen) return
+    if (state.picker !== undefined) return
     if (state.overlay.kind !== 'none') return
     const action = mapKey({ input, key })
     if (action === 'quit') {
       exit()
     } else if (action === 'interrupt') {
-      controller.patchAgent({ status: 'cancelling' })
+      const status = state.agent.status
+      if (status === 'running' || status === 'cancelling') {
+        if (interruptArmed.current) {
+          // Second Ctrl+C while the turn is still being cancelled → exit.
+          exit()
+        } else {
+          interruptArmed.current = true
+          controller.patchAgent({ status: 'cancelling' })
+        }
+      } else {
+        // Idle: kiro exits on a single Ctrl+C (kiro.dev issue #6442).
+        exit()
+      }
     } else if (action === 'clear-screen') {
       process.stdout.write('\x1b[2J\x1b[H')
     } else if (action === 'open-slash-menu') {
@@ -87,6 +111,10 @@ export function App({ controller, seedTask, activeAgentName, onSubmit }: AppProp
     return undefined
   }, [state.messages])
 
+  const contextPct = state.agent.contextLimitTokens !== undefined && state.agent.contextLimitTokens > 0
+    ? Math.round((state.agent.contextUsedTokens / state.agent.contextLimitTokens) * 100)
+    : undefined
+
   return (
     <Box flexDirection="column" height="100%">
       <Transcript
@@ -99,7 +127,14 @@ export function App({ controller, seedTask, activeAgentName, onSubmit }: AppProp
         subtext={state.hasActiveTool ? 'executing…' : undefined}
       />
       <StatusBar agent={state.agent} prefix={prefix} activeAgentName={activeAgentName} />
-      {slashMenuOpen ? (
+      {state.picker !== undefined ? (
+        <PickerOverlay
+          picker={state.picker}
+          onMoveTo={(index) => controller.setPickerSelection(index)}
+          onSelect={() => controller.selectPickerItem()}
+          onClose={() => controller.closePicker()}
+        />
+      ) : slashMenuOpen ? (
         <SlashMenu
           initialQuery={prefix === '/' ? prefixQuery : ''}
           active={slashMenuOpen}
@@ -109,6 +144,7 @@ export function App({ controller, seedTask, activeAgentName, onSubmit }: AppProp
       ) : (
         <Prompt
           busy={state.agent.status === 'running'}
+          contextPct={contextPct}
           onSubmit={(text) => {
             onSubmit(text)
             setPrefix(undefined)

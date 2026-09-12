@@ -93,6 +93,26 @@ export type OverlayKind =
   | { kind: 'progress'; label: string }
   | { kind: 'diff-view'; a: string; b: string }
 
+/** One selectable row in an interactive picker (kiro-style list chooser). */
+export interface PickerItem {
+  /** Stable machine value carried back to the opener on selection. */
+  readonly value: string
+  /** Primary display text. */
+  readonly label: string
+  /** Secondary display text (right-aligned hint, e.g. provider/model id). */
+  readonly hint?: string
+  /** Mark this row as the currently active choice. */
+  readonly current?: boolean
+}
+
+/** Live state of the interactive picker overlay. */
+export interface PickerState {
+  readonly title: string
+  readonly items: readonly PickerItem[]
+  /** Index of the highlighted row. */
+  readonly selected: number
+}
+
 /** Per-session render state the SessionController publishes. */
 export interface SessionRenderState {
   /** Active session id; `undefined` before the first agent is created. */
@@ -103,6 +123,8 @@ export interface SessionRenderState {
   agent: AgentStatusSnapshot
   /** Active overlay, if any. */
   overlay: OverlayKind
+  /** Live interactive picker (kiro-style chooser), or `undefined` when closed. */
+  picker: PickerState | undefined
   /** Whether a tool invocation is currently being streamed. */
   hasActiveTool: boolean
 }

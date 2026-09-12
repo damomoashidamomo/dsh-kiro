@@ -12,6 +12,8 @@ import { type PendingImage } from '../runtime/input';
 export interface PromptProps {
     /** Whether the agent is currently processing a turn. */
     readonly busy: boolean;
+    /** Context usage percent (0-100) rendered left of the gutter, kiro-style. */
+    readonly contextPct?: number;
     /** Placeholder when the draft is empty. */
     readonly placeholder?: string;
     /** Submit handler — receives the trimmed text and pending images. */
@@ -26,4 +28,4 @@ export interface PromptProps {
     readonly onAutocompleteCommit?: () => void;
 }
 /** Render the prompt input row. */
-export declare function Prompt({ busy, placeholder, onSubmit, onPrefix, history, onAutocompleteMove, onAutocompleteCommit, }: PromptProps): JSX.Element;
+export declare function Prompt({ busy, contextPct, placeholder, onSubmit, onPrefix, history, onAutocompleteMove, onAutocompleteCommit, }: PromptProps): JSX.Element;

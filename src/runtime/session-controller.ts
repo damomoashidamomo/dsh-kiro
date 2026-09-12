@@ -17,6 +17,7 @@ import type {
   AgentStatusSnapshot,
   Message,
   OverlayKind,
+  PickerItem,
   SessionRenderState,
   ToolRecord,
 } from './types'
@@ -39,6 +40,7 @@ function emptyState(): SessionRenderState {
       contextLimitTokens: undefined,
     },
     overlay: { kind: 'none' },
+    picker: undefined,
     hasActiveTool: false,
   }
 }
@@ -155,6 +157,73 @@ export class SessionController {
     }
     this.state = { ...this.state, messages: [...this.state.messages, message] }
     this.publish()
+  }
+
+  // --- Interactive picker (kiro-style list chooser) ---
+
+  /** Selection callback stored out-of-band (never part of the render state). */
+  private pickerOnSelect: ((item: PickerItem) => void) | undefined
+
+  /**
+   * Open an interactive picker. The command handler builds the items and
+   * supplies an `onSelect` closure (it owns the apply logic — persist,
+   * patch, push feedback); the controller only manages selection state.
+   */
+  openPicker(request: {
+    title: string
+    items: readonly PickerItem[]
+    onSelect: (item: PickerItem) => void
+  }): void {
+    if (request.items.length === 0) return
+    // Open with the current choice highlighted, kiro-style.
+    const currentIndex = request.items.findIndex((item) => item.current === true)
+    this.pickerOnSelect = request.onSelect
+    this.state = {
+      ...this.state,
+      picker: {
+        title: request.title,
+        items: request.items,
+        selected: currentIndex >= 0 ? currentIndex : 0,
+      },
+    }
+    this.publish()
+  }
+
+  /** Close the picker without selecting. */
+  closePicker(): void {
+    this.pickerOnSelect = undefined
+    if (this.state.picker === undefined) return
+    this.state = { ...this.state, picker: undefined }
+    this.publish()
+  }
+
+  /** Move the highlighted row by `delta`, clamped to the list. */
+  movePickerSelection(delta: number): void {
+    const picker = this.state.picker
+    if (picker === undefined || picker.items.length === 0) return
+    this.setPickerSelection(picker.selected + delta)
+  }
+
+  /** Jump the highlight to an absolute index (used by filtered picker views). */
+  setPickerSelection(index: number): void {
+    const picker = this.state.picker
+    if (picker === undefined || picker.items.length === 0) return
+    const selected = Math.max(0, Math.min(picker.items.length - 1, index))
+    if (selected === picker.selected) return
+    this.state = { ...this.state, picker: { ...picker, selected } }
+    this.publish()
+  }
+
+  /** Confirm the highlighted row: runs the opener's callback, then closes. */
+  selectPickerItem(): void {
+    const picker = this.state.picker
+    const callback = this.pickerOnSelect
+    if (picker === undefined || callback === undefined) return
+    const item = picker.items[picker.selected]
+    this.pickerOnSelect = undefined
+    this.state = { ...this.state, picker: undefined }
+    this.publish()
+    if (item !== undefined) callback(item)
   }
 
   /** Patch the agent snapshot (used by status bar updates outside the event bus). */

@@ -24,6 +24,8 @@ import {
 export interface PromptProps {
   /** Whether the agent is currently processing a turn. */
   readonly busy: boolean
+  /** Context usage percent (0-100) rendered left of the gutter, kiro-style. */
+  readonly contextPct?: number
   /** Placeholder when the draft is empty. */
   readonly placeholder?: string
   /** Submit handler — receives the trimmed text and pending images. */
@@ -41,6 +43,7 @@ export interface PromptProps {
 /** Render the prompt input row. */
 export function Prompt({
   busy,
+  contextPct,
   placeholder = 'Type a message, / for commands, @ for tools, ! for shell…',
   onSubmit,
   onPrefix,
@@ -161,21 +164,26 @@ export function Prompt({
     if (input.length > 0) {
       // When the terminal delivers a multi-byte chunk (PTY batching, fast
       // key-repeat, some keyboard layouts), Ink fires useInput once with the
-      // full string and no per-character key flags. A chunk like "\b\bh" or
-      // "\x7fh" would otherwise be inserted as literal text and clutter the
-      // draft. Process each byte: backspace/delete bytes cancel the most
-      // recent character; everything else becomes a typed character.
-      if (input.length > 1 && /[\b\x7f]/.test(input)) {
+      // full string and no per-character key flags. A chunk like "/model\r"
+      // or "\b\bh" would otherwise be inserted as literal text and clutter
+      // the draft. Process each byte: \r/\n submit the draft, backspace/
+      // delete bytes cancel the most recent character, everything else
+      // becomes a typed character.
+      if (input.length > 1 && /[\b\x7f\r\n]/.test(input)) {
         for (const ch of input) {
-          if (ch === '\b' || ch === '\x7f') {
+          if (ch === '\r' || ch === '\n') {
+            handle({ kind: 'submit', text: buffer.text, images: buffer.images })
+          } else if (ch === '\b' || ch === '\x7f') {
             handle({ kind: 'backspace' })
           } else {
             handle({ kind: 'insert', text: ch })
           }
         }
-      } else {
-        handle({ kind: 'insert', text: input })
+        return
       }
+      // Note: a single "\r" chunk arrives as key.return above (mapKey);
+      // a single control char here means a plain text byte.
+      handle({ kind: 'insert', text: input })
     }
   }, { isActive: true })
 
@@ -187,6 +195,7 @@ export function Prompt({
     <Box flexDirection="column" borderStyle="round" borderColor={palette.enabled ? 'green' : undefined} paddingX={1} marginTop={1}>
       <Box flexDirection="row">
         <Text color={palette.enabled ? 'green' : undefined}>
+          {contextPct !== undefined ? <Text dimColor>{`${contextPct}% `}</Text> : null}
           {busy ? palette.warning(`${ICONS.agent} `) : palette.accent('> ')}
         </Text>
         <Box flexGrow={1} flexDirection="row">

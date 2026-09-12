@@ -11,7 +11,7 @@
  */
 import type { Context } from '@deepseek-ai/cordis';
 import type { Agent } from '@deepseek-ai/dsh-agent';
-import type { AgentStatusSnapshot, OverlayKind, SessionRenderState } from './types';
+import type { AgentStatusSnapshot, OverlayKind, PickerItem, SessionRenderState } from './types';
 /** Subscriber callback when the render state changes. */
 export type StateListener = (state: SessionRenderState) => void;
 /**
@@ -39,6 +39,26 @@ export declare class SessionController {
     setOverlay(overlay: OverlayKind): void;
     /** Append a system message to the transcript (for slash command feedback). */
     pushSystem(text: string): void;
+    /** Selection callback stored out-of-band (never part of the render state). */
+    private pickerOnSelect;
+    /**
+     * Open an interactive picker. The command handler builds the items and
+     * supplies an `onSelect` closure (it owns the apply logic — persist,
+     * patch, push feedback); the controller only manages selection state.
+     */
+    openPicker(request: {
+        title: string;
+        items: readonly PickerItem[];
+        onSelect: (item: PickerItem) => void;
+    }): void;
+    /** Close the picker without selecting. */
+    closePicker(): void;
+    /** Move the highlighted row by `delta`, clamped to the list. */
+    movePickerSelection(delta: number): void;
+    /** Jump the highlight to an absolute index (used by filtered picker views). */
+    setPickerSelection(index: number): void;
+    /** Confirm the highlighted row: runs the opener's callback, then closes. */
+    selectPickerItem(): void;
     /** Patch the agent snapshot (used by status bar updates outside the event bus). */
     patchAgent(snapshot: Partial<AgentStatusSnapshot>): void;
     /** Notify subscribers of a state change. */
