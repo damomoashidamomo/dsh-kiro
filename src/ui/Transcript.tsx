@@ -54,7 +54,7 @@ export function Transcript({ messages, header }: TranscriptProps): JSX.Element {
     <Box flexDirection="column" flexGrow={1}>
       <Static items={staticItems}>
         {(item: StaticItem) => item.kind === 'splash' ? (
-          <Box key={item.key} flexDirection="column" paddingX={1} marginTop={1}>
+          <Box key={item.key} flexDirection="column" marginTop={1}>
             <Text>{item.content}</Text>
           </Box>
         ) : (
