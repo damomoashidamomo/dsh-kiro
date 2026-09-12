@@ -8,6 +8,7 @@
  * unordered lists, GFM tables (box-drawing), and horizontal rules.
  */
 
+import { Box, Text } from 'ink'
 import { renderMarkdown } from '../markdown/render'
 import { palette, ICONS } from '../theme/palette'
 import type { Message as MessageRecord } from '../runtime/types'
@@ -39,62 +40,64 @@ export function Message({ message }: MessageProps): JSX.Element {
 /** Render a user prompt with the `›` gutter. */
 function UserMessage({ text }: { text: string }): JSX.Element {
   return (
-    <box flexDirection="row" marginTop={1}>
-      <text>{palette.accent(`${ICONS.user} `)}</text>
-      <box flexDirection="column" flexGrow={1}>
-        <text>{text}</text>
-      </box>
-    </box>
+    <Box flexDirection="row" marginTop={1}>
+      <Text>{palette.accent(`${ICONS.user} `)}</Text>
+      <Box flexDirection="column" flexGrow={1}>
+        <Text>{text}</Text>
+      </Box>
+    </Box>
   )
 }
 
 /** Render an assistant message with markdown and streaming cursor. */
 function AssistantMessage({ text, streaming }: { text: string; streaming: boolean }): JSX.Element {
   const rendered = renderMarkdown(text)
-  const cursor = streaming ? palette.accent(' ▍') : ''
   return (
-    <box flexDirection="row" marginTop={1}>
-      <text>{palette.accent2(`${ICONS.assistant} `)}</text>
-      <box flexDirection="column" flexGrow={1}>
-        <text>{rendered}{cursor}</text>
-      </box>
-    </box>
+    <Box flexDirection="row" marginTop={1}>
+      <Text>{palette.accent2(`${ICONS.assistant} `)}</Text>
+      <Box flexDirection="column" flexGrow={1}>
+        <Text>
+          {rendered}
+          {streaming ? palette.accent(' ▍') : null}
+        </Text>
+      </Box>
+    </Box>
   )
 }
 
 /** Render a reasoning block in italic muted-green. */
 function ReasoningMessage({ text }: { text: string }): JSX.Element {
   return (
-    <box flexDirection="row" marginTop={1}>
-      <text>{palette.accentSoft(`${ICONS.reasoning} `)}</text>
-      <box flexDirection="column" flexGrow={1}>
-        <text>{palette.reasoning(text)}</text>
-      </box>
-    </box>
+    <Box flexDirection="row" marginTop={1}>
+      <Text>{palette.accentSoft(`${ICONS.reasoning} `)}</Text>
+      <Box flexDirection="column" flexGrow={1}>
+        <Text>{palette.reasoning(text)}</Text>
+      </Box>
+    </Box>
   )
 }
 
 /** Render a system message in muted dim. */
 function SystemMessage({ text }: { text: string }): JSX.Element {
   return (
-    <box flexDirection="row" marginTop={1}>
-      <text>{palette.muted(`${ICONS.system} `)}</text>
-      <box flexDirection="column" flexGrow={1}>
-        <text>{palette.muted(text)}</text>
-      </box>
-    </box>
+    <Box flexDirection="row" marginTop={1}>
+      <Text>{palette.muted(`${ICONS.system} `)}</Text>
+      <Box flexDirection="column" flexGrow={1}>
+        <Text>{palette.muted(text)}</Text>
+      </Box>
+    </Box>
   )
 }
 
 /** Render an error message in red. */
 function ErrorMessage({ text }: { text: string }): JSX.Element {
   return (
-    <box flexDirection="row" marginTop={1}>
-      <text>{palette.error(`${ICONS.error} `)}</text>
-      <box flexDirection="column" flexGrow={1}>
-        <text>{palette.error(text)}</text>
-      </box>
-    </box>
+    <Box flexDirection="row" marginTop={1}>
+      <Text>{palette.error(`${ICONS.error} `)}</Text>
+      <Box flexDirection="column" flexGrow={1}>
+        <Text>{palette.error(text)}</Text>
+      </Box>
+    </Box>
   )
 }
 
@@ -126,15 +129,15 @@ function ToolMessage({ message }: { message: MessageRecord }): JSX.Element {
   const header = `${iconColor(`${icon} ${tool.name}`)} ${palette.dim('·')} ${stateLabel[tool.state]}`
   const argsPreview = tool.argsPreview.length > 0
     ? palette.dim(`  ${tool.argsPreview.split('\n').join('\n  ')}`)
-    : ''
+    : null
   const output = tool.output.length > 0
     ? palette.muted(`  → ${tool.output}`)
-    : ''
+    : null
   return (
-    <box flexDirection="column" marginTop={1}>
-      <text>{header}</text>
-      {argsPreview !== '' ? <text>{argsPreview}</text> : null}
-      {output !== '' ? <text>{output}</text> : null}
-    </box>
+    <Box flexDirection="column" marginTop={1}>
+      <Text>{header}</Text>
+      {argsPreview !== null ? <Text>{argsPreview}</Text> : null}
+      {output !== null ? <Text>{output}</Text> : null}
+    </Box>
   )
 }
