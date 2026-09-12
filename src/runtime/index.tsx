@@ -20,6 +20,8 @@ import { App } from '../ui/App'
 import { SessionController } from './session-controller'
 import type { KiroStartup } from '../startup'
 import { parseShellCommand, runShell } from '../utils/shell'
+import { KIRO_KNOWLEDGE, renderKnowledgeContext } from '../knowledge'
+import type { KnowledgeStore } from '../knowledge/store'
 
 /** Stable Cordis plugin name. */
 export const name = 'kiro-runtime'
@@ -149,6 +151,19 @@ async function mount(ctx: Context, startup: KiroStartup): Promise<void> {
     }
 
     // Plain text → agent followup.
+    const knowledge = ctx.get(KIRO_KNOWLEDGE) as KnowledgeStore | undefined
+    if (knowledge !== undefined && knowledge.size() > 0) {
+      // RAG: inject the top BM25 hits as model-facing context (does not wake
+      // the driver and is not rendered into the transcript).
+      const hits = knowledge.query(trimmed, 2)
+      const block = renderKnowledgeContext(hits)
+      if (block !== '') {
+        agent.inject(createUserMessage({
+          content: [{ type: 'text', text: block }],
+          source: { kind: 'plugin', plugin: 'kiro-knowledge' },
+        }))
+      }
+    }
     agent.followup(createUserMessage({
       content: [{ type: 'text', text: trimmed }],
       source: { kind: 'user' },
