@@ -249,12 +249,38 @@ describe('/model interactive picker', () => {
       await new Promise((resolve) => setTimeout(resolve, 0))
       expect(modelSwitch.apply).toHaveBeenCalledWith({ provider: 'scnet', model: 'DeepSeek-V4-Flash' })
       expect(controller.pushSystem).toHaveBeenCalledWith(
-        expect.stringContaining('SCNET_API_KEY 未设置'),
+        expect.stringContaining('SCNET_API_KEY 未配置'),
       )
     } finally {
       if (previous !== undefined) process.env.SCNET_API_KEY = previous
       else delete process.env.SCNET_API_KEY
     }
+  })
+
+  it('stays quiet when the credentials service reports the key configured', async () => {
+    const { agent, controller } = agentWithController()
+    const credentials = {
+      describe: vi.fn().mockResolvedValue({ configured: true, writable: true }),
+    }
+    const agent2 = {
+      ...agent,
+      ctx: {
+        get: (key: string) => {
+          if (key === 'credentials') return credentials
+          return agent.ctx.get(key)
+        },
+      },
+    }
+    const handler = (modelCommand as CommandDefinition).handler!
+    await handler({ agent: agent2 as never, rawInput: '', attachments: [] } as never)
+    const request = controller.openPicker.mock.calls[0]![0]
+    const scnetItem = request.items.find((it: { value: string }) => it.value === 'scnet/DeepSeek-V4-Flash')
+    scnetItem !== undefined && request.onSelect(scnetItem)
+    await new Promise((resolve) => setTimeout(resolve, 0))
+    expect(credentials.describe).toHaveBeenCalledWith('SCNET_API_KEY')
+    expect(controller.pushSystem).toHaveBeenCalledWith(
+      expect.not.stringContaining('未配置'),
+    )
   })
 
   it('keeps the direct provider/model path working', async () => {

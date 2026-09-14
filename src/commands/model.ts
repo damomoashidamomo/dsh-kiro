@@ -65,18 +65,32 @@ function kiroModelSwitchOf(ctx: unknown): KiroModelSwitch | undefined {
 }
 
 /**
- * Hint at switch time when the target provider's env key is absent — some
- * adapters resolve credentials elsewhere (gateway/fallback), so this is a
- * conditional hint, not a failure prediction.
+ * Hint when the target provider's key is missing. The key is NOT stored in
+ * settings.yaml — `apiKeyEnv` there names a credential reference that the
+ * adapter resolves across the process environment, the provider-managed
+ * store (~/.dsh/.credentials.yaml) and .env files. Check the same way the
+ * adapter does: the dsh `credentials` service (describe → configured), with
+ * a process.env fallback for bare/test contexts.
  */
-function missingKeyWarning(piAi: PiAiConfig | undefined, provider: string): string {
+async function missingKeyHint(ctx: unknown, piAi: PiAiConfig | undefined, provider: string): Promise<string> {
   const env = piAi?.providers?.[provider]?.apiKeyEnv
   if (env === undefined || env === '') return ''
-  const value = process.env[env]
-  if (value === undefined || value === '') {
-    return `\n⚠ 环境变量 ${env} 未设置——若调用报错请先 export ${env}`
+  const credentials = serviceOf<{
+    describe?: (ref: string) => Promise<{ configured: boolean }>
+  }>(ctx, 'credentials')
+  let configured: boolean
+  if (credentials?.describe !== undefined) {
+    try {
+      configured = (await credentials.describe(env)).configured
+    } catch {
+      configured = false
+    }
+  } else {
+    const value = process.env[env]
+    configured = value !== undefined && value !== ''
   }
-  return ''
+  if (configured) return ''
+  return `\n⚠ 凭据 ${env} 未配置——若调用报错请先在 dsh 设置里填入 API Key，或 export ${env}`
 }
 
 function parseModel(input: string): { provider: string; model: string } | undefined {
@@ -179,7 +193,7 @@ export const modelCommand: CommandDefinition = {
                 ...(contextLimitTokens !== undefined ? { contextLimitTokens } : {}),
               })
               controller.pushSystem(
-                `模型已切换到 ${next.provider}/${next.model}（下一轮生效）${missingKeyWarning(piAi, next.provider)}`,
+                `模型已切换到 ${next.provider}/${next.model}（下一轮生效）${await missingKeyHint(ctx, piAi, next.provider)}`,
               )
             } catch (error: unknown) {
               const message = error instanceof Error ? error.message : String(error)
@@ -215,13 +229,11 @@ export const modelCommand: CommandDefinition = {
       activeModel: parsed.model,
       ...(contextLimitTokens !== undefined ? { contextLimitTokens } : {}),
     })
-    return {
-      kind: 'success',
-      text:
-        `model preference set to ${parsed.provider}/${parsed.model}\n`
-        + '(status bar updated; the in-flight turn keeps its original model — '
-        + 'the new model applies on the next turn.)',
-    }
+    const hint = await missingKeyHint(ctx, piAi, parsed.provider)
+    ctrl?.pushSystem(
+      `模型已切换到 ${parsed.provider}/${parsed.model}（下一轮生效）${hint}`,
+    )
+    return { kind: 'success' }
   },
 }
 
