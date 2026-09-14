@@ -112,12 +112,61 @@ describe('buildModelItems', () => {
   })
 })
 
+describe('SessionController turn/end error surfacing', () => {
+  function boundController() {
+    const ctrl = new SessionController()
+    const handlers = new Map<string, (session: unknown, event: unknown) => void>()
+    const ctx = {
+      on: (type: string, cb: (session: unknown, event: unknown) => void) => {
+        handlers.set(type, cb)
+        return () => handlers.delete(type)
+      },
+    }
+    const session = { id: 's1' }
+    ctrl.bindAgent(ctx as never, { session } as never)
+    const emit = (event: unknown) => handlers.get('session/event')?.(session, event)
+    return { ctrl, emit }
+  }
+
+  it('surfaces the driver failure message and pushes it to the transcript', () => {
+    const { ctrl, emit } = boundController()
+    emit({
+      type: 'turn/end',
+      seq: 1,
+      data: {
+        turn: 1,
+        reason: { kind: 'error', error: { message: 'SCNET_API_KEY is not set', code: 'AUTH' } },
+      },
+    })
+    const state = ctrl.getState()
+    expect(state.agent.status).toBe('error')
+    expect(state.agent.lastTurnReason).toContain('SCNET_API_KEY is not set')
+    const system = state.messages.find((m) => m.kind === 'system')
+    expect(system?.text).toContain('回合失败')
+    expect(system?.text).toContain('SCNET_API_KEY is not set')
+  })
+
+  it('keeps completed turns idle without noise', () => {
+    const { ctrl, emit } = boundController()
+    emit({ type: 'turn/end', seq: 1, data: { turn: 1, reason: { kind: 'completed' } } })
+    const state = ctrl.getState()
+    expect(state.agent.status).toBe('idle')
+    expect(state.agent.lastTurnReason).toBe('completed')
+    expect(state.messages).toHaveLength(0)
+  })
+})
+
 describe('/model interactive picker', () => {
   const piAi = {
     providers: {
       minimax: {
         displayName: 'MiniMax',
         models: [{ id: 'MiniMax-M3', name: 'MiniMax-M3', contextWindow: 200_000 }],
+      },
+      scnet: {
+        displayName: 'scnet',
+        apiKeyEnv: 'SCNET_API_KEY',
+        models: [{ id: 'DeepSeek-V4-Flash', name: 'DeepSeek-V4-Flash' }],
       },
     },
   }
@@ -128,6 +177,7 @@ describe('/model interactive picker', () => {
       pushSystem: vi.fn(),
       openPicker: vi.fn(),
     }
+    const modelSwitch = { apply: vi.fn() }
     const defaultModel = {
       currentSelection: vi.fn().mockReturnValue({ provider: 'minimax', model: 'MiniMax-M3' }),
       saveSelection: vi.fn().mockResolvedValue(undefined),
@@ -140,11 +190,12 @@ describe('/model interactive picker', () => {
           if (key === 'agentDefaultModel') return defaultModel
           if (key === 'settings') return settings
           if (key === 'kiroController') return controller
+          if (key === 'kiroModelSwitch') return modelSwitch
           return undefined
         },
       },
     }
-    return { agent, controller, defaultModel, settings }
+    return { agent, controller, modelSwitch, defaultModel, settings }
   }
 
   it('opens the picker with catalog items and a silent success result', async () => {
@@ -164,8 +215,8 @@ describe('/model interactive picker', () => {
     })
   })
 
-  it('persists and patches the status bar on selection', async () => {
-    const { agent, controller, defaultModel } = agentWithController()
+  it('persists, live-switches, and patches the status bar on selection', async () => {
+    const { agent, controller, modelSwitch, defaultModel } = agentWithController()
     const handler = (modelCommand as CommandDefinition).handler!
     await handler({ agent: agent as never, rawInput: '', attachments: [] } as never)
 
@@ -175,16 +226,39 @@ describe('/model interactive picker', () => {
     // onSelect is async; flush the microtask queue.
     await new Promise((resolve) => setTimeout(resolve, 0))
     expect(defaultModel.saveSelection).toHaveBeenCalledWith({ provider: 'minimax', model: 'MiniMax-M3' })
+    // The live agent switch must apply so the next step really uses it.
+    expect(modelSwitch.apply).toHaveBeenCalledWith({ provider: 'minimax', model: 'MiniMax-M3' })
     expect(controller.patchAgent).toHaveBeenCalledWith({
       activeProvider: 'minimax',
-      activeModel: 'minimax/MiniMax-M3',
+      activeModel: 'MiniMax-M3',
       contextLimitTokens: 200_000,
     })
     expect(controller.pushSystem).toHaveBeenCalledWith('模型已切换到 minimax/MiniMax-M3（下一轮生效）')
   })
 
+  it('warns at switch time when the target provider key is missing', async () => {
+    const previous = process.env.SCNET_API_KEY
+    delete process.env.SCNET_API_KEY
+    try {
+      const { agent, controller, modelSwitch, defaultModel } = agentWithController()
+      const handler = (modelCommand as CommandDefinition).handler!
+      await handler({ agent: agent as never, rawInput: '', attachments: [] } as never)
+      const request = controller.openPicker.mock.calls[0]![0]
+      const scnetItem = request.items.find((it: { value: string }) => it.value === 'scnet/DeepSeek-V4-Flash')
+      scnetItem !== undefined && request.onSelect(scnetItem)
+      await new Promise((resolve) => setTimeout(resolve, 0))
+      expect(modelSwitch.apply).toHaveBeenCalledWith({ provider: 'scnet', model: 'DeepSeek-V4-Flash' })
+      expect(controller.pushSystem).toHaveBeenCalledWith(
+        expect.stringContaining('SCNET_API_KEY 未设置'),
+      )
+    } finally {
+      if (previous !== undefined) process.env.SCNET_API_KEY = previous
+      else delete process.env.SCNET_API_KEY
+    }
+  })
+
   it('keeps the direct provider/model path working', async () => {
-    const { agent, controller, defaultModel } = agentWithController()
+    const { agent, controller, modelSwitch, defaultModel } = agentWithController()
     const handler = (modelCommand as CommandDefinition).handler!
     const outcome = await handler({
       agent: agent as never,
@@ -194,9 +268,10 @@ describe('/model interactive picker', () => {
 
     expect(outcome.kind).toBe('success')
     expect(defaultModel.saveSelection).toHaveBeenCalledWith({ provider: 'scnet', model: 'DeepSeek-V4-Flash' })
+    expect(modelSwitch.apply).toHaveBeenCalledWith({ provider: 'scnet', model: 'DeepSeek-V4-Flash' })
     expect(controller.patchAgent).toHaveBeenCalledWith({
       activeProvider: 'scnet',
-      activeModel: 'scnet/DeepSeek-V4-Flash',
+      activeModel: 'DeepSeek-V4-Flash',
     })
     // scnet is not in the fake config → no contextLimitTokens patch.
     expect(controller.patchAgent.mock.calls[0]![0].contextLimitTokens).toBeUndefined()

@@ -25,6 +25,7 @@ import type { PickerItem } from '../runtime/types'
 interface PiAiConfig {
   providers?: Record<string, {
     displayName?: string
+    apiKeyEnv?: string
     models?: ReadonlyArray<{ id: string; name?: string; contextWindow?: number }>
   }>
 }
@@ -43,6 +44,11 @@ interface KiroController {
   }): void
 }
 
+/** Live agent switch handle: mutates the runtime's per-step model ref. */
+interface KiroModelSwitch {
+  apply(next: { provider: string; model: string }): void
+}
+
 function serviceOf<T>(ctx: unknown, name: string): T | undefined {
   if (ctx === null || typeof ctx !== 'object') return undefined
   const c = (ctx as { get?: (name: string) => unknown }).get
@@ -52,6 +58,25 @@ function serviceOf<T>(ctx: unknown, name: string): T | undefined {
 
 function kiroControllerOf(ctx: unknown): KiroController | undefined {
   return serviceOf<KiroController>(ctx, 'kiroController')
+}
+
+function kiroModelSwitchOf(ctx: unknown): KiroModelSwitch | undefined {
+  return serviceOf<KiroModelSwitch>(ctx, 'kiroModelSwitch')
+}
+
+/**
+ * Hint at switch time when the target provider's env key is absent — some
+ * adapters resolve credentials elsewhere (gateway/fallback), so this is a
+ * conditional hint, not a failure prediction.
+ */
+function missingKeyWarning(piAi: PiAiConfig | undefined, provider: string): string {
+  const env = piAi?.providers?.[provider]?.apiKeyEnv
+  if (env === undefined || env === '') return ''
+  const value = process.env[env]
+  if (value === undefined || value === '') {
+    return `\n⚠ 环境变量 ${env} 未设置——若调用报错请先 export ${env}`
+  }
+  return ''
 }
 
 function parseModel(input: string): { provider: string; model: string } | undefined {
@@ -141,17 +166,20 @@ export const modelCommand: CommandDefinition = {
         onSelect: (item) => {
           const next = parseModel(item.value)
           if (next === undefined) return
+          const modelSwitch = kiroModelSwitchOf(ctx)
           void (async () => {
             try {
               await defaultModel.saveSelection!(next)
+              // Live switch: the next step's request uses the new model.
+              modelSwitch?.apply(next)
               const contextLimitTokens = contextWindowOf(piAi, next.provider, next.model)
               controller.patchAgent({
                 activeProvider: next.provider,
-                activeModel: `${next.provider}/${next.model}`,
+                activeModel: next.model,
                 ...(contextLimitTokens !== undefined ? { contextLimitTokens } : {}),
               })
               controller.pushSystem(
-                `模型已切换到 ${next.provider}/${next.model}（下一轮生效）`,
+                `模型已切换到 ${next.provider}/${next.model}（下一轮生效）${missingKeyWarning(piAi, next.provider)}`,
               )
             } catch (error: unknown) {
               const message = error instanceof Error ? error.message : String(error)
@@ -180,10 +208,11 @@ export const modelCommand: CommandDefinition = {
       return { kind: 'error', text: `failed to persist selection: ${message}` }
     }
     const ctrl = kiroControllerOf(ctx)
+    kiroModelSwitchOf(ctx)?.apply(parsed)
     const contextLimitTokens = contextWindowOf(piAi, parsed.provider, parsed.model)
     ctrl?.patchAgent({
       activeProvider: parsed.provider,
-      activeModel: `${parsed.provider}/${parsed.model}`,
+      activeModel: parsed.model,
       ...(contextLimitTokens !== undefined ? { contextLimitTokens } : {}),
     })
     return {

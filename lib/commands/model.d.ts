@@ -23,6 +23,7 @@ import type { PickerItem } from '../runtime/types';
 interface PiAiConfig {
     providers?: Record<string, {
         displayName?: string;
+        apiKeyEnv?: string;
         models?: ReadonlyArray<{
             id: string;
             name?: string;

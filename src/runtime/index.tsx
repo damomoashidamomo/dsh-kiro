@@ -12,7 +12,7 @@ import { render } from 'ink'
 import type { Context } from '@deepseek-ai/cordis'
 import { brandString } from '@deepseek-ai/dsh-brand'
 import { installModelSelection } from '@deepseek-ai/dsh-agent'
-import type { Agent, ModelSelectionRef } from '@deepseek-ai/dsh-agent'
+import type { Agent, ModelSelection, ModelSelectionRef } from '@deepseek-ai/dsh-agent'
 import { createUserMessage } from '@deepseek-ai/dsh-llm'
 import { SessionId } from '@deepseek-ai/dsh-session'
 import { parseCommand } from '@deepseek-ai/dsh-commands'
@@ -84,14 +84,27 @@ async function mount(ctx: Context, startup: KiroStartup): Promise<void> {
     setup: (agentCtx) => {
       const selected: ModelSelectionRef = { current: selection, assembled: undefined }
       installModelSelection(agentCtx, selected)
+      // Live mid-session switch: slash commands (e.g. /model) mutate this ref
+      // so the NEXT step's request actually uses the new provider/model —
+      // installModelSelection reads selection.current per step; settings
+      // writes alone would only persist for the next launch.
+      ctx.provide('kiroModelSwitch', {
+        apply(next: ModelSelection): void {
+          selected.current = next
+        },
+      })
     },
   })
 
   const controller = new SessionController()
   controller.bindAgent(ctx, agent)
+  // activeModel is the bare model id (slice after the first slash, matching
+  // /model's parseModel); StatusBar renders provider/model once.
+  const bootModel = startup.model ?? `${selection.provider}/${selection.model}`
+  const bootModelId = bootModel.includes('/') ? bootModel.slice(bootModel.indexOf('/') + 1) : bootModel
   controller.patchAgent({
     activeAgent: startup.agent,
-    activeModel: startup.model ?? `${selection.provider}/${selection.model}`,
+    activeModel: bootModelId,
     activeProvider: selection.provider,
     contextLimitTokens: 128_000,
   })

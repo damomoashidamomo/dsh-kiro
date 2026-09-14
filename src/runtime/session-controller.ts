@@ -50,6 +50,12 @@ function idFor(kind: string, seq: number): string {
   return `${kind}-${seq}`
 }
 
+/** Truncate a status-bar reason label to a single readable line. */
+function truncateLabel(text: string, max = 48): string {
+  const single = text.replace(/\s+/g, ' ').trim()
+  return single.length <= max ? single : `${single.slice(0, max - 1)}…`
+}
+
 /** Render-friendly preview of an arbitrary JSON value. */
 function previewValue(value: unknown): string {
   if (value === undefined) return ''
@@ -254,12 +260,20 @@ export class SessionController {
       }
       case 'turn/end': {
         const reason = event.data.reason
+        // Surface the real failure instead of a bare "error" chip: LlmFailure
+        // carries the driver message (e.g. missing API key, bad model id).
+        let label: string = reason.kind
+        if (reason.kind === 'error') {
+          const message = typeof reason.error?.message === 'string' ? reason.error.message : 'unknown error'
+          label = `error: ${truncateLabel(message)}`
+          this.pushSystem(`✗ 回合失败：${message}`)
+        }
         this.state = {
           ...this.state,
           agent: {
             ...this.state.agent,
             status: reason.kind === 'completed' ? 'idle' : 'error',
-            lastTurnReason: reason.kind,
+            lastTurnReason: label,
           },
           hasActiveTool: false,
         }
