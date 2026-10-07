@@ -44,13 +44,17 @@ export interface PromptProps {
 export function Prompt({
   busy,
   contextPct,
-  placeholder = 'Type a message, / for commands, @ for tools, ! for shell…',
+  placeholder,
   onSubmit,
   onPrefix,
   history = [],
   onAutocompleteMove,
   onAutocompleteCommit,
 }: PromptProps): JSX.Element {
+  // While a turn runs, typing + Enter steers the live turn instead of
+  // queueing for the next one — say so in the placeholder (kiro-style).
+  const idlePlaceholder = placeholder ?? 'Type a message, / for commands, @ for tools, ! for shell…'
+  const busyPlaceholder = '输入回车即可中途插话，纠正当前回合…'
   const [buffer, setBuffer] = useState<PromptBuffer>(() => emptyBuffer(history))
 
   const handle = useCallback((outcome: InputOutcome) => {
@@ -189,7 +193,7 @@ export function Prompt({
 
   const draft = buffer.text
   const prefix = detectPrefix(draft)
-  const placeholderText = draft === '' ? placeholder : ''
+  const placeholderText = draft === '' ? (busy ? busyPlaceholder : idlePlaceholder) : ''
 
   return (
     <Box flexDirection="column" borderStyle="round" borderColor={palette.enabled ? 'green' : undefined} paddingX={1} marginTop={1}>

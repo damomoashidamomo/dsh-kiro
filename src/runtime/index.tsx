@@ -21,6 +21,7 @@ import { SessionController } from './session-controller'
 import type { KiroStartup } from '../startup'
 import { createApprovalAnswerer } from './approval-answerer'
 import type { ApprovalOutcomeLike, ApprovalRequestLike } from './approval-answerer'
+import { routeTurnInput } from './turn-input'
 import { parseShellCommand, runShell } from '../utils/shell'
 import { KIRO_KNOWLEDGE, renderKnowledgeContext } from '../knowledge'
 import type { KnowledgeStore } from '../knowledge/store'
@@ -198,10 +199,18 @@ async function mount(ctx: Context, startup: KiroStartup): Promise<void> {
         }))
       }
     }
-    agent.followup(createUserMessage({
+    const message = createUserMessage({
       content: [{ type: 'text', text: trimmed }],
       source: { kind: 'user' },
-    }))
+    })
+    // A running turn turns this submission into mid-flight steering — the
+    // live turn's next step boundary consumes it (kiro-style interjection,
+    // no cancel needed). Idle (or cancelling — platform rule: input after an
+    // active cancellation queues for the next turn) opens/queues a new turn.
+    if (routeTurnInput(agent, message) === 'steer') {
+      const preview = trimmed.length > 40 ? `${trimmed.slice(0, 40)}…` : trimmed
+      controller.pushSystem(`↪ 已插话（下一步生效）：${preview}`)
+    }
   }
 
   // Non-TTY mode: process the task and exit without booting Ink.

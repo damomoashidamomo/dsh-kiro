@@ -35,6 +35,30 @@ describe('Prompt context percentage', () => {
   })
 })
 
+describe('Prompt steering hint while busy', () => {
+  it('shows the mid-flight steering placeholder while a turn runs', async () => {
+    const frame = await frameOf(<Prompt busy={true} onSubmit={() => {}} />)
+    expect(frame).toContain('中途插话')
+  })
+
+  it('keeps the normal placeholder when idle', async () => {
+    const frame = await frameOf(<Prompt busy={false} onSubmit={() => {}} />)
+    expect(frame).toContain('Type a message')
+    expect(frame).not.toContain('中途插话')
+  })
+
+  it('busy placeholder yields to a typed draft', async () => {
+    const { stdin, lastFrame, unmount } = render(<Prompt busy={true} onSubmit={() => {}} />)
+    await new Promise((resolve) => setTimeout(resolve, 40))
+    stdin.write('hold on')
+    await new Promise((resolve) => setTimeout(resolve, 40))
+    const frame = lastFrame() ?? ''
+    expect(frame).toContain('hold on')
+    expect(frame).not.toContain('中途插话')
+    unmount()
+  })
+})
+
 describe('Prompt multi-byte chunk handling', () => {
   it('submits when \r arrives inside a batched chunk ("/model\\r")', async () => {
     const onSubmit = vi.fn()
