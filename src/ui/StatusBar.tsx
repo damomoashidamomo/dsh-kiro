@@ -59,6 +59,12 @@ export function StatusBar({ agent, prefix, activeAgentName }: StatusBarProps): J
             <Text>{palette.warning('[plan]')}</Text>
           </>
         ) : null}
+        {presetChip(agent.permissionPreset) !== null ? (
+          <>
+            <Text> {palette.muted('·')} </Text>
+            <Text>{presetChip(agent.permissionPreset)}</Text>
+          </>
+        ) : null}
         <Text> {palette.muted('·')} </Text>
         <Text>{usageBar}</Text>
         {prefixLabel !== '' ? <Text> {prefixLabel}</Text> : null}
@@ -71,6 +77,18 @@ export function StatusBar({ agent, prefix, activeAgentName }: StatusBarProps): J
       </Text>
     </Box>
   )
+}
+
+/** Short kiro-style spelling for a permission preset chip. */
+function presetChip(preset: string | undefined): string | null {
+  if (preset === undefined) return null
+  const short: Record<string, string> = {
+    'read-only': '[read-only]',
+    'workspace-write': '[write]',
+    'danger-full-access': '[full]',
+    custom: '[custom]',
+  }
+  return short[preset] ?? `[${preset}]`
 }
 
 /** Render a token-usage bar with a fraction (used / limit). */

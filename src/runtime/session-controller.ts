@@ -43,6 +43,7 @@ function emptyState(): SessionRenderState {
       contextUsedTokens: 0,
       contextLimitTokens: undefined,
       planMode: false,
+      permissionPreset: undefined,
     },
     overlay: { kind: 'none' },
     picker: undefined,
@@ -621,14 +622,23 @@ export class SessionController {
         return
       }
       default: {
-        // `plan/mode` arrives from dsh-plan-mode's event augmentation, which
-        // this bundle does not type-depend on — match structurally.
-        const wide = event as { type?: string; data?: { active?: boolean } }
+        // `plan/mode` (dsh-plan-mode) and `permission/preset`
+        // (dsh-permission-presets) arrive via event augmentations this
+        // bundle does not type-depend on — match structurally.
+        const wide = event as { type?: string; data?: { active?: boolean; preset?: string } }
         if (wide.type === 'plan/mode') {
           const active = wide.data?.active === true
           this.state = {
             ...this.state,
             agent: { ...this.state.agent, planMode: active },
+          }
+          this.publish()
+          return
+        }
+        if (wide.type === 'permission/preset' && typeof wide.data?.preset === 'string') {
+          this.state = {
+            ...this.state,
+            agent: { ...this.state.agent, permissionPreset: wide.data.preset },
           }
           this.publish()
         }

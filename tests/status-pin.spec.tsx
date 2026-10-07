@@ -72,6 +72,35 @@ describe('user/message transcript echo', () => {
   })
 })
 
+describe('permission preset pin', () => {
+  it('permission/preset events update the snapshot', () => {
+    const { ctrl, emit } = driver()
+    emit({ type: 'permission/preset', seq: 1, data: { preset: 'workspace-write' } })
+    expect(ctrl.state.agent.permissionPreset).toBe('workspace-write')
+    emit({ type: 'permission/preset', seq: 2, data: { preset: 'read-only' } })
+    expect(ctrl.state.agent.permissionPreset).toBe('read-only')
+  })
+
+  it('the status bar shows the short chip per preset', async () => {
+    const snap = (preset: string | undefined): AgentStatusSnapshot => ({
+      status: 'idle', activeAgent: undefined, activeModel: 'm', activeProvider: 'p',
+      lastTurnReason: undefined, contextUsedTokens: 0, contextLimitTokens: 100,
+      planMode: false, permissionPreset: preset,
+    })
+    for (const [preset, chip] of [['workspace-write', '[write]'], ['read-only', '[read-only]'], ['danger-full-access', '[full]'], ['custom', '[custom]']] as const) {
+      const { lastFrame, unmount } = render(<StatusBar agent={snap(preset)} prefix={undefined} />)
+      await new Promise((r) => setTimeout(r, 25))
+      expect(lastFrame() ?? '').toContain(chip)
+      unmount()
+    }
+    const none = render(<StatusBar agent={snap(undefined)} prefix={undefined} />)
+    await new Promise((r) => setTimeout(r, 25))
+    expect(none.lastFrame() ?? '').not.toContain('[write]')
+    expect(none.lastFrame() ?? '').not.toContain('[read-only]')
+    none.unmount()
+  })
+})
+
 describe('request/context effective window (token-meter parity)', () => {
   it('sets the limit from the adapter-resolved window and refreshes model', () => {
     const { ctrl, emit } = driver()

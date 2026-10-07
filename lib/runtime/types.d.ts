@@ -64,6 +64,8 @@ export interface AgentStatusSnapshot {
     readonly contextLimitTokens: number | undefined;
     /** Whether plan mode is active for this session (pinned in the status bar). */
     readonly planMode: boolean;
+    /** Active permission preset (read-only / workspace-write / ...), pinned like plan mode. */
+    readonly permissionPreset: string | undefined;
 }
 /** UI overlay state. */
 export type OverlayKind = {
