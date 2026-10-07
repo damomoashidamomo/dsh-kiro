@@ -15,6 +15,8 @@ import type { SessionEvent } from '@deepseek-ai/dsh-session'
 import type { Agent } from '@deepseek-ai/dsh-agent'
 import type {
   AgentStatusSnapshot,
+  ApprovalChoice,
+  ApprovalRequestUi,
   Message,
   OverlayKind,
   PickerItem,
@@ -41,6 +43,7 @@ function emptyState(): SessionRenderState {
     },
     overlay: { kind: 'none' },
     picker: undefined,
+    approval: undefined,
     hasActiveTool: false,
   }
 }
@@ -232,6 +235,83 @@ export class SessionController {
     if (item !== undefined) callback(item)
   }
 
+  // --- Tool-permission approval (kiro-style ask panel) ---
+
+  /** Resolver for the currently pending approval question, if any. */
+  private approvalResolve: ((choice: ApprovalChoice) => void) | undefined
+  /** Approval signal cleanup for the currently pending question. */
+  private approvalSignalCleanup: (() => void) | undefined
+  /** Tools the user allowed for the rest of this session (per-boot memory). */
+  private readonly sessionAllowedTools = new Set<string>()
+
+  /**
+   * Put a permission question to the user. Resolves when the UI answers,
+   * or with `{ kind: 'cancelled' }` when the request signal aborts (turn
+   * cancelled) or the turn closes — the approval service discards late
+   * answers itself, so cancelling here only needs to close the panel.
+   */
+  openApproval(
+    request: ApprovalRequestUi,
+    signal?: { aborted: boolean; addEventListener?: (t: string, l: () => void) => unknown; removeEventListener?: (t: string, l: () => void) => unknown },
+  ): Promise<ApprovalChoice> {
+    this.cancelApproval()
+    const promise = new Promise<ApprovalChoice>((resolve) => {
+      this.approvalResolve = resolve
+    })
+    if (signal !== undefined) {
+      if (signal.aborted) {
+        this.approvalResolve = undefined
+        return Promise.resolve({ kind: 'cancelled' })
+      }
+      if (typeof signal.addEventListener === 'function') {
+        const onAbort = (): void => { this.cancelApproval() }
+        signal.addEventListener('abort', onAbort)
+        this.approvalSignalCleanup = () => {
+          signal.removeEventListener?.('abort', onAbort)
+        }
+      }
+    }
+    this.state = { ...this.state, approval: request }
+    this.publish()
+    return promise
+  }
+
+  /** Answer the pending question (UI path) and close the panel. */
+  resolveApproval(choice: ApprovalChoice): void {
+    const resolve = this.approvalResolve
+    this.approvalSignalCleanup?.()
+    this.approvalSignalCleanup = undefined
+    this.approvalResolve = undefined
+    if (this.state.approval !== undefined) {
+      this.state = { ...this.state, approval: undefined }
+      this.publish()
+    }
+    resolve?.(choice)
+  }
+
+  /** Withdraw the question without a user answer (signal/turn end). */
+  cancelApproval(): void {
+    const resolve = this.approvalResolve
+    this.approvalSignalCleanup?.()
+    this.approvalSignalCleanup = undefined
+    this.approvalResolve = undefined
+    if (this.state.approval !== undefined) {
+      this.state = { ...this.state, approval: undefined }
+      this.publish()
+    }
+    resolve?.({ kind: 'cancelled' })
+  }
+
+  /** Whether the user allowed this tool for the whole session. */
+  isToolAllowedForSession(toolName: string): boolean {
+    return this.sessionAllowedTools.has(toolName)
+  }
+
+  /** Remember a session-wide allowance for this tool (本会话始终允许). */
+  allowToolForSession(toolName: string): void {
+    this.sessionAllowedTools.add(toolName)
+  }
+
   /** Patch the agent snapshot (used by status bar updates outside the event bus). */
   patchAgent(snapshot: Partial<AgentStatusSnapshot>): void {
     this.state = {
@@ -260,6 +340,9 @@ export class SessionController {
       }
       case 'turn/end': {
         const reason = event.data.reason
+        // A closed turn withdraws any pending approval question (the request
+        // is turn-enclosed by design); late answers are discarded upstream.
+        this.cancelApproval()
         // Surface the real failure instead of a bare "error" chip: LlmFailure
         // carries the driver message (e.g. missing API key, bad model id).
         let label: string = reason.kind

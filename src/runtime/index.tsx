@@ -19,6 +19,8 @@ import { parseCommand } from '@deepseek-ai/dsh-commands'
 import { App } from '../ui/App'
 import { SessionController } from './session-controller'
 import type { KiroStartup } from '../startup'
+import { createApprovalAnswerer } from './approval-answerer'
+import type { ApprovalOutcomeLike, ApprovalRequestLike } from './approval-answerer'
 import { parseShellCommand, runShell } from '../utils/shell'
 import { KIRO_KNOWLEDGE, renderKnowledgeContext } from '../knowledge'
 import type { KnowledgeStore } from '../knowledge/store'
@@ -74,6 +76,9 @@ async function mount(ctx: Context, startup: KiroStartup): Promise<void> {
 
   const selection = defaultModel.currentSelection()
   const sessionId = brandString<SessionId>(`session-${randomUUID()}`)
+  // The controller is created BEFORE the agent so the agent-scoped listeners
+  // registered in `setup` can drive its approval panel immediately.
+  const controller = new SessionController()
   const { agent } = await agents.create({
     sessionId,
     meta: { cwd: process.cwd() },
@@ -93,10 +98,26 @@ async function mount(ctx: Context, startup: KiroStartup): Promise<void> {
           selected.current = next
         },
       })
+      // kiro-style tool-permission panel: answer the platform's
+      // `approval/request` waterfall (dsh-user-approval). Registered on the
+      // agent scope so only this agent's questions reach the TUI. The event's
+      // cordis type augmentation ships with dsh-user-approval, which this
+      // bundle does not type-depend on — hence the structural cast.
+      const onApprovalRequest = agentCtx.on as unknown as (
+        event: 'approval/request',
+        listener: (req: ApprovalRequestLike) => Promise<ApprovalOutcomeLike>,
+      ) => void
+      onApprovalRequest('approval/request', createApprovalAnswerer(controller, {
+        inject: (text) => {
+          agent.inject(createUserMessage({
+            content: [{ type: 'text', text }],
+            source: { kind: 'user' },
+          }))
+        },
+      }))
     },
   })
 
-  const controller = new SessionController()
   controller.bindAgent(ctx, agent)
   // activeModel is the bare model id (slice after the first slash, matching
   // /model's parseModel); StatusBar renders provider/model once.

@@ -11,7 +11,7 @@
  */
 import type { Context } from '@deepseek-ai/cordis';
 import type { Agent } from '@deepseek-ai/dsh-agent';
-import type { AgentStatusSnapshot, OverlayKind, PickerItem, SessionRenderState } from './types';
+import type { AgentStatusSnapshot, ApprovalChoice, ApprovalRequestUi, OverlayKind, PickerItem, SessionRenderState } from './types';
 /** Subscriber callback when the render state changes. */
 export type StateListener = (state: SessionRenderState) => void;
 /**
@@ -59,6 +59,31 @@ export declare class SessionController {
     setPickerSelection(index: number): void;
     /** Confirm the highlighted row: runs the opener's callback, then closes. */
     selectPickerItem(): void;
+    /** Resolver for the currently pending approval question, if any. */
+    private approvalResolve;
+    /** Approval signal cleanup for the currently pending question. */
+    private approvalSignalCleanup;
+    /** Tools the user allowed for the rest of this session (per-boot memory). */
+    private readonly sessionAllowedTools;
+    /**
+     * Put a permission question to the user. Resolves when the UI answers,
+     * or with `{ kind: 'cancelled' }` when the request signal aborts (turn
+     * cancelled) or the turn closes — the approval service discards late
+     * answers itself, so cancelling here only needs to close the panel.
+     */
+    openApproval(request: ApprovalRequestUi, signal?: {
+        aborted: boolean;
+        addEventListener?: (t: string, l: () => void) => unknown;
+        removeEventListener?: (t: string, l: () => void) => unknown;
+    }): Promise<ApprovalChoice>;
+    /** Answer the pending question (UI path) and close the panel. */
+    resolveApproval(choice: ApprovalChoice): void;
+    /** Withdraw the question without a user answer (signal/turn end). */
+    cancelApproval(): void;
+    /** Whether the user allowed this tool for the whole session. */
+    isToolAllowedForSession(toolName: string): boolean;
+    /** Remember a session-wide allowance for this tool (本会话始终允许). */
+    allowToolForSession(toolName: string): void;
     /** Patch the agent snapshot (used by status bar updates outside the event bus). */
     patchAgent(snapshot: Partial<AgentStatusSnapshot>): void;
     /** Notify subscribers of a state change. */

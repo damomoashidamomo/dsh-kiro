@@ -113,6 +113,21 @@ export interface PickerState {
   readonly selected: number
 }
 
+/** A pending tool-permission question put to the user (kiro-style approval). */
+export interface ApprovalRequestUi {
+  /** Tool whose operation needs the decision (e.g. `bash`). */
+  readonly toolName: string
+  /** Asker-supplied human-readable reason (e.g. escalation justification). */
+  readonly reason: string | undefined
+}
+
+/** The user's answer to a pending {@link ApprovalRequestUi}. */
+export type ApprovalChoice =
+  | { readonly kind: 'allow-once' }
+  | { readonly kind: 'allow-session' }
+  | { readonly kind: 'deny'; readonly reason: string | undefined }
+  | { readonly kind: 'cancelled' }
+
 /** Per-session render state the SessionController publishes. */
 export interface SessionRenderState {
   /** Active session id; `undefined` before the first agent is created. */
@@ -125,6 +140,8 @@ export interface SessionRenderState {
   overlay: OverlayKind
   /** Live interactive picker (kiro-style chooser), or `undefined` when closed. */
   picker: PickerState | undefined
+  /** Pending tool-permission approval, or `undefined` when none. */
+  approval: ApprovalRequestUi | undefined
   /** Whether a tool invocation is currently being streamed. */
   hasActiveTool: boolean
 }
