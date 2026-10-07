@@ -10,9 +10,10 @@
  */
 
 import { Box, Text, useInput } from 'ink'
-import { useState, useCallback } from 'react'
+import { useEffect, useRef, useState, useCallback } from 'react'
 import { palette, ICONS } from '../theme/palette'
 import {
+  applyMentionInsert,
   applyOutcome,
   detectPrefix,
   emptyBuffer,
@@ -38,6 +39,17 @@ export interface PromptProps {
   readonly onAutocompleteMove?: (delta: number) => void
   /** Commit the currently highlighted autocomplete entry. */
   readonly onAutocompleteCommit?: () => void
+  /**
+   * Insert a picked `@`-mention into the draft (path completion): the
+   * trailing query token is replaced by `insert` plus a space. Bumping the
+   * seq applies it once; the same seq is ignored.
+   */
+  readonly pendingInsert?: { readonly token: string; readonly insert: string; readonly seq: number } | undefined
+  /**
+   * An autocomplete popup is open: Enter commits the highlighted entry
+   * instead of submitting the draft (kiro-style).
+   */
+  readonly autocompleteActive?: boolean
 }
 
 /** Render the prompt input row. */
@@ -50,12 +62,26 @@ export function Prompt({
   history = [],
   onAutocompleteMove,
   onAutocompleteCommit,
+  pendingInsert,
+  autocompleteActive,
 }: PromptProps): JSX.Element {
   // While a turn runs, typing + Enter steers the live turn instead of
   // queueing for the next one — say so in the placeholder (kiro-style).
   const idlePlaceholder = placeholder ?? 'Type a message, / for commands, @ for tools, ! for shell…'
   const busyPlaceholder = '输入回车即可中途插话，纠正当前回合…'
   const [buffer, setBuffer] = useState<PromptBuffer>(() => emptyBuffer(history))
+  const lastInsertSeq = useRef(-1)
+  useEffect(() => {
+    if (pendingInsert === undefined || pendingInsert.seq === lastInsertSeq.current) return
+    lastInsertSeq.current = pendingInsert.seq
+    setBuffer(prev => {
+      const text = applyMentionInsert(prev.text, pendingInsert.token, pendingInsert.insert)
+      const prefix = detectPrefix(text)
+      const query = prefix !== undefined ? text.slice(1) : ''
+      onPrefix?.(prefix, query)
+      return { ...prev, text, cursor: text.length }
+    })
+  }, [pendingInsert, onPrefix])
 
   const handle = useCallback((outcome: InputOutcome) => {
     setBuffer(prev => {
@@ -108,6 +134,10 @@ export function Prompt({
       return
     }
     if (key.return && !key.shift) {
+      if (autocompleteActive === true) {
+        onAutocompleteCommit?.()
+        return
+      }
       handle({ kind: 'submit', text: buffer.text.trim(), images: buffer.images })
       return
     }

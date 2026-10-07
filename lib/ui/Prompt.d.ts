@@ -26,6 +26,21 @@ export interface PromptProps {
     readonly onAutocompleteMove?: (delta: number) => void;
     /** Commit the currently highlighted autocomplete entry. */
     readonly onAutocompleteCommit?: () => void;
+    /**
+     * Insert a picked `@`-mention into the draft (path completion): the
+     * trailing query token is replaced by `insert` plus a space. Bumping the
+     * seq applies it once; the same seq is ignored.
+     */
+    readonly pendingInsert?: {
+        readonly token: string;
+        readonly insert: string;
+        readonly seq: number;
+    } | undefined;
+    /**
+     * An autocomplete popup is open: Enter commits the highlighted entry
+     * instead of submitting the draft (kiro-style).
+     */
+    readonly autocompleteActive?: boolean;
 }
 /** Render the prompt input row. */
-export declare function Prompt({ busy, contextPct, placeholder, onSubmit, onPrefix, history, onAutocompleteMove, onAutocompleteCommit, }: PromptProps): JSX.Element;
+export declare function Prompt({ busy, contextPct, placeholder, onSubmit, onPrefix, history, onAutocompleteMove, onAutocompleteCommit, pendingInsert, autocompleteActive, }: PromptProps): JSX.Element;

@@ -90,6 +90,12 @@
     - id: kiro-hooks
       name: '@damomoashidamomo/dsh-kiro/hooks'
 
+    # Workspace @-mention search backing the TUI's file autocomplete (the
+    # same service the web app loads), plus the model-facing file-reference
+    # prompt section.
+    - id: file-reference-local
+      name: '@deepseek-ai/dsh-file-reference-local'
+
     # Tangent (side-conversation) mode. Owns tangent lifecycle.
     - id: kiro-tangent
       name: '@damomoashidamomo/dsh-kiro/tangent'

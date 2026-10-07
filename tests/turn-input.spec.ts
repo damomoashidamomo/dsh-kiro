@@ -1,5 +1,6 @@
 import { describe, it, expect, vi } from 'vitest'
 import { routeTurnInput, type TurnInputTarget } from '../src/runtime/turn-input'
+import { applyMentionInsert } from '../src/runtime/input'
 
 function fakeAgent(status: string): TurnInputTarget & {
   steer: ReturnType<typeof vi.fn>
@@ -34,5 +35,17 @@ describe('routeTurnInput (steering branch)', () => {
   it('queues on any other non-running status (e.g. error)', () => {
     const agent = fakeAgent('error')
     expect(routeTurnInput(agent, {})).toBe('followup')
+  })
+})
+
+describe('applyMentionInsert (@-mention completion)', () => {
+  it('replaces the trailing query token and adds a space', () => {
+    expect(applyMentionInsert('看看 @read', '@read', '@README.md ')).toBe('看看 @README.md ')
+  })
+  it('falls back to appending when the token was edited away', () => {
+    expect(applyMentionInsert('draft changed', '@gone', '@src/')).toBe('draft changed@src/ ')
+  })
+  it('keeps the quoted grammar for paths with spaces', () => {
+    expect(applyMentionInsert('@"my fil', '@"my fil', '@"my file.md" ')).toBe('@"my file.md" ')
   })
 })

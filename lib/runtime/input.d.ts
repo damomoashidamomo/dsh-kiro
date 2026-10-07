@@ -73,6 +73,13 @@ export interface PromptBuffer {
 }
 /** Construct a fresh empty buffer. */
 export declare function emptyBuffer(history?: readonly string[]): PromptBuffer;
+/**
+ * Apply a picked `@`-mention to the draft: replace the trailing query token
+ * (e.g. `@read`) with the formatted candidate (e.g. `@"README.md"` or
+ * `@src/`) plus one trailing space, so the popup closes and the user keeps
+ * composing. Falls back to appending when the token was edited away.
+ */
+export declare function applyMentionInsert(text: string, token: string, insert: string): string;
 /** Detect whether the draft starts with a special trigger character. */
 export declare function detectPrefix(text: string): '/' | '@' | '!' | undefined;
 /** Apply one keystroke outcome to the buffer; returns a new buffer. */

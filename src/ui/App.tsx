@@ -15,15 +15,21 @@ import { SlashMenu } from './SlashMenu'
 import { PickerOverlay } from './PickerOverlay'
 import { ApprovalOverlay } from './ApprovalOverlay'
 import { PlanReviewOverlay } from './PlanReviewOverlay'
-import { Autocomplete, slashCandidates } from './Autocomplete'
+import { Autocomplete, slashCandidates, type AutocompleteItem } from './Autocomplete'
 import { banner, palette } from '../theme/palette'
 import { splashMark } from '../theme/banner'
+import Fuse from 'fuse.js'
 import type { SessionController } from '../runtime/session-controller'
 import type { SessionRenderState } from '../runtime/types'
 import { mapKey } from '../runtime/keybindings'
 import { ALL_COMMANDS } from '../commands/registry'
 
 export interface AppProps {
+  /**
+   * Workspace `@`-mention lookup (platform fileReferences service):
+   * resolves a query fragment to file/directory candidates.
+   */
+  readonly fileSearch?: (query: string) => Promise<readonly AutocompleteItem[]> | undefined
   controller: SessionController
   seedTask?: string | undefined
   activeAgentName?: string | undefined
@@ -31,7 +37,7 @@ export interface AppProps {
 }
 
 /** Render the TUI. */
-export function App({ controller, seedTask, activeAgentName, onSubmit }: AppProps): JSX.Element {
+export function App({ controller, seedTask, activeAgentName, onSubmit, fileSearch }: AppProps): JSX.Element {
   const { exit } = useApp()
   const [state, setState] = useState<SessionRenderState>(() => controller.getState())
   const [prefix, setPrefix] = useState<'/' | '@' | '!' | undefined>(undefined)
@@ -39,6 +45,24 @@ export function App({ controller, seedTask, activeAgentName, onSubmit }: AppProp
   const [slashMenuOpen, setSlashMenuOpen] = useState<boolean>(false)
   const [prefixQuery, setPrefixQuery] = useState<string>('')
   const [autocompleteSelected, setAutocompleteSelected] = useState<number>(0)
+  const [atItems, setAtItems] = useState<readonly AutocompleteItem[]>([])
+  const [atInsert, setAtInsert] = useState<{ token: string; insert: string; seq: number } | undefined>(undefined)
+  const insertSeq = useRef(0)
+
+  // @-mention candidates: debounced workspace lookup while the @ popup is up.
+  useEffect(() => {
+    if (prefix !== '@' || fileSearch === undefined) {
+      setAtItems([])
+      return
+    }
+    let cancelled = false
+    const timer = setTimeout(() => {
+      Promise.resolve(fileSearch(prefixQuery))
+        .then((items) => { if (!cancelled) setAtItems(items ?? []) })
+        .catch(() => { if (!cancelled) setAtItems([]) })
+    }, 120)
+    return () => { cancelled = true; clearTimeout(timer) }
+  }, [prefix, prefixQuery, fileSearch])
   // kiro-style two-stage Ctrl+C: first press cancels the running turn, a
   // second press while still cancelling exits the TUI back to the shell.
   const interruptArmed = useRef<boolean>(false)
@@ -176,8 +200,28 @@ export function App({ controller, seedTask, activeAgentName, onSubmit }: AppProp
             setAutocompleteSelected((idx) => Math.max(0, idx + delta))
           }}
           onAutocompleteCommit={() => {
+            if (prefix === '@') {
+              // Insert the picked mention into the draft instead of
+              // submitting; the user keeps composing the message. Mirror
+              // the popover's Fuse ordering so the highlighted row is what
+              // gets inserted.
+              const fuse = new Fuse([...atItems], {
+                keys: ['label', 'hint', 'keywords'],
+                threshold: 0.35,
+                ignoreLocation: true,
+                minMatchCharLength: 1,
+              })
+              const ranked = prefixQuery === '' ? [...atItems] : fuse.search(prefixQuery).map((r) => r.item)
+              const picked = ranked.slice(autocompleteSelected, autocompleteSelected + 1)[0]
+              if (picked !== undefined) {
+                insertSeq.current += 1
+                setAtInsert({ token: `@${prefixQuery}`, insert: picked.insert, seq: insertSeq.current })
+              }
+              setAutocompleteSelected(0)
+              return
+            }
             const items = slashCandidates(ALL_COMMANDS.map((c) => ({ name: c.name, description: c.description })))
-            const filtered = items.filter((it) => prefix === '/' || prefix === '@')
+            const filtered = items.filter((it) => prefix === '/')
             const visible = filtered.slice(autocompleteSelected, autocompleteSelected + 1)
             if (visible[0] !== undefined) {
               onSubmit(visible[0].insert)
@@ -185,6 +229,8 @@ export function App({ controller, seedTask, activeAgentName, onSubmit }: AppProp
             setPrefix(undefined)
             setPrefixQuery('')
           }}
+          pendingInsert={atInsert}
+          autocompleteActive={prefix === '@' && !slashMenuOpen && !prefixQuery.includes(' ') && atItems.length > 0}
         />
       )}
       {prefix === '/' && !slashMenuOpen ? (
@@ -194,11 +240,11 @@ export function App({ controller, seedTask, activeAgentName, onSubmit }: AppProp
           candidates={slashCandidates(ALL_COMMANDS.map((c) => ({ name: c.name, description: c.description })))}
           selected={autocompleteSelected}
         />
-      ) : prefix === '@' && !slashMenuOpen ? (
+      ) : prefix === '@' && !slashMenuOpen && !prefixQuery.includes(' ') ? (
         <Autocomplete
           trigger="@"
           query={prefixQuery}
-          candidates={[]}
+          candidates={atItems}
           selected={0}
         />
       ) : null}

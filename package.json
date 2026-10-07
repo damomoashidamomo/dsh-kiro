@@ -71,6 +71,8 @@
     "clean": "rm -rf lib *.tsbuildinfo"
   },
   "dependencies": {
+    "@deepseek-ai/dsh-file-reference": "file:/home/gary/.npm-global/lib/node_modules/@deepseek-ai/dsh/node_modules/@deepseek-ai/dsh-file-reference",
+    "@deepseek-ai/dsh-file-reference-local": "file:/home/gary/.npm-global/lib/node_modules/@deepseek-ai/dsh/node_modules/@deepseek-ai/dsh-file-reference-local",
     "@deepseek-ai/dsh-hook-protocol": "0.1.2-rc.1",
     "@deepseek-ai/dsh-user-questions": "0.1.2-rc.1",
     "@modelcontextprotocol/sdk": "^1.0.4",

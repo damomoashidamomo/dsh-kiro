@@ -66,6 +66,18 @@ export function emptyBuffer(history: readonly string[] = []): PromptBuffer {
   }
 }
 
+/**
+ * Apply a picked `@`-mention to the draft: replace the trailing query token
+ * (e.g. `@read`) with the formatted candidate (e.g. `@"README.md"` or
+ * `@src/`) plus one trailing space, so the popup closes and the user keeps
+ * composing. Falls back to appending when the token was edited away.
+ */
+export function applyMentionInsert(text: string, token: string, insert: string): string {
+  const suffix = token.length > 0 && text.endsWith(token) ? text.slice(0, text.length - token.length) : text
+  const trimmedInsert = insert.endsWith(' ') ? insert.slice(0, -1) : insert
+  return `${suffix}${trimmedInsert} `
+}
+
 /** Detect whether the draft starts with a special trigger character. */
 export function detectPrefix(text: string): '/' | '@' | '!' | undefined {
   if (text.startsWith('!')) return '!'

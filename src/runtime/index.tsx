@@ -17,6 +17,7 @@ import { createUserMessage } from '@deepseek-ai/dsh-llm'
 import { SessionId } from '@deepseek-ai/dsh-session'
 import { parseCommand } from '@deepseek-ai/dsh-commands'
 import { App } from '../ui/App'
+import type { AutocompleteItem } from '../ui/Autocomplete'
 import { SessionController } from './session-controller'
 import type { KiroStartup } from '../startup'
 import { createApprovalAnswerer } from './approval-answerer'
@@ -24,6 +25,8 @@ import { createQuestionAnswerer } from './question-answerer'
 import type { ApprovalOutcomeLike, ApprovalRequestLike } from './approval-answerer'
 import { routeTurnInput } from './turn-input'
 import { contextWindowOf } from './model-catalog'
+import { formatFileMention } from '@deepseek-ai/dsh-file-reference/grammar'
+import type { LocalFileReferenceService } from '@deepseek-ai/dsh-file-reference-local'
 import type { PiAiConfig } from './model-catalog'
 import { parseShellCommand, runShell } from '../utils/shell'
 import { KIRO_KNOWLEDGE, renderKnowledgeContext } from '../knowledge'
@@ -244,12 +247,33 @@ async function mount(ctx: Context, startup: KiroStartup): Promise<void> {
     return
   }
 
+  // @-mention search: the platform's fileReferences service (loaded by the
+  // file-reference-local patch row) walks the workspace with sensible
+  // excludes; candidates map into the TUI autocomplete items.
+  // The base service type lacks `list` (it ships with the local provider);
+  // narrow to the local class the file-reference-local patch row mounts.
+  const fileRefs = ctx.get('fileReferences') as LocalFileReferenceService | undefined
+  const fileSearch = fileRefs?.list !== undefined
+    ? (query: string): Promise<readonly AutocompleteItem[]> => {
+        const timeout = new AbortController()
+        const timer = setTimeout(() => { timeout.abort() }, 4000)
+        return fileRefs.list(agent, query, timeout.signal)
+          .then((candidates) => candidates.map((candidate) => ({
+            insert: formatFileMention(candidate, false) ?? `${candidate.path} `,
+            label: candidate.kind === 'directory' ? `${candidate.path}/` : candidate.path,
+            hint: candidate.kind === 'directory' ? 'dir' : undefined,
+          })))
+          .finally(() => { clearTimeout(timer) })
+      }
+    : undefined
+
   const app = render(
     <App
       controller={controller}
       seedTask={startup.task}
       activeAgentName={startup.agent}
       onSubmit={submit}
+      fileSearch={fileSearch}
     />,
     { exitOnCtrlC: false, patchConsole: false },
   )
