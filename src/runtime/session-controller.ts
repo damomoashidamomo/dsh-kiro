@@ -552,6 +552,36 @@ export class SessionController {
         }
         return
       }
+      case 'request/context': {
+        const data = event.data as { provider?: string; model?: string; contextWindow?: number }
+        // The adapter's effective window for THIS request (catalog value or
+        // its route-level default) — the same truth the Web UI's token-meter
+        // projection renders. Lands before the request runs, so the bar is
+        // correct from the first turn and after any model switch.
+        if (typeof data.contextWindow === 'number' && Number.isFinite(data.contextWindow) && data.contextWindow > 0) {
+          this.state = {
+            ...this.state,
+            agent: {
+              ...this.state.agent,
+              contextLimitTokens: data.contextWindow,
+              ...(data.provider !== undefined ? { activeProvider: data.provider } : {}),
+              ...(data.model !== undefined ? { activeModel: data.model } : {}),
+            },
+          }
+          this.publish()
+        } else if (data.provider !== undefined || data.model !== undefined) {
+          this.state = {
+            ...this.state,
+            agent: {
+              ...this.state.agent,
+              ...(data.provider !== undefined ? { activeProvider: data.provider } : {}),
+              ...(data.model !== undefined ? { activeModel: data.model } : {}),
+            },
+          }
+          this.publish()
+        }
+        return
+      }
       default: {
         // `plan/mode` arrives from dsh-plan-mode's event augmentation, which
         // this bundle does not type-depend on — match structurally.

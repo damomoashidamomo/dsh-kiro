@@ -45,6 +45,32 @@ describe('plan-mode pin', () => {
   })
 })
 
+describe('request/context effective window (token-meter parity)', () => {
+  it('sets the limit from the adapter-resolved window and refreshes model', () => {
+    const { ctrl, emit } = driver()
+    emit({ type: 'request/context', seq: 1, data: { provider: 'scnet', model: 'DeepSeek-V4.1-Flash', contextWindow: 262144 } })
+    expect(ctrl.state.agent.contextLimitTokens).toBe(262144)
+    expect(ctrl.state.agent.activeModel).toBe('DeepSeek-V4.1-Flash')
+    // A later request under a different model updates the bar.
+    emit({ type: 'request/context', seq: 2, data: { provider: 'glm-codingplan', model: 'glm-5.3-flash', contextWindow: 1000000 } })
+    expect(ctrl.state.agent.contextLimitTokens).toBe(1000000)
+  })
+
+  it('keeps the previous limit when the request carries no window', () => {
+    const { ctrl, emit } = driver()
+    emit({ type: 'request/context', seq: 1, data: { provider: 'p', model: 'm', contextWindow: 204800 } })
+    emit({ type: 'request/context', seq: 2, data: { provider: 'p', model: 'm2' } })
+    expect(ctrl.state.agent.contextLimitTokens).toBe(204800)
+    expect(ctrl.state.agent.activeModel).toBe('m2')
+  })
+
+  it('ignores junk windows', () => {
+    const { ctrl, emit } = driver()
+    emit({ type: 'request/context', seq: 1, data: { contextWindow: Number.NaN } })
+    expect(ctrl.state.agent.contextLimitTokens).toBeUndefined()
+  })
+})
+
 describe('honest context limit', () => {
   it('catalog lookup finds declared windows and misses undeclared ones', () => {
     const piAi = {
