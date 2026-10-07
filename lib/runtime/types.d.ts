@@ -14,6 +14,8 @@ export type ToolState = 'pending' | 'running' | 'done' | 'failed' | 'cancelled';
 export interface ToolRecord {
     /** Stable id within the session; `call-${seq}` from the log. */
     readonly id: string;
+    /** Platform call id pairing this call with its `tool/result` event. */
+    callId: string | undefined;
     /** The exact tool name as registered with the agent. */
     readonly name: string;
     /** Argument string as the model wrote it (pretty-printed). */

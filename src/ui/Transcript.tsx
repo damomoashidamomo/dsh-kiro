@@ -37,13 +37,17 @@ type StaticItem = SplashItem | (MessageRecord & { key: string })
  * passed in as a `header` item here instead of rendering its own `<Static>`.
  */
 export function Transcript({ messages, header }: TranscriptProps): JSX.Element {
-  // Stable partition: anything with `streaming: false` is finished.
-  const lastStreaming = findLastIndex(messages, m => m.streaming)
-  const finished = lastStreaming >= 0
-    ? messages.slice(0, lastStreaming)
+  // Stable partition: a message is finished only once `streaming` clears.
+  // Static takes the all-finished PREFIX — everything up to (exclusive) the
+  // FIRST still-streaming message. Parallel calls mean an early streaming
+  // message can precede later ones; freezing such a prefix into Static
+  // would pin its running card forever (Static prints items once).
+  const firstStreaming = findFirstStreaming(messages)
+  const finished = firstStreaming >= 0
+    ? messages.slice(0, firstStreaming)
     : messages
-  const live = lastStreaming >= 0
-    ? messages.slice(lastStreaming)
+  const live = firstStreaming >= 0
+    ? messages.slice(firstStreaming)
     : []
   const staticItems: StaticItem[] = [
     ...(header ? [header] : []),
@@ -77,10 +81,10 @@ export function Transcript({ messages, header }: TranscriptProps): JSX.Element {
   )
 }
 
-function findLastIndex<T>(items: readonly T[], predicate: (item: T) => boolean): number {
-  for (let i = items.length - 1; i >= 0; i -= 1) {
+function findFirstStreaming(items: readonly MessageRecord[]): number {
+  for (let i = 0; i < items.length; i += 1) {
     const item = items[i]
-    if (item !== undefined && predicate(item)) return i
+    if (item !== undefined && item.streaming) return i
   }
   return -1
 }

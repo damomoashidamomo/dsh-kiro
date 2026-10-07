@@ -24,7 +24,8 @@ export declare class SessionController {
     private readonly listeners;
     private agent;
     private unsubscribe;
-    private activeTool;
+    /** In-flight tool calls keyed by platform callId (parallel-safe). */
+    private readonly activeTools;
     /** Subscribe to state changes. Returns the disposer. */
     subscribe(listener: StateListener): () => void;
     /** Snapshot of the current state. */
@@ -109,6 +110,13 @@ export declare class SessionController {
     private publish;
     /** Apply one session event. */
     private applyEvent;
+    /**
+     * Close any tool-call message still marked streaming (a result that never
+     * correlated, or a turn cancelled mid-call). A stuck `streaming` flag
+     * pins every later message into Ink's live region, so the whole UI
+     * re-renders each spinner tick — this sweep is the backstop.
+     */
+    private sweepOrphanedToolCalls;
     /** Append to the last assistant message, creating it if absent. */
     private appendToLastAssistant;
     /** Append a reasoning block to a dedicated message. */

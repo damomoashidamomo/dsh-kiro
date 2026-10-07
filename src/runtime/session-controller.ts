@@ -62,6 +62,18 @@ function truncateLabel(text: string, max = 48): string {
   return single.length <= max ? single : `${single.slice(0, max - 1)}…`
 }
 
+/**
+ * Find the LAST tool-call message whose record pairs with `callId`
+ * (findLastIndex is not in this tsconfig's lib target).
+ */
+function findToolCallIndex(messages: readonly Message[], callId: string): number {
+  for (let i = messages.length - 1; i >= 0; i -= 1) {
+    const message = messages[i]
+    if (message?.kind === 'tool-call' && message.tool?.callId === callId) return i
+  }
+  return -1
+}
+
 /** Render-friendly preview of an arbitrary JSON value. */
 function previewValue(value: unknown): string {
   if (value === undefined) return ''
@@ -84,8 +96,10 @@ function contentToText(content: readonly unknown[]): string {
   return content
     .map(block => {
       if (typeof block === 'object' && block !== null && 'type' in block) {
-        const b = block as { type: string; text?: string }
+        const b = block as { type: string; text?: string; content?: unknown[] }
         if (b.type === 'text' && typeof b.text === 'string') return b.text
+        // Tool-result blocks keep their payload nested one level down.
+        if (b.type === 'tool-result' && Array.isArray(b.content)) return contentToText(b.content)
       }
       return ''
     })
@@ -102,7 +116,8 @@ export class SessionController {
   private readonly listeners = new Set<StateListener>()
   private agent: Agent | undefined
   private unsubscribe: (() => void) | undefined
-  private activeTool: ToolRecord | undefined
+  /** In-flight tool calls keyed by platform callId (parallel-safe). */
+  private readonly activeTools = new Map<string, ToolRecord>()
 
   /** Subscribe to state changes. Returns the disposer. */
   subscribe(listener: StateListener): () => void {
@@ -142,7 +157,7 @@ export class SessionController {
     this.unsubscribe?.()
     this.unsubscribe = undefined
     this.agent = undefined
-    this.activeTool = undefined
+    this.activeTools.clear()
     this.state = emptyState()
     this.publish()
   }
@@ -430,7 +445,8 @@ export class SessionController {
           },
           hasActiveTool: false,
         }
-        this.activeTool = undefined
+        this.activeTools.clear()
+        this.sweepOrphanedToolCalls()
         this.publish()
         return
       }
@@ -473,6 +489,7 @@ export class SessionController {
         const seq = Number(event.seq)
         const record: ToolRecord = {
           id: idFor('tool-call', seq),
+          callId: data.callId,
           name: data.name,
           argsPreview: truncate(previewValue(data.arguments), 240),
           state: 'running',
@@ -481,7 +498,7 @@ export class SessionController {
           durationMs: undefined,
           metadata: {},
         }
-        this.activeTool = record
+        this.activeTools.set(data.callId, record)
         const message: Message = {
           id: idFor('tool-call', seq),
           kind: 'tool-call',
@@ -494,29 +511,41 @@ export class SessionController {
         }
         this.state = {
           ...this.state,
-          hasActiveTool: true,
+          hasActiveTool: this.activeTools.size > 0,
           messages: [...this.state.messages, message],
         }
         this.publish()
         return
       }
       case 'tool/result': {
-        const data = event.data as { message: { content: unknown[] }; error?: { name: string; code: string } }
+        const data = event.data as {
+          message: { content: { type?: string; toolCallId?: string }[] }
+          error?: { name: string; code: string }
+        }
         const text = contentToText(data.message.content)
-        const finished = this.activeTool
-        if (finished !== undefined) {
+        // Correlate by the platform's callId (result content[0].toolCallId)
+        // rather than positional trust: parallel calls and interleaved
+        // assistant text mean the matching call is not necessarily last.
+        const callId = data.message.content.find((block) => typeof block?.toolCallId === 'string')?.toolCallId
+        const finished = callId !== undefined ? this.activeTools.get(callId) : undefined
+        if (finished !== undefined && callId !== undefined) {
+          this.activeTools.delete(callId)
           finished.state = data.error !== undefined ? 'failed' : 'done'
           finished.output = truncate(text, 800)
-          finished.durationMs = Date.now() - (this.state.messages.at(-1)?.createdAt ?? Date.now())
-          this.activeTool = undefined
-          const last = this.state.messages.at(-1)
-          if (last !== undefined) {
-            const updated: Message = { ...last, tool: { ...finished }, streaming: false }
+          const index = findToolCallIndex(this.state.messages, callId)
+          const target = index >= 0 ? this.state.messages[index] : undefined
+          finished.durationMs = Date.now() - (target?.createdAt ?? Date.now())
+          if (target !== undefined) {
+            const updated: Message = { ...target, tool: { ...finished }, streaming: false }
+            const messages = [...this.state.messages]
+            messages[index] = updated
             this.state = {
               ...this.state,
-              hasActiveTool: false,
-              messages: [...this.state.messages.slice(0, -1), updated],
+              hasActiveTool: this.activeTools.size > 0,
+              messages,
             }
+          } else {
+            this.state = { ...this.state, hasActiveTool: this.activeTools.size > 0 }
           }
           this.publish()
         }
@@ -524,6 +553,30 @@ export class SessionController {
       }
       default:
         return
+    }
+  }
+
+  /**
+   * Close any tool-call message still marked streaming (a result that never
+   * correlated, or a turn cancelled mid-call). A stuck `streaming` flag
+   * pins every later message into Ink's live region, so the whole UI
+   * re-renders each spinner tick — this sweep is the backstop.
+   */
+  private sweepOrphanedToolCalls(): void {
+    let changed = false
+    const messages = this.state.messages.map((message) => {
+      if (message.kind === 'tool-call' && message.streaming && message.tool !== undefined) {
+        changed = true
+        return {
+          ...message,
+          streaming: false,
+          tool: { ...message.tool, state: 'failed' as const, output: message.tool.output === '' ? '(no result — turn ended)' : message.tool.output },
+        }
+      }
+      return message
+    })
+    if (changed) {
+      this.state = { ...this.state, messages }
     }
   }
 
