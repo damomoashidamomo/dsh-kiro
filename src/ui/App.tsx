@@ -14,6 +14,7 @@ import { ProgressOverlay } from './ProgressOverlay'
 import { SlashMenu } from './SlashMenu'
 import { PickerOverlay } from './PickerOverlay'
 import { ApprovalOverlay } from './ApprovalOverlay'
+import { PlanReviewOverlay } from './PlanReviewOverlay'
 import { Autocomplete, slashCandidates } from './Autocomplete'
 import { banner, palette } from '../theme/palette'
 import { BANNER } from '../theme/banner'
@@ -82,9 +83,9 @@ export function App({ controller, seedTask, activeAgentName, onSubmit }: AppProp
         // Idle: kiro exits on a single Ctrl+C (kiro.dev issue #6442).
         exit()
       }
-    } else if (state.approval !== undefined) {
-      // While the approval panel waits, only quit/interrupt stay live (the
-      // interrupt cancels the turn, which aborts the pending request).
+    } else if (state.approval !== undefined || state.question !== undefined) {
+      // While the approval or plan-review panel waits, only quit/interrupt
+      // stay live (the interrupt cancels the turn, which aborts the request).
       return
     } else if (action === 'clear-screen') {
       process.stdout.write('\x1b[2J\x1b[H')
@@ -132,7 +133,12 @@ export function App({ controller, seedTask, activeAgentName, onSubmit }: AppProp
         subtext={state.hasActiveTool ? 'executing…' : undefined}
       />
       <StatusBar agent={state.agent} prefix={prefix} activeAgentName={activeAgentName} />
-      {state.approval !== undefined ? (
+      {state.question !== undefined ? (
+        <PlanReviewOverlay
+          request={state.question}
+          onResolve={(choice) => controller.resolveQuestion(choice)}
+        />
+      ) : state.approval !== undefined ? (
         <ApprovalOverlay
           request={state.approval}
           onResolve={(choice) => controller.resolveApproval(choice)}

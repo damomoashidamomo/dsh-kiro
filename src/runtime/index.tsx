@@ -20,6 +20,7 @@ import { App } from '../ui/App'
 import { SessionController } from './session-controller'
 import type { KiroStartup } from '../startup'
 import { createApprovalAnswerer } from './approval-answerer'
+import { createQuestionAnswerer } from './question-answerer'
 import type { ApprovalOutcomeLike, ApprovalRequestLike } from './approval-answerer'
 import { routeTurnInput } from './turn-input'
 import { parseShellCommand, runShell } from '../utils/shell'
@@ -116,6 +117,12 @@ async function mount(ctx: Context, startup: KiroStartup): Promise<void> {
           }))
         },
       }))
+      // kiro-style plan review: answer the platform's `user-questions/request`
+      // waterfall (dsh-user-questions) so `exit_plan_mode` (dsh-plan-mode) can
+      // put its review to the human instead of failing with NO_PROVIDER.
+      // Agent-scoped like the approval answerer; this bundle DOES depend on
+      // dsh-user-questions, so the typed augmentation applies.
+      agentCtx.on('user-questions/request', createQuestionAnswerer(controller))
     },
   })
 

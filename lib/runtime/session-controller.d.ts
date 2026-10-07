@@ -11,7 +11,7 @@
  */
 import type { Context } from '@deepseek-ai/cordis';
 import type { Agent } from '@deepseek-ai/dsh-agent';
-import type { AgentStatusSnapshot, ApprovalChoice, ApprovalRequestUi, OverlayKind, PickerItem, SessionRenderState } from './types';
+import type { AgentStatusSnapshot, ApprovalChoice, ApprovalRequestUi, OverlayKind, PickerItem, QuestionChoice, QuestionRequestUi, SessionRenderState } from './types';
 /** Subscriber callback when the render state changes. */
 export type StateListener = (state: SessionRenderState) => void;
 /**
@@ -65,6 +65,10 @@ export declare class SessionController {
     private approvalSignalCleanup;
     /** Tools the user allowed for the rest of this session (per-boot memory). */
     private readonly sessionAllowedTools;
+    /** Resolver for the currently pending question, if any. */
+    private questionResolve;
+    /** Question signal cleanup for the currently pending question. */
+    private questionSignalCleanup;
     /**
      * Put a permission question to the user. Resolves when the UI answers,
      * or with `{ kind: 'cancelled' }` when the request signal aborts (turn
@@ -84,6 +88,21 @@ export declare class SessionController {
     isToolAllowedForSession(toolName: string): boolean;
     /** Remember a session-wide allowance for this tool (本会话始终允许). */
     allowToolForSession(toolName: string): void;
+    /**
+     * Put a structured question to the user (plan review, generic ask).
+     * Resolves when the UI answers, or with `{ kind: 'dismissed' }` when the
+     * request signal aborts or the turn closes — the caller maps a dismissal
+     * to ASK_CANCELLED semantics (stay and wait for the user's own words).
+     */
+    openQuestion(request: QuestionRequestUi, signal?: {
+        aborted: boolean;
+        addEventListener?: (t: string, l: () => void) => unknown;
+        removeEventListener?: (t: string, l: () => void) => unknown;
+    }): Promise<QuestionChoice>;
+    /** Answer the pending question (UI path) and close the panel. */
+    resolveQuestion(choice: QuestionChoice): void;
+    /** Withdraw the question without a user answer (signal/turn end). */
+    cancelQuestion(): void;
     /** Patch the agent snapshot (used by status bar updates outside the event bus). */
     patchAgent(snapshot: Partial<AgentStatusSnapshot>): void;
     /** Notify subscribers of a state change. */

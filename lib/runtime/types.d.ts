@@ -141,6 +141,32 @@ export type ApprovalChoice = {
 } | {
     readonly kind: 'cancelled';
 };
+/** A pending structured question put to the user (plan review, generic ask). */
+export interface QuestionRequestUi {
+    /** Stable question id, echoed back in the answer. */
+    readonly id: string;
+    /** Optional short heading/group label. */
+    readonly header: string | undefined;
+    /** The question to display. */
+    readonly question: string;
+    /** Supporting detail rendered with the question (plan markdown). */
+    readonly detail: string | undefined;
+    /** Selectable options; empty means free-text only. */
+    readonly options: readonly {
+        readonly label: string;
+        readonly description: string | undefined;
+    }[];
+    /** The option label that approves, when this is a plan-review. */
+    readonly approveLabel: string | undefined;
+}
+/** The user's answer to a pending {@link QuestionRequestUi}. */
+export type QuestionChoice = {
+    readonly kind: 'answer';
+    readonly selected: string[];
+    readonly custom: string | undefined;
+} | {
+    readonly kind: 'dismissed';
+};
 /** Per-session render state the SessionController publishes. */
 export interface SessionRenderState {
     /** Active session id; `undefined` before the first agent is created. */
@@ -155,6 +181,8 @@ export interface SessionRenderState {
     picker: PickerState | undefined;
     /** Pending tool-permission approval, or `undefined` when none. */
     approval: ApprovalRequestUi | undefined;
+    /** Pending structured question (plan review or generic), or `undefined`. */
+    question: QuestionRequestUi | undefined;
     /** Whether a tool invocation is currently being streamed. */
     hasActiveTool: boolean;
 }

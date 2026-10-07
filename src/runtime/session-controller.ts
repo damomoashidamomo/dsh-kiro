@@ -20,6 +20,8 @@ import type {
   Message,
   OverlayKind,
   PickerItem,
+  QuestionChoice,
+  QuestionRequestUi,
   SessionRenderState,
   ToolRecord,
 } from './types'
@@ -44,6 +46,7 @@ function emptyState(): SessionRenderState {
     overlay: { kind: 'none' },
     picker: undefined,
     approval: undefined,
+    question: undefined,
     hasActiveTool: false,
   }
 }
@@ -244,6 +247,13 @@ export class SessionController {
   /** Tools the user allowed for the rest of this session (per-boot memory). */
   private readonly sessionAllowedTools = new Set<string>()
 
+  // --- Structured questions (plan review, generic asks) ---
+
+  /** Resolver for the currently pending question, if any. */
+  private questionResolve: ((choice: QuestionChoice) => void) | undefined
+  /** Question signal cleanup for the currently pending question. */
+  private questionSignalCleanup: (() => void) | undefined
+
   /**
    * Put a permission question to the user. Resolves when the UI answers,
    * or with `{ kind: 'cancelled' }` when the request signal aborts (turn
@@ -312,6 +322,64 @@ export class SessionController {
     this.sessionAllowedTools.add(toolName)
   }
 
+  /**
+   * Put a structured question to the user (plan review, generic ask).
+   * Resolves when the UI answers, or with `{ kind: 'dismissed' }` when the
+   * request signal aborts or the turn closes — the caller maps a dismissal
+   * to ASK_CANCELLED semantics (stay and wait for the user's own words).
+   */
+  openQuestion(
+    request: QuestionRequestUi,
+    signal?: { aborted: boolean; addEventListener?: (t: string, l: () => void) => unknown; removeEventListener?: (t: string, l: () => void) => unknown },
+  ): Promise<QuestionChoice> {
+    this.cancelQuestion()
+    const promise = new Promise<QuestionChoice>((resolve) => {
+      this.questionResolve = resolve
+    })
+    if (signal !== undefined) {
+      if (signal.aborted) {
+        this.questionResolve = undefined
+        return Promise.resolve({ kind: 'dismissed' })
+      }
+      if (typeof signal.addEventListener === 'function') {
+        const onAbort = (): void => { this.cancelQuestion() }
+        signal.addEventListener('abort', onAbort)
+        this.questionSignalCleanup = () => {
+          signal.removeEventListener?.('abort', onAbort)
+        }
+      }
+    }
+    this.state = { ...this.state, question: request }
+    this.publish()
+    return promise
+  }
+
+  /** Answer the pending question (UI path) and close the panel. */
+  resolveQuestion(choice: QuestionChoice): void {
+    const resolve = this.questionResolve
+    this.questionSignalCleanup?.()
+    this.questionSignalCleanup = undefined
+    this.questionResolve = undefined
+    if (this.state.question !== undefined) {
+      this.state = { ...this.state, question: undefined }
+      this.publish()
+    }
+    resolve?.(choice)
+  }
+
+  /** Withdraw the question without a user answer (signal/turn end). */
+  cancelQuestion(): void {
+    const resolve = this.questionResolve
+    this.questionSignalCleanup?.()
+    this.questionSignalCleanup = undefined
+    this.questionResolve = undefined
+    if (this.state.question !== undefined) {
+      this.state = { ...this.state, question: undefined }
+      this.publish()
+    }
+    resolve?.({ kind: 'dismissed' })
+  }
+
   /** Patch the agent snapshot (used by status bar updates outside the event bus). */
   patchAgent(snapshot: Partial<AgentStatusSnapshot>): void {
     this.state = {
@@ -340,9 +408,11 @@ export class SessionController {
       }
       case 'turn/end': {
         const reason = event.data.reason
-        // A closed turn withdraws any pending approval question (the request
-        // is turn-enclosed by design); late answers are discarded upstream.
+        // A closed turn withdraws any pending approval question or structured
+        // question (both are turn-enclosed by design); late answers are
+        // discarded upstream.
         this.cancelApproval()
+        this.cancelQuestion()
         // Surface the real failure instead of a bare "error" chip: LlmFailure
         // carries the driver message (e.g. missing API key, bad model id).
         let label: string = reason.kind
