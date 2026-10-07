@@ -24,6 +24,7 @@ import type {
   QuestionRequestUi,
   SessionRenderState,
   ToolRecord,
+  TodoItem,
 } from './types'
 
 /** Subscriber callback when the render state changes. */
@@ -45,6 +46,7 @@ function emptyState(): SessionRenderState {
       planMode: false,
       permissionPreset: undefined,
     },
+    todos: undefined,
     overlay: { kind: 'none' },
     picker: undefined,
     approval: undefined,
@@ -181,6 +183,26 @@ export class SessionController {
   /** Record a steered input already echoed locally (dedupe on arrival). */
   noteSteered(text: string): void {
     this.lastSteeredText = text
+  }
+
+  /** Append a todo checklist snapshot, skipping no-op duplicates. */
+  private pushTodoSnapshot(todos: readonly TodoItem[]): void {
+    const signature = todos.map((t) => `${t.status}:${t.content}`).join('|')
+    const lastTodo = [...this.state.messages].reverse().find((m) => m.kind === 'todo')
+    if (lastTodo?.text === signature) return
+    const seq = this.state.messages.length + 1
+    const message: Message = {
+      id: idFor('todo', seq),
+      kind: 'todo',
+      text: signature,
+      todos,
+      tool: undefined,
+      createdAt: Date.now(),
+      seq,
+      usage: undefined,
+      streaming: false,
+    }
+    this.state = { ...this.state, messages: [...this.state.messages, message] }
   }
 
   pushSystem(text: string): void {
@@ -635,6 +657,16 @@ export class SessionController {
             ...this.state,
             agent: { ...this.state.agent, planMode: active },
           }
+          this.publish()
+          return
+        }
+        if (wide.type === 'todo/write') {
+          // Whole-list snapshot from the todo_write tool (turn/start clears
+          // it upstream). Pin the list and drop a compact checklist row
+          // into the transcript — kiro-style visible progress.
+          const todos = (wide.data as { todos?: TodoItem[] | null }).todos ?? undefined
+          this.state = { ...this.state, todos }
+          if (todos !== undefined && todos.length > 0) this.pushTodoSnapshot(todos)
           this.publish()
           return
         }

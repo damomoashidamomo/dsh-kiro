@@ -47,6 +47,8 @@ export declare class SessionController {
     /** Append a system message to the transcript (for slash command feedback). */
     /** Record a steered input already echoed locally (dedupe on arrival). */
     noteSteered(text: string): void;
+    /** Append a todo checklist snapshot, skipping no-op duplicates. */
+    private pushTodoSnapshot;
     pushSystem(text: string): void;
     /** Selection callback stored out-of-band (never part of the render state). */
     private pickerOnSelect;

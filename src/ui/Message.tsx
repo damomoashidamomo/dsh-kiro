@@ -11,7 +11,7 @@
 import { Box, Text } from 'ink'
 import { renderMarkdown } from '../markdown/render'
 import { palette, ICONS } from '../theme/palette'
-import type { Message as MessageRecord } from '../runtime/types'
+import type { Message as MessageRecord, TodoItem } from '../runtime/types'
 
 export interface MessageProps {
   message: MessageRecord
@@ -28,6 +28,8 @@ export function Message({ message }: MessageProps): JSX.Element {
       return <ReasoningMessage text={message.text} streaming={message.streaming} />
     case 'tool-call':
       return <ToolMessage message={message} />
+    case 'todo':
+      return <TodoMessage todos={message.todos ?? []} />
     case 'system':
       return <SystemMessage text={message.text} />
     case 'error':
@@ -87,6 +89,34 @@ function ReasoningMessage({ text, streaming }: { text: string; streaming: boolea
 /** Compact char count: 4200 -> 4.2k 字. */
 function formatCharCount(n: number): string {
   return n >= 1000 ? `${(n / 1000).toFixed(1)}k 字` : `${n} 字`
+}
+
+/**
+ * Todo checklist snapshot: kiro-style visible progress. Completed rows
+ * check off, the in-progress row is accented, pending rows stay dim.
+ */
+function TodoMessage({ todos }: { todos: readonly TodoItem[] }): JSX.Element {
+  if (todos.length === 0) return <></>
+  const done = todos.filter((t) => t.status === 'completed').length
+  const rows = todos.slice(0, 12).map((todo) => {
+    const mark = todo.status === 'completed' ? '☑' : todo.status === 'in_progress' ? '◐' : '☐'
+    const text = todo.content.length > 72 ? `${todo.content.slice(0, 71)}…` : todo.content
+    const styled = todo.status === 'completed'
+      ? palette.dim(`${mark} ${text}`)
+      : todo.status === 'in_progress'
+        ? palette.accent(`${mark} ${text}`)
+        : palette.muted(`${mark} ${text}`)
+    return <Text key={todo.content}>{styled}</Text>
+  })
+  if (todos.length > 12) {
+    rows.push(<Text key="__more">{palette.muted(`… 还有 ${todos.length - 12} 项`)}</Text>)
+  }
+  return (
+    <Box flexDirection="column" marginTop={1}>
+      <Text>{palette.accentSoft(`✻ 任务清单 (${done}/${todos.length})`)}</Text>
+      {rows}
+    </Box>
+  )
 }
 
 /** Render a system message in muted dim. */

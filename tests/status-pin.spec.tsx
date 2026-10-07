@@ -72,6 +72,54 @@ describe('user/message transcript echo', () => {
   })
 })
 
+describe('todo snapshots', () => {
+  it('todo/write pins the list and drops a transcript snapshot', () => {
+    const { ctrl, emit } = driver()
+    emit({ type: 'todo/write', seq: 1, data: { todos: [
+      { content: '第一项', status: 'completed' },
+      { content: '第二项', status: 'in_progress' },
+      { content: '第三项', status: 'pending' },
+    ] } })
+    expect(ctrl.state.todos?.length).toBe(3)
+    const snapshot = ctrl.state.messages.find((m) => m.kind === 'todo')
+    expect(snapshot?.todos?.[1]?.status).toBe('in_progress')
+  })
+
+  it('identical consecutive writes do not duplicate the snapshot', () => {
+    const { ctrl, emit } = driver()
+    const list = [{ content: 'only', status: 'pending' }]
+    emit({ type: 'todo/write', seq: 1, data: { todos: list } })
+    emit({ type: 'todo/write', seq: 2, data: { todos: list } })
+    expect(ctrl.state.messages.filter((m) => m.kind === 'todo')).toHaveLength(1)
+    // a changed list appends a new snapshot
+    emit({ type: 'todo/write', seq: 3, data: { todos: [{ content: 'only', status: 'completed' }] } })
+    expect(ctrl.state.messages.filter((m) => m.kind === 'todo')).toHaveLength(2)
+  })
+
+  it('null clears the pin without a snapshot', () => {
+    const { ctrl, emit } = driver()
+    emit({ type: 'todo/write', seq: 1, data: { todos: [{ content: 'x', status: 'pending' }] } })
+    emit({ type: 'todo/write', seq: 2, data: { todos: null } })
+    expect(ctrl.state.todos).toBeUndefined()
+  })
+
+  it('renders the checklist with counts and states', async () => {
+    const { Message } = await import('../src/ui/Message')
+    const { lastFrame, unmount } = render(React.createElement(Message, { message: {
+      id: 't1', kind: 'todo', text: 'sig', todos: [
+        { content: 'done item', status: 'completed' },
+        { content: 'live item', status: 'in_progress' },
+      ], tool: undefined, createdAt: Date.now(), seq: 1, usage: undefined, streaming: false,
+    } }))
+    await new Promise((r) => setTimeout(r, 30))
+    const frame = lastFrame() ?? ''
+    expect(frame).toContain('任务清单 (1/2)')
+    expect(frame).toContain('☑ done item')
+    expect(frame).toContain('◐ live item')
+    unmount()
+  })
+})
+
 describe('permission preset pin', () => {
   it('permission/preset events update the snapshot', () => {
     const { ctrl, emit } = driver()

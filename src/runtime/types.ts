@@ -8,6 +8,12 @@
 
 import type { SessionEvent } from '@deepseek-ai/dsh-session'
 
+/** One todo entry from the platform's todos projection. */
+export interface TodoItem {
+  readonly content: string
+  readonly status: 'pending' | 'in_progress' | 'completed'
+}
+
 /** UI-facing message kinds. */
 export type MessageKind =
   | 'user'
@@ -16,6 +22,7 @@ export type MessageKind =
   | 'tool-call'
   | 'tool-result'
   | 'system'
+  | 'todo'
   | 'error'
 
 /** Tool call execution state machine. */
@@ -47,6 +54,8 @@ export interface ToolRecord {
 
 /** Single visible message in the transcript. */
 export interface Message {
+  /** Todo list snapshot (kind 'todo' only): the rows to render. */
+  readonly todos?: readonly TodoItem[] | undefined
   /** Stable id within the session; `${kind}-${seq}`. */
   readonly id: string
   /** Whether the message originated from the user, model, or runtime. */
@@ -165,6 +174,8 @@ export interface SessionRenderState {
   messages: Message[]
   /** Agent state for the StatusBar. */
   agent: AgentStatusSnapshot
+  /** Latest todo snapshot from the todos projection (undefined = none). */
+  todos: readonly TodoItem[] | undefined
   /** Active overlay, if any. */
   overlay: OverlayKind
   /** Live interactive picker (kiro-style chooser), or `undefined` when closed. */
