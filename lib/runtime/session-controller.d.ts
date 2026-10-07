@@ -26,6 +26,12 @@ export declare class SessionController {
     private unsubscribe;
     /** In-flight tool calls keyed by platform callId (parallel-safe). */
     private readonly activeTools;
+    /**
+     * Text of the most recent steer, already echoed locally as `↪ 已插话`.
+     * The platform delivers the same text as a `user/message` when the next
+     * step consumes it — match and drop to avoid a duplicate row.
+     */
+    private lastSteeredText;
     /** Subscribe to state changes. Returns the disposer. */
     subscribe(listener: StateListener): () => void;
     /** Snapshot of the current state. */
@@ -39,6 +45,8 @@ export declare class SessionController {
     /** Push a UI overlay state change. */
     setOverlay(overlay: OverlayKind): void;
     /** Append a system message to the transcript (for slash command feedback). */
+    /** Record a steered input already echoed locally (dedupe on arrival). */
+    noteSteered(text: string): void;
     pushSystem(text: string): void;
     /** Selection callback stored out-of-band (never part of the render state). */
     private pickerOnSelect;

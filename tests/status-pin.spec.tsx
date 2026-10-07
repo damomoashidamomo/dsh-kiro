@@ -45,6 +45,33 @@ describe('plan-mode pin', () => {
   })
 })
 
+describe('user/message transcript echo', () => {
+  it("renders the user's typed input as a transcript row", () => {
+    const { ctrl, emit } = driver()
+    emit({ type: 'user/message', seq: 1, data: { id: 'u1', role: 'user', content: [{ type: 'text', text: '在吗' }], source: { kind: 'user' } } })
+    const row = ctrl.state.messages.find((m) => m.kind === 'user')
+    expect(row?.text).toBe('在吗')
+    expect(row?.streaming).toBe(false)
+  })
+
+  it('drops the steered duplicate (already echoed as ↪ 已插话)', () => {
+    const { ctrl, emit } = driver()
+    ctrl.noteSteered('你在做什么')
+    emit({ type: 'user/message', seq: 1, data: { id: 'u1', role: 'user', content: [{ type: 'text', text: '你在做什么' }], source: { kind: 'user' } } })
+    expect(ctrl.state.messages.filter((m) => m.kind === 'user')).toHaveLength(0)
+    // A different later input still shows.
+    emit({ type: 'user/message', seq: 2, data: { id: 'u2', role: 'user', content: [{ type: 'text', text: '另一句' }], source: { kind: 'user' } } })
+    expect(ctrl.state.messages.filter((m) => m.kind === 'user')).toHaveLength(1)
+  })
+
+  it('ignores platform-injected (non-user-source) messages and empty text', () => {
+    const { ctrl, emit } = driver()
+    emit({ type: 'user/message', seq: 1, data: { id: 'n1', role: 'user', content: [{ type: 'text', text: 'compaction notice' }], source: { kind: 'plugin' } } })
+    emit({ type: 'user/message', seq: 2, data: { id: 'n2', role: 'user', content: [], source: { kind: 'user' } } })
+    expect(ctrl.state.messages.filter((m) => m.kind === 'user')).toHaveLength(0)
+  })
+})
+
 describe('request/context effective window (token-meter parity)', () => {
   it('sets the limit from the adapter-resolved window and refreshes model', () => {
     const { ctrl, emit } = driver()

@@ -119,6 +119,12 @@ export class SessionController {
   private unsubscribe: (() => void) | undefined
   /** In-flight tool calls keyed by platform callId (parallel-safe). */
   private readonly activeTools = new Map<string, ToolRecord>()
+  /**
+   * Text of the most recent steer, already echoed locally as `↪ 已插话`.
+   * The platform delivers the same text as a `user/message` when the next
+   * step consumes it — match and drop to avoid a duplicate row.
+   */
+  private lastSteeredText: string | undefined
 
   /** Subscribe to state changes. Returns the disposer. */
   subscribe(listener: StateListener): () => void {
@@ -171,6 +177,11 @@ export class SessionController {
   }
 
   /** Append a system message to the transcript (for slash command feedback). */
+  /** Record a steered input already echoed locally (dedupe on arrival). */
+  noteSteered(text: string): void {
+    this.lastSteeredText = text
+  }
+
   pushSystem(text: string): void {
     const seq = this.state.messages.length
     const message: Message = {
@@ -580,6 +591,32 @@ export class SessionController {
           }
           this.publish()
         }
+        return
+      }
+      case 'user/message': {
+        const data = event.data as { content?: unknown[]; source?: { kind?: string } }
+        // Only what the user actually typed/attached: platform-injected
+        // notices (compaction summaries, queue texts) use other source kinds.
+        if (data.source?.kind !== 'user') return
+        const text = contentToText(data.content ?? []).trim()
+        if (text === '') return
+        if (text === this.lastSteeredText) {
+          this.lastSteeredText = undefined
+          return
+        }
+        const seq = this.state.messages.length + 1
+        const message: Message = {
+          id: idFor('user', seq),
+          kind: 'user',
+          text,
+          tool: undefined,
+          createdAt: Date.now(),
+          seq,
+          usage: undefined,
+          streaming: false,
+        }
+        this.state = { ...this.state, messages: [...this.state.messages, message] }
+        this.publish()
         return
       }
       default: {

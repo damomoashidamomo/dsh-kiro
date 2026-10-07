@@ -227,6 +227,7 @@ async function mount(ctx: Context, startup: KiroStartup): Promise<void> {
     // active cancellation queues for the next turn) opens/queues a new turn.
     if (routeTurnInput(agent, message) === 'steer') {
       const preview = trimmed.length > 40 ? `${trimmed.slice(0, 40)}…` : trimmed
+      controller.noteSteered(trimmed)
       controller.pushSystem(`↪ 已插话（下一步生效）：${preview}`)
     }
   }
