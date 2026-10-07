@@ -17,7 +17,7 @@ import { ApprovalOverlay } from './ApprovalOverlay'
 import { PlanReviewOverlay } from './PlanReviewOverlay'
 import { Autocomplete, slashCandidates } from './Autocomplete'
 import { banner, palette } from '../theme/palette'
-import { BANNER } from '../theme/banner'
+import { splashMark } from '../theme/banner'
 import type { SessionController } from '../runtime/session-controller'
 import type { SessionRenderState } from '../runtime/types'
 import { mapKey } from '../runtime/keybindings'
@@ -99,7 +99,7 @@ export function App({ controller, seedTask, activeAgentName, onSubmit }: AppProp
   // so flex centering inside it never spans the terminal width. Center the
   // splash by padding each line with spaces for the real column count.
   const splash = useMemo(() => {
-    const raw = banner(BANNER)
+    const raw = splashMark()
     const columns = stdout?.columns ?? 100
     const lines = raw.split('\n')
     const maxWidth = Math.max(0, ...lines.map((line) => line.replace(/\x1b\[[0-9;]*m/gu, '').length))

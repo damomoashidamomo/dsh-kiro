@@ -21,7 +21,7 @@ import {
   type AppExit,
 } from '@deepseek-ai/dsh-cmdline'
 import { banner, resetPalette, colorLevel } from './theme/palette'
-import { BANNER } from './theme/banner'
+import { splashMark } from './theme/banner'
 
 declare module '@deepseek-ai/cordis' {
   interface Context {
@@ -292,7 +292,7 @@ export function apply(ctx: Context): void {
   // hook the banner.
   const originalHelp = program.helpInformation.bind(program)
   program.helpInformation = function helpWithBanner(): string {
-    return `${banner(BANNER)}\n${originalHelp()}`
+    return `${splashMark()}\n${originalHelp()}`
   }
 
   try {
