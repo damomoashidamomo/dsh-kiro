@@ -24,15 +24,19 @@ export const BANNER = String.raw`
 `
 
 
-import { LOGO_ANSI } from './logo-ansi'
+import { LOGO_VARIANTS } from './logo-ansi'
 import { banner, colorLevel } from './palette'
 
 /**
  * The startup mark for TUI surfaces: the truecolor pixel logo when the
  * terminal speaks 24-bit color (level 3), else the classic ASCII banner.
  * The pixel art embeds raw `38;2`/`48;2` sequences, so level 2 (256-color)
- * falls back rather than risking mis-rendered ANSI.
+ * falls back rather than risking mis-rendered ANSI. Of the pre-rendered
+ * variants (220/165/110 cols) the largest that fits `columns` wins.
  */
-export function splashMark(): string {
-  return colorLevel() >= 3 ? LOGO_ANSI : banner(BANNER)
+export function splashMark(columns: number | undefined): string {
+  if (colorLevel() < 3) return banner(BANNER)
+  const usable = (columns ?? 80) - 2
+  const fit = LOGO_VARIANTS.find((variant) => variant.cols <= usable)
+  return fit !== undefined ? fit.ansi : banner(BANNER)
 }

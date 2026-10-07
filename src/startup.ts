@@ -292,7 +292,7 @@ export function apply(ctx: Context): void {
   // hook the banner.
   const originalHelp = program.helpInformation.bind(program)
   program.helpInformation = function helpWithBanner(): string {
-    return `${splashMark()}\n${originalHelp()}`
+    return `${splashMark(process.stdout.columns)}\n${originalHelp()}`
   }
 
   try {

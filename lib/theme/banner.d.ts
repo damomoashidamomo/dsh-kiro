@@ -11,6 +11,7 @@ export declare const BANNER: string;
  * The startup mark for TUI surfaces: the truecolor pixel logo when the
  * terminal speaks 24-bit color (level 3), else the classic ASCII banner.
  * The pixel art embeds raw `38;2`/`48;2` sequences, so level 2 (256-color)
- * falls back rather than risking mis-rendered ANSI.
+ * falls back rather than risking mis-rendered ANSI. Of the pre-rendered
+ * variants (220/165/110 cols) the largest that fits `columns` wins.
  */
-export declare function splashMark(): string;
+export declare function splashMark(columns: number | undefined): string;
