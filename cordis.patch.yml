@@ -85,6 +85,11 @@
     - id: kiro-knowledge
       name: '@damomoashidamomo/dsh-kiro/knowledge'
 
+    # Hooks engine. Reads ~/.kiro/hooks.json + .kiro/hooks.json (Claude Code
+    # compatible command hooks) and wires them onto the interception points.
+    - id: kiro-hooks
+      name: '@damomoashidamomo/dsh-kiro/hooks'
+
     # Tangent (side-conversation) mode. Owns tangent lifecycle.
     - id: kiro-tangent
       name: '@damomoashidamomo/dsh-kiro/tangent'
