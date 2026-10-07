@@ -151,6 +151,8 @@ export type ApprovalChoice = {
 } | {
     readonly kind: 'allow-session';
 } | {
+    readonly kind: 'allow-project';
+} | {
     readonly kind: 'deny';
     readonly reason: string | undefined;
 } | {

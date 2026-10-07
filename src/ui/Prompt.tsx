@@ -76,12 +76,10 @@ export function Prompt({
     lastInsertSeq.current = pendingInsert.seq
     setBuffer(prev => {
       const text = applyMentionInsert(prev.text, pendingInsert.token, pendingInsert.insert)
-      const prefix = detectPrefix(text)
-      const query = prefix !== undefined ? text.slice(1) : ''
-      onPrefix?.(prefix, query)
       return { ...prev, text, cursor: text.length }
     })
-  }, [pendingInsert, onPrefix])
+    // The buffer.text effect above re-derives the prefix afterwards.
+  }, [pendingInsert])
 
   const handle = useCallback((outcome: InputOutcome) => {
     setBuffer(prev => {
@@ -99,9 +97,6 @@ export function Prompt({
         || outcome.kind === 'delete'
         || outcome.kind === 'newline'
       ) {
-        const prefix = detectPrefix(next.text)
-        const query = prefix !== undefined ? next.text.slice(1) : ''
-        onPrefix?.(prefix, query)
         return { ...next, cursor: next.text.length }
       }
       if (outcome.kind === 'submit') {
@@ -111,12 +106,17 @@ export function Prompt({
         Promise.resolve().then(() => onSubmit(text, images))
         return emptyBuffer(next.history)
       }
-      const prefix = detectPrefix(next.text)
-      const query = prefix !== undefined ? next.text.slice(1) : ''
-      onPrefix?.(prefix, query)
       return next
     })
-  }, [onSubmit, onPrefix])
+  }, [onSubmit])
+
+  // Prefix notifications follow the committed text (calling a parent setter
+  // inside our setBuffer updater rendered-during-render warnings).
+  useEffect(() => {
+    const prefix = detectPrefix(buffer.text)
+    const query = prefix !== undefined ? buffer.text.slice(1) : ''
+    onPrefix?.(prefix, query)
+  }, [buffer.text, onPrefix])
 
   useInput((input, key) => {
     // Backspace / delete handling must run BEFORE the modifier shortcuts

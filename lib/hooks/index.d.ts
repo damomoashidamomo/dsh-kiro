@@ -54,6 +54,10 @@ export interface KiroHooksService {
     readonly entries: readonly HookConfigEntry[];
     /** The most recent invocations (bounded ring). */
     recent(limit?: number): readonly HookRunRecord[];
+    /** Re-read both config files and swap the live tables in place. */
+    reload(): {
+        hooks: number;
+    };
 }
 export declare const KIRO_HOOKS = "kiroHooks";
 export declare function getKiroHooks(): KiroHooksService | undefined;

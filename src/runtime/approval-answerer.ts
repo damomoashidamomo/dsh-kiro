@@ -43,6 +43,8 @@ export interface ApprovalFeedback {
 export interface ApprovalUi {
   isToolAllowedForSession(toolName: string): boolean
   allowToolForSession(toolName: string): void
+  /** Persist a project-wide allowance (.kiro/approvals.json). */
+  allowToolForProject(toolName: string): void
   openApproval(
     request: ApprovalRequestUi,
     signal?: ApprovalRequestLike['signal'],
@@ -66,6 +68,9 @@ export function createApprovalAnswerer(
     switch (choice.kind) {
       case 'allow-session':
         ui.allowToolForSession(req.toolName)
+        return 'allowed-once'
+      case 'allow-project':
+        ui.allowToolForProject(req.toolName)
         return 'allowed-once'
       case 'deny':
         if (choice.reason !== undefined && choice.reason !== '') {

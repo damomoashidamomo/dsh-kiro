@@ -142,6 +142,7 @@ export interface ApprovalRequestUi {
 export type ApprovalChoice =
   | { readonly kind: 'allow-once' }
   | { readonly kind: 'allow-session' }
+  | { readonly kind: 'allow-project' }
   | { readonly kind: 'deny'; readonly reason: string | undefined }
   | { readonly kind: 'cancelled' }
 

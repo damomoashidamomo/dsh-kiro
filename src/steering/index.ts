@@ -49,23 +49,44 @@ export function getKiroSteering(): typeof steeringState {
   return steeringState
 }
 
+/** Reload hook (set by apply; /steering reload calls it). */
+let steeringReload: (() => void) | undefined
+
+/** Re-read the steering directories and swap the section in place. */
+export function reloadKiroSteering(): boolean {
+  if (steeringReload === undefined) return false
+  steeringReload()
+  return true
+}
+
+/** Latest steering section text (mutable so reload can swap it in place). */
+let sectionText = ''
+
 /** Mount the loader and inject the guidance as a system-prompt section. */
 export function apply(ctx: Context): void {
-  const files = loadSteeringFiles()
-  const applicable = resolveApplicableSteering(process.cwd(), files)
-  const section = composeSteeringPrompt(applicable)
+  const reload = (): void => {
+    const files = loadSteeringFiles()
+    const applicable = resolveApplicableSteering(process.cwd(), files)
+    sectionText = composeSteeringPrompt(applicable)
+    steeringState = { files, applicable, sectionChars: sectionText.length }
+    ctx.logger.info?.(`dsh-kiro: kiro-steering reloaded (${applicable.length}/${files.length} applicable to ${process.cwd()})`)
+  }
+  reload()
+  ctx.provide(KIRO_STEERING, {
+    get files() { return steeringState?.files ?? [] },
+    get applicable() { return steeringState?.applicable ?? [] },
+    get sectionChars() { return steeringState?.sectionChars ?? 0 },
+  })
   ctx.inject(['systemPrompt'], (scope) => {
     scope.systemPrompt.section({
       name: 'kiro:steering',
       // After TEAM_POLICY (600), before PTC_ONLY (800): persistent guidance
       // sits with the policy sections, ahead of the tool docs.
       order: 650,
-      text: () => section,
+      text: () => sectionText,
     })
   })
-  steeringState = { files, applicable, sectionChars: section.length }
-  ctx.provide(KIRO_STEERING, steeringState)
-  ctx.logger.info?.(`dsh-kiro: kiro-steering mounted (${applicable.length}/${files.length} applicable to ${process.cwd()})`)
+  steeringReload = reload
 }
 
 export type { SteeringFile } from './loader'

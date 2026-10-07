@@ -21,6 +21,8 @@ declare let steeringState: {
 } | undefined;
 /** Latest loaded steering state, for /steering. */
 export declare function getKiroSteering(): typeof steeringState;
+/** Re-read the steering directories and swap the section in place. */
+export declare function reloadKiroSteering(): boolean;
 /** Mount the loader and inject the guidance as a system-prompt section. */
 export declare function apply(ctx: Context): void;
 export type { SteeringFile } from './loader';

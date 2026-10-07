@@ -28,7 +28,8 @@ import type { DiffRow } from './diff'
 const OPTIONS = [
   { key: '1', label: '允许一次' },
   { key: '2', label: '本会话始终允许' },
-  { key: '3', label: '拒绝（可填理由）' },
+  { key: '3', label: '本项目始终允许（写入 .kiro/approvals.json）' },
+  { key: '4', label: '拒绝（可填理由）' },
 ] as const
 
 export function ApprovalOverlay(props: {
@@ -82,11 +83,13 @@ export function ApprovalOverlay(props: {
     }
 
     const pick = (index: number): void => {
-      if (index === 2) {
+      if (index === 3) {
         setReasonMode(true)
         return
       }
-      props.onResolve(index === 1 ? { kind: 'allow-session' } : { kind: 'allow-once' })
+      if (index === 1) props.onResolve({ kind: 'allow-session' })
+      else if (index === 2) props.onResolve({ kind: 'allow-project' })
+      else props.onResolve({ kind: 'allow-once' })
     }
 
     if (input === '') {
@@ -120,7 +123,7 @@ export function ApprovalOverlay(props: {
         return
       }
       const direct = OPTIONS.findIndex((option) => option.key === ch)
-      if (direct === 2) {
+      if (direct === 3) {
         enteringReason = true
         continue
       }

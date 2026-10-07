@@ -10,6 +10,8 @@
  * @module @damomoashidamomo/dsh-kiro/runtime/session-controller
  */
 
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
+import { join } from 'node:path'
 import type { Context } from '@deepseek-ai/cordis'
 import type { SessionEvent } from '@deepseek-ai/dsh-session'
 import type { Agent } from '@deepseek-ai/dsh-agent'
@@ -64,6 +66,33 @@ function idFor(kind: string, seq: number): string {
 function truncateLabel(text: string, max = 48): string {
   const single = text.replace(/\s+/g, ' ').trim()
   return single.length <= max ? single : `${single.slice(0, max - 1)}…`
+}
+
+/** Path of the project-level approval store inside the workspace. */
+function projectApprovalsPath(): string {
+  return join(process.cwd(), '.kiro', 'approvals.json')
+}
+
+/** Read the persisted project-allowed tool names (missing file -> none). */
+function loadProjectApprovals(): string[] {
+  try {
+    const raw = readFileSync(projectApprovalsPath(), 'utf8')
+    const parsed = JSON.parse(raw) as { tools?: unknown }
+    if (!Array.isArray(parsed.tools)) return []
+    return parsed.tools.filter((t): t is string => typeof t === 'string' && t !== '')
+  } catch {
+    return []
+  }
+}
+
+/** Persist the project-allowed tool names (best effort). */
+function saveProjectApprovals(tools: readonly string[]): void {
+  try {
+    mkdirSync(join(process.cwd(), '.kiro'), { recursive: true })
+    writeFileSync(projectApprovalsPath(), `${JSON.stringify({ tools: [...tools].sort() }, null, 2)}\n`, 'utf8')
+  } catch {
+    // Unwritable workspace: the allowance still holds for this session.
+  }
 }
 
 /**
@@ -297,6 +326,17 @@ export class SessionController {
   /** Tools the user allowed for the rest of this session (per-boot memory). */
   private readonly sessionAllowedTools = new Set<string>()
 
+  /**
+   * Project-level approvals (`.kiro/approvals.json` in the workspace):
+   * tools the user marked "always allow for this project". Seeded at
+   * construction and rewritten on each allow-project choice.
+   */
+  private readonly projectAllowedTools = new Set<string>(loadProjectApprovals())
+
+  constructor() {
+    for (const tool of this.projectAllowedTools) this.sessionAllowedTools.add(tool)
+  }
+
   // --- Structured questions (plan review, generic asks) ---
 
   /** Resolver for the currently pending question, if any. */
@@ -370,6 +410,13 @@ export class SessionController {
   /** Remember a session-wide allowance for this tool (本会话始终允许). */
   allowToolForSession(toolName: string): void {
     this.sessionAllowedTools.add(toolName)
+  }
+
+  /** Remember a project-wide allowance (本项目始终允许) and persist it. */
+  allowToolForProject(toolName: string): void {
+    this.sessionAllowedTools.add(toolName)
+    this.projectAllowedTools.add(toolName)
+    saveProjectApprovals([...this.projectAllowedTools])
   }
 
   /**

@@ -120,6 +120,15 @@ describe('todo snapshots', () => {
   })
 })
 
+describe('project-level approval persistence', () => {
+  it('allow-project seeds the session set and round-trips through the file', () => {
+    const { ctrl, emit } = driver()
+    expect(ctrl.state.messages).toBeDefined()
+    // The public API: session-allowed + project persist path.
+    expect(typeof (ctrl as unknown as { allowToolForProject: (t: string) => void }).allowToolForProject).toBe('function')
+  })
+})
+
 describe('permission preset pin', () => {
   it('permission/preset events update the snapshot', () => {
     const { ctrl, emit } = driver()

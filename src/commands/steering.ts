@@ -1,5 +1,5 @@
 import type { CommandDefinition } from '@deepseek-ai/dsh-commands'
-import { getKiroSteering } from '../steering'
+import { getKiroSteering, reloadKiroSteering } from '../steering'
 
 /**
  * /steering — surface the ACTUAL loaded steering state: which .kiro/steering
@@ -10,7 +10,18 @@ import { getKiroSteering } from '../steering'
 export const steeringCommand: CommandDefinition = {
   name: 'steering',
   description: 'Show loaded steering files (.kiro/steering/*.md)',
-  handler: async () => {
+  input: { hint: '[reload]' },
+  handler: async ({ rawInput }) => {
+    if (rawInput.trim() === 'reload') {
+      if (!reloadKiroSteering()) {
+        return { kind: 'error' as const, text: 'steering engine not loaded' }
+      }
+      const state = getKiroSteering()
+      return {
+        kind: 'success' as const,
+        text: `已重新读取 steering：生效 ${state?.applicable.length ?? 0} 个文件，注入系统提示 ${state?.sectionChars ?? 0} 字符，无需重启。`,
+      }
+    }
     const state = getKiroSteering()
     if (state === undefined) {
       return {

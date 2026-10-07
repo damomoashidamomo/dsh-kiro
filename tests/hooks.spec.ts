@@ -62,9 +62,11 @@ describe('kiro-hooks plugin surface', () => {
       expect(service).toBeDefined()
       expect(service?.entries).toEqual([])
       expect(service?.sources.every((s) => !s.loaded)).toBe(true)
-      // entries empty → early return: no hook-point listeners at all.
-      expect(h.listeners.get('tools/pre-execute')).toBeUndefined()
-      expect(h.listeners.get('agent/pre-step')).toBeUndefined()
+      // Handlers register even with an empty initial config so that a
+      // later /hooks reload can go live without a restart. The listeners
+      // are inert until a reload puts entries in the tables.
+      expect(h.listeners.get('tools/pre-execute')).toBeDefined()
+      expect(h.listeners.get('agent/pre-step')).toBeDefined()
     })
   })
 })

@@ -76,6 +76,13 @@ export declare class SessionController {
     private approvalSignalCleanup;
     /** Tools the user allowed for the rest of this session (per-boot memory). */
     private readonly sessionAllowedTools;
+    /**
+     * Project-level approvals (`.kiro/approvals.json` in the workspace):
+     * tools the user marked "always allow for this project". Seeded at
+     * construction and rewritten on each allow-project choice.
+     */
+    private readonly projectAllowedTools;
+    constructor();
     /** Resolver for the currently pending question, if any. */
     private questionResolve;
     /** Question signal cleanup for the currently pending question. */
@@ -99,6 +106,8 @@ export declare class SessionController {
     isToolAllowedForSession(toolName: string): boolean;
     /** Remember a session-wide allowance for this tool (本会话始终允许). */
     allowToolForSession(toolName: string): void;
+    /** Remember a project-wide allowance (本项目始终允许) and persist it. */
+    allowToolForProject(toolName: string): void;
     /**
      * Put a structured question to the user (plan review, generic ask).
      * Resolves when the UI answers, or with `{ kind: 'dismissed' }` when the

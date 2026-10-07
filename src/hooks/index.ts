@@ -81,6 +81,8 @@ export interface KiroHooksService {
   readonly entries: readonly HookConfigEntry[]
   /** The most recent invocations (bounded ring). */
   recent(limit?: number): readonly HookRunRecord[]
+  /** Re-read both config files and swap the live tables in place. */
+  reload(): { hooks: number }
 }
 
 export const KIRO_HOOKS = 'kiroHooks'
@@ -162,32 +164,46 @@ export function apply(ctx: Context): void {
     { path: join(workspaceDir, '.kiro', 'hooks.json'), source: 'workspace' },
   ]
 
-  const merged: Partial<Record<HookPoint, MatcherGroup[]>> = {}
-  for (const file of discovered) {
-    const result = loadSource(file.path)
-    sources.push({ path: file.path, loaded: result.loaded, ...(result.reason !== undefined ? { reason: result.reason } : {}) })
-    if (!result.loaded || result.parsed === undefined) continue
-    const { groups, skipped } = parseHookFile(result.parsed)
-    if (skipped > 0) {
-      ctx.logger.warn(`kiro-hooks: ${file.path}: skipped ${skipped} non-command hook(s) (only command hooks run)`)
-    }
-    for (const point of POINTS) {
-      const groupsForPoint = groups[point]
-      if (groupsForPoint === undefined) continue
-      const existing = merged[point] ?? []
-      merged[point] = [...existing, ...groupsForPoint]
-      for (const group of groupsForPoint) {
-        for (const hook of group.hooks) {
-          entries.push({ source: file.source, point, matcher: group.matcher, command: hook.command })
+  /**
+   * (Re-)discover and parse both config files, REPLACING the live tables in
+   * place: interception handlers close over `merged`, so a reload swaps the
+   * behaviour without re-registering anything (hot reload, /hooks reload).
+   */
+  const reload = (): { hooks: number } => {
+    sources.length = 0
+    entries.length = 0
+    for (const key of Object.keys(merged) as HookPoint[]) delete merged[key]
+    for (const file of discovered) {
+      const result = loadSource(file.path)
+      sources.push({ path: file.path, loaded: result.loaded, ...(result.reason !== undefined ? { reason: result.reason } : {}) })
+      if (!result.loaded || result.parsed === undefined) continue
+      const { groups, skipped } = parseHookFile(result.parsed)
+      if (skipped > 0) {
+        ctx.logger.warn(`kiro-hooks: ${file.path}: skipped ${skipped} non-command hook(s) (only command hooks run)`)
+      }
+      for (const point of POINTS) {
+        const groupsForPoint = groups[point]
+        if (groupsForPoint === undefined) continue
+        const existing = merged[point] ?? []
+        merged[point] = [...existing, ...groupsForPoint]
+        for (const group of groupsForPoint) {
+          for (const hook of group.hooks) {
+            entries.push({ source: file.source, point, matcher: group.matcher, command: hook.command })
+          }
         }
       }
     }
+    return { hooks: entries.length }
   }
+
+  const merged: Partial<Record<HookPoint, MatcherGroup[]>> = {}
+  reload()
 
   const service: KiroHooksService = {
     sources,
     entries,
     recent: (limit = 20) => recentRuns.slice(-limit).reverse(),
+    reload,
   }
   ctx.provide(KIRO_HOOKS, service)
   activeService = service
@@ -195,8 +211,8 @@ export function apply(ctx: Context): void {
     if (activeService === service) activeService = undefined
   }, 'kiro-hooks: clear module handle')
 
-  if (entries.length === 0) return
-
+  // Handlers are registered even when the initial config is empty: a
+  // `/hooks reload` that adds hooks must find the wiring in place.
   const detached = createDetachedRuns()
   ctx.effect(() => () => detached.drain(), 'kiro-hooks: drain detached hook runs')
 

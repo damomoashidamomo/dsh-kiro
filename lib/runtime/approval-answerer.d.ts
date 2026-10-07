@@ -37,6 +37,8 @@ export interface ApprovalFeedback {
 export interface ApprovalUi {
     isToolAllowedForSession(toolName: string): boolean;
     allowToolForSession(toolName: string): void;
+    /** Persist a project-wide allowance (.kiro/approvals.json). */
+    allowToolForProject(toolName: string): void;
     openApproval(request: ApprovalRequestUi, signal?: ApprovalRequestLike['signal']): Promise<ApprovalChoice>;
 }
 /**
