@@ -504,6 +504,9 @@ export class SessionController {
         const record: ToolRecord = {
           id: idFor('tool-call', seq),
           callId: data.callId,
+          argsRaw: typeof data.arguments === 'string'
+            ? data.arguments
+            : (data.arguments !== undefined ? JSON.stringify(data.arguments) : undefined),
           name: data.name,
           argsPreview: truncate(previewValue(data.arguments), 240),
           state: 'running',

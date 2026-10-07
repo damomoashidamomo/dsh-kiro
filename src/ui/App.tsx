@@ -19,10 +19,26 @@ import { Autocomplete, slashCandidates, type AutocompleteItem } from './Autocomp
 import { banner, palette } from '../theme/palette'
 import { splashMark } from '../theme/banner'
 import Fuse from 'fuse.js'
+import { buildEditDiff, isEditableTool, type DiffRow } from './diff'
 import type { SessionController } from '../runtime/session-controller'
 import type { SessionRenderState } from '../runtime/types'
 import { mapKey } from '../runtime/keybindings'
 import { ALL_COMMANDS } from '../commands/registry'
+
+/**
+ * Diff rows for a pending approval: match the most recent tool-call record
+ * of the named tool and build red/green rows from its recorded arguments.
+ */
+function approvalDiff(state: SessionRenderState, toolName: string): readonly DiffRow[] | undefined {
+  if (!isEditableTool(toolName)) return undefined
+  for (let i = state.messages.length - 1; i >= 0; i -= 1) {
+    const message = state.messages[i]
+    if (message?.kind === 'tool-call' && message.tool?.name === toolName) {
+      return buildEditDiff(toolName, message.tool.argsRaw)
+    }
+  }
+  return undefined
+}
 
 export interface AppProps {
   /**
@@ -165,6 +181,7 @@ export function App({ controller, seedTask, activeAgentName, onSubmit, fileSearc
       ) : state.approval !== undefined ? (
         <ApprovalOverlay
           request={state.approval}
+          diff={approvalDiff(state, state.approval.toolName)}
           onResolve={(choice) => controller.resolveApproval(choice)}
         />
       ) : state.picker !== undefined ? (

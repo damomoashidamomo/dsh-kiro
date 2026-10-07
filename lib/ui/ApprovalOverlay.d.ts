@@ -20,7 +20,10 @@
  */
 import React from 'react';
 import type { ApprovalChoice, ApprovalRequestUi } from '../runtime/types';
+import type { DiffRow } from './diff';
 export declare function ApprovalOverlay(props: {
+    /** Edit-tool diff rows (B1): red/green view of what the call changes. */
+    diff?: readonly DiffRow[] | undefined;
     request: ApprovalRequestUi;
     onResolve: (choice: ApprovalChoice) => void;
 }): React.ReactElement;

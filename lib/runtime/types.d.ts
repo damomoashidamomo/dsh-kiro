@@ -16,6 +16,8 @@ export interface ToolRecord {
     readonly id: string;
     /** Platform call id pairing this call with its `tool/result` event. */
     callId: string | undefined;
+    /** Full argument JSON from the tool/call event (diff rendering reads it). */
+    argsRaw: string | undefined;
     /** The exact tool name as registered with the agent. */
     readonly name: string;
     /** Argument string as the model wrote it (pretty-printed). */

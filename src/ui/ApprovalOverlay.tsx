@@ -23,6 +23,7 @@ import React, { useState } from 'react'
 import { Text, Box, useInput } from 'ink'
 import type { ApprovalChoice, ApprovalRequestUi } from '../runtime/types'
 import { palette } from '../theme/palette'
+import type { DiffRow } from './diff'
 
 const OPTIONS = [
   { key: '1', label: '允许一次' },
@@ -31,6 +32,8 @@ const OPTIONS = [
 ] as const
 
 export function ApprovalOverlay(props: {
+  /** Edit-tool diff rows (B1): red/green view of what the call changes. */
+  diff?: readonly DiffRow[] | undefined,
   request: ApprovalRequestUi
   onResolve: (choice: ApprovalChoice) => void
 }): React.ReactElement {
@@ -147,6 +150,15 @@ export function ApprovalOverlay(props: {
           <Text wrap="truncate-end">{props.request.reason}</Text>
         </Box>
       )}
+      {props.diff !== undefined && props.diff.length > 0 && (
+        <Box flexDirection="column" marginTop={1}>
+          {props.diff.map((row, idx) => (
+            <Text key={idx} wrap="truncate-end">
+              {renderDiffRow(row)}
+            </Text>
+          ))}
+        </Box>
+      )}
       <Box flexDirection="column" marginTop={1}>
         {reasonMode ? (
           <>
@@ -168,4 +180,21 @@ export function ApprovalOverlay(props: {
       </Box>
     </Box>
   )
+}
+
+
+/** Color one diff row for the approval panel. */
+function renderDiffRow(row: DiffRow): string {
+  switch (row.kind) {
+    case 'add':
+      return palette.success(`+ ${row.text}`)
+    case 'del':
+      return palette.error(`- ${row.text}`)
+    case 'hunk':
+      return palette.accentSoft(row.text)
+    case 'note':
+      return palette.muted(row.text)
+    default:
+      return palette.dim(`  ${row.text}`)
+  }
 }
