@@ -23,6 +23,8 @@ import { createApprovalAnswerer } from './approval-answerer'
 import { createQuestionAnswerer } from './question-answerer'
 import type { ApprovalOutcomeLike, ApprovalRequestLike } from './approval-answerer'
 import { routeTurnInput } from './turn-input'
+import { contextWindowOf } from './model-catalog'
+import type { PiAiConfig } from './model-catalog'
 import { parseShellCommand, runShell } from '../utils/shell'
 import { KIRO_KNOWLEDGE, renderKnowledgeContext } from '../knowledge'
 import type { KnowledgeStore } from '../knowledge/store'
@@ -131,11 +133,20 @@ async function mount(ctx: Context, startup: KiroStartup): Promise<void> {
   // /model's parseModel); StatusBar renders provider/model once.
   const bootModel = startup.model ?? `${selection.provider}/${selection.model}`
   const bootModelId = bootModel.includes('/') ? bootModel.slice(bootModel.indexOf('/') + 1) : bootModel
+  // Read the model catalog for the boot model's declared context window.
+  const settingsCtx = (ctx as unknown as { get?: <T>(key: string) => T | undefined })
+  const piAiBoot = typeof settingsCtx.get === 'function'
+    ? settingsCtx.get<PiAiConfig>('settings') as { get?: (ns: string) => unknown } | undefined
+    : undefined
+  const piAi = piAiBoot?.get !== undefined ? piAiBoot.get('llm-pi-ai') as PiAiConfig | undefined : undefined
+  const bootModelWindow = contextWindowOf(piAi, selection.provider, bootModelId)
   controller.patchAgent({
     activeAgent: startup.agent,
     activeModel: bootModelId,
     activeProvider: selection.provider,
-    contextLimitTokens: 128_000,
+    // The catalog's declared window for the BOOT model — no invented
+    // default: models without a contextWindow show bare token usage.
+    contextLimitTokens: bootModelWindow ?? undefined,
   })
   // Expose the controller as a Cordis service so slash commands can update
   // the status bar (e.g. /model <provider>/<model> after persisting the new

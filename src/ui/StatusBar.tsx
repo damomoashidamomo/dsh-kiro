@@ -53,6 +53,12 @@ export function StatusBar({ agent, prefix, activeAgentName }: StatusBarProps): J
         <Text>{palette.accent(modelLabel)}</Text>
         <Text> {palette.muted('·')} </Text>
         <Text>{statusColor(STATUS_LABEL[agent.status])}</Text>
+        {agent.planMode ? (
+          <>
+            <Text> {palette.muted('·')} </Text>
+            <Text>{palette.warning('[plan]')}</Text>
+          </>
+        ) : null}
         <Text> {palette.muted('·')} </Text>
         <Text>{usageBar}</Text>
         {prefixLabel !== '' ? <Text> {prefixLabel}</Text> : null}

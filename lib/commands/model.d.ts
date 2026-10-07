@@ -19,18 +19,7 @@
  */
 import type { CommandDefinition } from '@deepseek-ai/dsh-commands';
 import type { PickerItem } from '../runtime/types';
-/** Structural view of `llm-pi-ai` config from `~/.dsh/settings.yaml`. */
-interface PiAiConfig {
-    providers?: Record<string, {
-        displayName?: string;
-        apiKeyEnv?: string;
-        models?: ReadonlyArray<{
-            id: string;
-            name?: string;
-            contextWindow?: number;
-        }>;
-    }>;
-}
+import type { PiAiConfig } from '../runtime/model-catalog';
 declare function parseModel(input: string): {
     provider: string;
     model: string;

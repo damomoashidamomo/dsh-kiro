@@ -72,6 +72,8 @@ export interface AgentStatusSnapshot {
   readonly lastTurnReason: string | undefined
   readonly contextUsedTokens: number
   readonly contextLimitTokens: number | undefined
+  /** Whether plan mode is active for this session (pinned in the status bar). */
+  readonly planMode: boolean
 }
 
 /** UI overlay state. */

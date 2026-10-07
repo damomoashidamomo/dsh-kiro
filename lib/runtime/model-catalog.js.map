@@ -1,0 +1,1 @@
+{"version":3,"file":"model-catalog.js","sourceRoot":"","sources":["../../src/runtime/model-catalog.ts"],"names":[],"mappings":"AAAA;;;;;;GAMG;AAWH,8EAA8E;AAC9E,MAAM,UAAU,eAAe,CAC7B,IAA4B,EAC5B,QAAgB,EAChB,KAAa;IAEb,OAAO,IAAI,EAAE,SAAS,EAAE,CAAC,QAAQ,CAAC,EAAE,MAAM,EAAE,IAAI,CAAC,CAAC,CAAC,EAAE,EAAE,CAAC,CAAC,CAAC,EAAE,KAAK,KAAK,CAAC,EAAE,aAAa,CAAA;AACxF,CAAC"}

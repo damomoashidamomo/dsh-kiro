@@ -20,15 +20,8 @@
 
 import type { CommandDefinition } from '@deepseek-ai/dsh-commands'
 import type { PickerItem } from '../runtime/types'
-
-/** Structural view of `llm-pi-ai` config from `~/.dsh/settings.yaml`. */
-interface PiAiConfig {
-  providers?: Record<string, {
-    displayName?: string
-    apiKeyEnv?: string
-    models?: ReadonlyArray<{ id: string; name?: string; contextWindow?: number }>
-  }>
-}
+import { contextWindowOf } from '../runtime/model-catalog'
+import type { PiAiConfig } from '../runtime/model-catalog'
 
 interface KiroController {
   patchAgent(snapshot: {
@@ -126,15 +119,6 @@ function buildModelItems(
     }
   }
   return items
-}
-
-/** Resolve a model's catalog context window, when the config declares one. */
-function contextWindowOf(
-  piAi: PiAiConfig | undefined,
-  provider: string,
-  model: string,
-): number | undefined {
-  return piAi?.providers?.[provider]?.models?.find((m) => m.id === model)?.contextWindow
 }
 
 export const modelCommand: CommandDefinition = {

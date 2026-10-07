@@ -42,6 +42,7 @@ function emptyState(): SessionRenderState {
       lastTurnReason: undefined,
       contextUsedTokens: 0,
       contextLimitTokens: undefined,
+      planMode: false,
     },
     overlay: { kind: 'none' },
     picker: undefined,
@@ -551,8 +552,20 @@ export class SessionController {
         }
         return
       }
-      default:
+      default: {
+        // `plan/mode` arrives from dsh-plan-mode's event augmentation, which
+        // this bundle does not type-depend on — match structurally.
+        const wide = event as { type?: string; data?: { active?: boolean } }
+        if (wide.type === 'plan/mode') {
+          const active = wide.data?.active === true
+          this.state = {
+            ...this.state,
+            agent: { ...this.state.agent, planMode: active },
+          }
+          this.publish()
+        }
         return
+      }
     }
   }
 
