@@ -125,6 +125,13 @@ export declare class SessionController {
      * re-renders each spinner tick — this sweep is the backstop.
      */
     private sweepOrphanedToolCalls;
+    /**
+     * Close any reasoning message still marked streaming. Reasoning deltas
+     * only stream; nothing in the chunk flow closes them, yet a stuck flag
+     * pins the whole later transcript into Ink's live region. Called whenever
+     * the model demonstrably moved on (text, a tool call) and at turn end.
+     */
+    private closeStreamingReasoning;
     /** Append to the last assistant message, creating it if absent. */
     private appendToLastAssistant;
     /** Append a reasoning block to a dedicated message. */

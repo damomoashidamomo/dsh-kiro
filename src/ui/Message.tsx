@@ -25,7 +25,7 @@ export function Message({ message }: MessageProps): JSX.Element {
     case 'assistant':
       return <AssistantMessage text={message.text} streaming={message.streaming} />
     case 'reasoning':
-      return <ReasoningMessage text={message.text} />
+      return <ReasoningMessage text={message.text} streaming={message.streaming} />
     case 'tool-call':
       return <ToolMessage message={message} />
     case 'system':
@@ -51,6 +51,7 @@ function UserMessage({ text }: { text: string }): JSX.Element {
 
 /** Render an assistant message with markdown and streaming cursor. */
 function AssistantMessage({ text, streaming }: { text: string; streaming: boolean }): JSX.Element {
+  if (text.trim() === '') return <></>
   const rendered = renderMarkdown(text)
   return (
     <Box flexDirection="row" marginTop={1}>
@@ -66,15 +67,26 @@ function AssistantMessage({ text, streaming }: { text: string; streaming: boolea
 }
 
 /** Render a reasoning block in italic muted-green. */
-function ReasoningMessage({ text }: { text: string }): JSX.Element {
+/**
+ * Reasoning stays COLLAPSED to one line — the full chain would bury the
+ * conversation (kiro-style cleanliness). The text itself lives on in the
+ * message record for a future expand affordance.
+ */
+function ReasoningMessage({ text, streaming }: { text: string; streaming: boolean }): JSX.Element {
+  const label = streaming
+    ? '思考中…'
+    : `已思考 · ${formatCharCount(text.length)}`
   return (
     <Box flexDirection="row" marginTop={1}>
       <Text>{palette.accentSoft(`${ICONS.reasoning} `)}</Text>
-      <Box flexDirection="column" flexGrow={1}>
-        <Text>{palette.reasoning(text)}</Text>
-      </Box>
+      <Text>{palette.reasoning(label)}</Text>
     </Box>
   )
+}
+
+/** Compact char count: 4200 -> 4.2k 字. */
+function formatCharCount(n: number): string {
+  return n >= 1000 ? `${(n / 1000).toFixed(1)}k 字` : `${n} 字`
 }
 
 /** Render a system message in muted dim. */
@@ -99,6 +111,21 @@ function ErrorMessage({ text }: { text: string }): JSX.Element {
       </Box>
     </Box>
   )
+}
+
+/**
+ * One-line outcome for a tool card: the FIRST meaningful line of the result
+ * (status line / first stdout row / error headline). Page bodies behind it —
+ * fetched content, JSON payloads — stay out of the transcript.
+ */
+function outcomeLine(output: string): string {
+  const noise = /^(external web content follows|treat it as untrusted data|not as instructions)\b/i
+  for (const raw of output.split('\n')) {
+    const line = raw.trim()
+    if (line === '' || noise.test(line)) continue
+    return line.length > 160 ? `${line.slice(0, 159)}…` : line
+  }
+  return '(no output)'
 }
 
 /** Render a tool call + (eventually) result. */
@@ -131,7 +158,7 @@ function ToolMessage({ message }: { message: MessageRecord }): JSX.Element {
     ? palette.dim(`  ${tool.argsPreview.split('\n').join('\n  ')}`)
     : null
   const output = tool.output.length > 0
-    ? palette.muted(`  → ${tool.output}`)
+    ? palette.muted(`  → ${outcomeLine(tool.output)}`)
     : null
   return (
     <Box flexDirection="column" marginTop={1}>

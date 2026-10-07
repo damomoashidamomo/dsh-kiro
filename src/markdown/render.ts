@@ -140,6 +140,27 @@ function renderHeading(token: Tokens.Heading): string {
   return palette.heading(`${hashes} ${text}`)
 }
 
+
+/** marked escapes text tokens for HTML (&#39; &quot; ...) — the terminal
+ * wants the original characters back. */
+function unescapeEntities(text: string): string {
+  return text
+    .replace(/&(amp|lt|gt|quot|#39|apos|nbsp);/g, (_, name: string) => {
+      const map: Record<string, string> = {
+        amp: '&', lt: '<', gt: '>', quot: '"', '#39': "'", apos: "'", nbsp: ' ',
+      }
+      return map[name] ?? name
+    })
+    .replace(/&#(\d{1,7});/g, (_, code: string) => {
+      const parsed = Number.parseInt(code, 10)
+      return Number.isFinite(parsed) ? String.fromCodePoint(parsed) : `&#${code};`
+    })
+    .replace(/&#x([0-9a-fA-F]{1,6});/g, (_, code: string) => {
+      const parsed = Number.parseInt(code, 16)
+      return Number.isFinite(parsed) ? String.fromCodePoint(parsed) : `&#x${code};`
+    })
+}
+
 /** Render an inline token sequence. */
 function renderInline(tokens: Tokens.Generic[]): string {
   return tokens.map(token => renderInlineToken(token)).join('')
@@ -151,7 +172,7 @@ function renderInlineToken(token: Tokens.Generic): string {
     case 'text':
       return token.tokens !== undefined && token.tokens.length > 0
         ? renderInline(token.tokens)
-        : (token as Tokens.Text).text
+        : unescapeEntities((token as Tokens.Text).text)
     case 'strong':
       return palette.bold(renderInline(token.tokens ?? []))
     case 'em':
@@ -159,12 +180,12 @@ function renderInlineToken(token: Tokens.Generic): string {
     case 'del':
       return `\x1b[9m${renderInline(token.tokens ?? [])}\x1b[29m`
     case 'codespan': {
-      const code = (token as Tokens.Codespan).text
+      const code = unescapeEntities((token as Tokens.Codespan).text)
       return palette.code(` ${code} `)
     }
     case 'link': {
       const link = token as Tokens.Link
-      return `${palette.link(renderInline(link.tokens))} ${palette.dim(`(${link.href})`)}`
+      return `${palette.link(renderInline(link.tokens))} ${palette.dim(`(${unescapeEntities(link.href)})`)}`
     }
     case 'image': {
       const image = token as Tokens.Image
@@ -173,7 +194,7 @@ function renderInlineToken(token: Tokens.Generic): string {
     case 'br':
       return '\n'
     case 'escape':
-      return (token as Tokens.Escape).text
+      return unescapeEntities((token as Tokens.Escape).text)
     case 'html':
       return (token as unknown as { text: string }).text
     default:

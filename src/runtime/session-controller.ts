@@ -497,6 +497,7 @@ export class SessionController {
         return
       }
       case 'tool/call': {
+        this.closeStreamingReasoning()
         const data = event.data as { turn: number; step: number; callId: string; name: string; arguments: string }
         const seq = Number(event.seq)
         const record: ToolRecord = {
@@ -643,6 +644,7 @@ export class SessionController {
    * re-renders each spinner tick — this sweep is the backstop.
    */
   private sweepOrphanedToolCalls(): void {
+    this.closeStreamingReasoning()
     let changed = false
     const messages = this.state.messages.map((message) => {
       if (message.kind === 'tool-call' && message.streaming && message.tool !== undefined) {
@@ -660,9 +662,30 @@ export class SessionController {
     }
   }
 
+  /**
+   * Close any reasoning message still marked streaming. Reasoning deltas
+   * only stream; nothing in the chunk flow closes them, yet a stuck flag
+   * pins the whole later transcript into Ink's live region. Called whenever
+   * the model demonstrably moved on (text, a tool call) and at turn end.
+   */
+  private closeStreamingReasoning(): void {
+    let changed = false
+    const messages = this.state.messages.map((message) => {
+      if (message.kind === 'reasoning' && message.streaming) {
+        changed = true
+        return { ...message, streaming: false }
+      }
+      return message
+    })
+    if (changed) {
+      this.state = { ...this.state, messages }
+    }
+  }
+
   /** Append to the last assistant message, creating it if absent. */
   private appendToLastAssistant(delta: string): void {
     if (delta === '') return
+    this.closeStreamingReasoning()
     const messages = [...this.state.messages]
     const last = messages.at(-1)
     if (last?.kind === 'assistant') {
