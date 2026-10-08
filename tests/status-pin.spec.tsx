@@ -120,6 +120,52 @@ describe('todo snapshots', () => {
   })
 })
 
+describe('first-token latency (P8)', () => {
+  it('turn/start then first chunk stamps lastTtftMs once', async () => {
+    const { ctrl, emit } = driver()
+    emit({ type: 'turn/start', seq: 1, data: { turn: 1 } })
+    await new Promise((r) => setTimeout(r, 25))
+    emit({ type: 'assistant/chunk', seq: 2, data: { chunk: { type: 'text-delta', text: 'hi' } } })
+    expect(ctrl.state.agent.lastTtftMs).toBeGreaterThanOrEqual(20)
+    emit({ type: 'assistant/chunk', seq: 3, data: { chunk: { type: 'text-delta', text: ' there' } } })
+    expect(ctrl.state.agent.lastTtftMs).toBeGreaterThanOrEqual(20) // unchanged
+  })
+
+  it('no open turn leaves lastTtftMs undefined', () => {
+    const { ctrl, emit } = driver()
+    emit({ type: 'assistant/chunk', seq: 1, data: { chunk: { type: 'text-delta', text: 'x' } } })
+    expect(ctrl.state.agent.lastTtftMs).toBeUndefined()
+  })
+})
+
+describe('context-pressure hints (P3)', () => {
+  function usage(total: number): { type: string; seq: number; data: unknown } {
+    return { type: 'assistant/chunk', seq: 99, data: { chunk: { type: 'usage', usage: { totalTokens: total } } } }
+  }
+  it('fires one hint per threshold and re-arms after pressure drops', () => {
+    const { ctrl, emit } = driver()
+    emit({ type: 'request/context', seq: 1, data: { contextWindow: 1000 } })
+    emit(usage(650))   // crosses 60%
+    emit(usage(700))   // still above 60 -> no repeat
+    emit(usage(850))   // crosses 80%
+    const hints = ctrl.state.messages.filter((m) => m.kind === 'system' && (m.text.includes('上下文已用')))
+    expect(hints.length).toBe(2)
+    expect(hints[0]?.text).toContain('65%')
+    expect(hints[1]?.text).toContain('85%')
+    // compaction drops usage below 50% -> hints re-arm
+    emit(usage(400))
+    emit(usage(700))
+    const after = ctrl.state.messages.filter((m) => m.kind === 'system' && m.text.includes('上下文已用'))
+    expect(after.length).toBe(3)
+  })
+
+  it('stays quiet without a known limit', () => {
+    const { ctrl, emit } = driver()
+    emit(usage(999999))
+    expect(ctrl.state.messages.some((m) => m.kind === 'system' && m.text.includes('上下文已用'))).toBe(false)
+  })
+})
+
 describe('project-level approval persistence', () => {
   it('allow-project seeds the session set and round-trips through the file', () => {
     const { ctrl, emit } = driver()

@@ -6,7 +6,7 @@
  * @module @damomoashidamomo/dsh-kiro/steering/loader
  */
 /** Where a steering file came from. */
-export type SteeringSource = 'project' | 'user';
+export type SteeringSource = 'builtin' | 'project' | 'user';
 /** Inclusion class for a steering file. */
 export type SteeringKind = 'always' | 'conditional' | 'manual';
 /** Parsed steering record. */
@@ -20,7 +20,12 @@ export interface SteeringFile {
     readonly description: string;
     readonly content: string;
 }
-/** Walk the well-known steering directories and parse every `.md` file. */
+/**
+ * Walk the well-known steering directories and parse every `.md` file.
+ * kiro-parity additions (P4): the workspace README's head plus skill
+ * manifests (.kiro/skills/<name>/SKILL.md at both levels) ride along as
+ * 'builtin' entries — kiro loads this set in every conversation.
+ */
 export declare function loadSteeringFiles(): SteeringFile[];
 /** Resolve which steering files apply to a given cwd. */
 export declare function resolveApplicableSteering(cwd: string, files: readonly SteeringFile[]): SteeringFile[];

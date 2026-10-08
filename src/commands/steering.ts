@@ -36,7 +36,7 @@ export const steeringCommand: CommandDefinition = {
     } else {
       lines.push(`生效的 steering（${state.applicable.length} 个，注入系统提示 ${state.sectionChars} 字符）：`)
       for (const file of state.applicable) {
-        const src = file.source === 'user' ? '~/.kiro' : '.kiro'
+        const src = file.source === 'builtin' ? '常载' : file.source === 'user' ? '~/.kiro' : '.kiro'
         const desc = file.description !== '' ? ` — ${file.description}` : ''
         lines.push(`  ✓ ${file.name}（${src}，${file.kind}，${file.content.length} 字）${desc}`)
       }

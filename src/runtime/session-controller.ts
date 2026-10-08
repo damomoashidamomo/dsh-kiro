@@ -47,6 +47,7 @@ function emptyState(): SessionRenderState {
       contextLimitTokens: undefined,
       planMode: false,
       permissionPreset: undefined,
+      lastTtftMs: undefined,
     },
     todos: undefined,
     overlay: { kind: 'none' },
@@ -325,6 +326,21 @@ export class SessionController {
   private approvalSignalCleanup: (() => void) | undefined
   /** Tools the user allowed for the rest of this session (per-boot memory). */
   private readonly sessionAllowedTools = new Set<string>()
+  /** Context-pressure hints fired this session (dedupe; reset under 50%). */
+  private readonly contextHints = { t60: false, t80: false }
+  /** Wall-clock of the open turn's start (TTFT numerator). */
+  private turnStartedAt: number | undefined
+
+  /** Record first-token latency once per turn (P8). */
+  private markFirstToken(): void {
+    if (this.turnStartedAt === undefined) return
+    const ttft = Date.now() - this.turnStartedAt
+    this.turnStartedAt = undefined
+    this.state = {
+      ...this.state,
+      agent: { ...this.state.agent, lastTtftMs: ttft },
+    }
+  }
 
   /**
    * Project-level approvals (`.kiro/approvals.json` in the workspace):
@@ -496,6 +512,7 @@ export class SessionController {
   private applyEvent(event: SessionEvent): void {
     switch (event.type) {
       case 'turn/start': {
+        this.turnStartedAt = Date.now()
         this.state = {
           ...this.state,
           agent: { ...this.state.agent, status: 'running' },
@@ -533,6 +550,7 @@ export class SessionController {
         return
       }
       case 'assistant/message': {
+        this.markFirstToken()
         const data = event.data as unknown as { message: { content: unknown[] } }
         const text = contentToText(data.message.content)
         const seq = Number(event.seq)
@@ -553,10 +571,12 @@ export class SessionController {
       case 'assistant/chunk': {
         const chunk = (event.data as { chunk: { type: string; text?: string; usage?: { inputTokens?: number; outputTokens?: number; totalTokens?: number } } }).chunk
         if (chunk.type === 'text-delta' && typeof chunk.text === 'string') {
+          this.markFirstToken()
           this.appendToLastAssistant(chunk.text)
           return
         }
         if (chunk.type === 'reasoning-delta' && typeof chunk.text === 'string') {
+          this.markFirstToken()
           this.appendReasoning(chunk.text)
           return
         }
@@ -567,6 +587,7 @@ export class SessionController {
         return
       }
       case 'tool/call': {
+        this.markFirstToken()
         this.closeStreamingReasoning()
         const data = event.data as { turn: number; step: number; callId: string; name: string; arguments: string }
         const seq = Number(event.seq)
@@ -835,6 +856,23 @@ export class SessionController {
     if (last?.kind === 'assistant') {
       messages[messages.length - 1] = { ...last, usage: { input, output } }
       this.state = { ...this.state, messages }
+    }
+    // Context-pressure nudges (P3): one hint per threshold per session; a
+    // drop under 50% (compaction / new chat) re-arms them.
+    const limit = this.state.agent.contextLimitTokens
+    if (limit !== undefined && limit > 0) {
+      const pct = (total / limit) * 100
+      if (pct >= 80 && !this.contextHints.t80) {
+        this.contextHints.t80 = true
+        this.contextHints.t60 = true
+        this.pushSystem(`⚠ 上下文已用 ${Math.round(pct)}%，接近上限。建议 /compact 压缩历史，或 /chat new 开新会话。`)
+      } else if (pct >= 60 && !this.contextHints.t60) {
+        this.contextHints.t60 = true
+        this.pushSystem(`ℹ 上下文已用 ${Math.round(pct)}%。可在不影响当前任务的前提下考虑 /compact。`)
+      } else if (pct < 50) {
+        this.contextHints.t60 = false
+        this.contextHints.t80 = false
+      }
     }
     this.publish()
   }

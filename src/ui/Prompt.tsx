@@ -17,6 +17,8 @@ import {
   applyOutcome,
   detectPrefix,
   emptyBuffer,
+  spillPaste,
+  PASTE_SPILL_THRESHOLD,
   type InputOutcome,
   type PendingImage,
   type PromptBuffer,
@@ -109,6 +111,19 @@ export function Prompt({
       return next
     })
   }, [onSubmit])
+
+  // Oversized paste (logs, dumps) — whether it lands as one write or many
+  // PTY fragments — accumulates in the draft; past the threshold the WHOLE
+  // draft spills to .kiro/paste/ and is replaced by a compact @-mention the
+  // model can read. Judged on the committed text, so fragments count too.
+  useEffect(() => {
+    if (buffer.text.length < PASTE_SPILL_THRESHOLD) return
+    const spill = spillPaste(buffer.text)
+    if (spill === undefined) return
+    const kb = Math.max(1, Math.round(spill.bytes / 1024))
+    const note = `[粘贴 ${kb}KB → @${spill.mention}] `
+    setBuffer(prev => ({ ...prev, text: note, cursor: note.length }))
+  }, [buffer.text])
 
   // Prefix notifications follow the committed text (calling a parent setter
   // inside our setBuffer updater rendered-during-render warnings).
@@ -204,14 +219,25 @@ export function Prompt({
       // delete bytes cancel the most recent character, everything else
       // becomes a typed character.
       if (input.length > 1 && /[\b\x7f\r\n]/.test(input)) {
-        for (const ch of input) {
-          if (ch === '\r' || ch === '\n') {
-            handle({ kind: 'submit', text: buffer.text, images: buffer.images })
-          } else if (ch === '\b' || ch === '\x7f') {
-            handle({ kind: 'backspace' })
-          } else {
-            handle({ kind: 'insert', text: ch })
+        const chars = [...input]
+        for (let i = 0; i < chars.length; i += 1) {
+          const ch = chars[i]!
+          if (ch !== '\r' && ch !== '\n') {
+            if (ch === '\b' || ch === '\x7f') handle({ kind: 'backspace' })
+            else handle({ kind: 'insert', text: ch })
+            continue
           }
+          // A trailing run of CR/LF (nothing but CR/LF after it) is a typed
+          // Enter that the PTY batched with the keystrokes -> submit. A
+          // newline EMBEDDED between content is a paste: keep it in the
+          // draft so oversized-paste spill judges the whole payload.
+          const rest = chars.slice(i + 1)
+          const trailingOnly = rest.every((c) => c === '\r' || c === '\n')
+          if (trailingOnly) {
+            handle({ kind: 'submit', text: buffer.text, images: buffer.images })
+            break
+          }
+          handle({ kind: 'newline' })
         }
         return
       }

@@ -67,6 +67,12 @@ export function StatusBar({ agent, prefix, activeAgentName }: StatusBarProps): J
         ) : null}
         <Text> {palette.muted('·')} </Text>
         <Text>{usageBar}</Text>
+        {agent.lastTtftMs !== undefined ? (
+          <>
+            <Text> {palette.muted('·')} </Text>
+            <Text>{palette.muted(`首字 ${(agent.lastTtftMs / 1000).toFixed(1)}s`)}</Text>
+          </>
+        ) : null}
         {prefixLabel !== '' ? <Text> {prefixLabel}</Text> : null}
         {agent.lastTurnReason !== undefined ? (
           <>
@@ -101,7 +107,9 @@ function renderUsageBar(used: number, limit: number | undefined): string {
   const filled = Math.round(ratio * width)
   const bar = '█'.repeat(filled) + '░'.repeat(width - filled)
   const pct = `${Math.round(ratio * 100)}%`
-  return `${palette.usage(bar)} ${palette.muted(`${formatNumber(used)}/${formatNumber(limit)} (${pct})`)}`
+  // Pressure tiers (P3): calm green, cautious amber >=60%, alarm red >=80%.
+  const colored = ratio >= 0.8 ? palette.error(bar) : ratio >= 0.6 ? palette.warning(bar) : palette.usage(bar)
+  return `${colored} ${palette.muted(`${formatNumber(used)}/${formatNumber(limit)} (${pct})`)}`
 }
 
 function formatNumber(value: number): string {

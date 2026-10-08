@@ -1,6 +1,9 @@
 import { describe, it, expect, vi } from 'vitest'
 import { routeTurnInput, type TurnInputTarget } from '../src/runtime/turn-input'
-import { applyMentionInsert } from '../src/runtime/input'
+import { applyMentionInsert, spillPaste, PASTE_SPILL_THRESHOLD } from '../src/runtime/input'
+import { readFileSync, existsSync, rmSync, mkdirSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 
 function fakeAgent(status: string): TurnInputTarget & {
   steer: ReturnType<typeof vi.fn>
@@ -47,5 +50,26 @@ describe('applyMentionInsert (@-mention completion)', () => {
   })
   it('keeps the quoted grammar for paths with spaces', () => {
     expect(applyMentionInsert('@"my fil', '@"my fil', '@"my file.md" ')).toBe('@"my file.md" ')
+  })
+})
+
+
+describe('spillPaste (P2 oversized paste protection)', () => {
+  const dir = join(tmpdir(), 'kiro-spill-test')
+  it('below threshold returns undefined and writes nothing', () => {
+    rmSync(dir, { recursive: true, force: true })
+    expect(spillPaste('x'.repeat(PASTE_SPILL_THRESHOLD - 1), dir)).toBeUndefined()
+    expect(existsSync(join(dir, '.kiro', 'paste'))).toBe(false)
+  })
+  it('oversized payload lands in .kiro/paste with a mention path', () => {
+    rmSync(dir, { recursive: true, force: true })
+    const big = 'log-line\n'.repeat(1500) // ~12KB
+    const spill = spillPaste(big, dir)
+    expect(spill).toBeDefined()
+    expect(spill!.bytes).toBeGreaterThan(8192)
+    expect(spill!.mention).toMatch(/^\.kiro\/paste\/paste-\d{14}\.txt$/)
+    const written = readFileSync(spill!.path, 'utf8')
+    expect(written.length).toBe(big.length)
+    rmSync(dir, { recursive: true, force: true })
   })
 })

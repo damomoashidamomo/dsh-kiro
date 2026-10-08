@@ -61,6 +61,11 @@
     - id: kiro-agents
       name: '@damomoashidamomo/dsh-kiro/agents'
 
+    # Built-in change guardrail: plan-first confirmation for production /
+    # out-of-repo config mutations (P11 from the habits analysis).
+    - id: kiro-guardrail
+      name: '@damomoashidamomo/dsh-kiro/guardrail'
+
     # Steering files. Loads .kiro/steering/*.md into system-prompt sections.
     - id: kiro-steering
       name: '@damomoashidamomo/dsh-kiro/steering'

@@ -76,6 +76,12 @@ export declare class SessionController {
     private approvalSignalCleanup;
     /** Tools the user allowed for the rest of this session (per-boot memory). */
     private readonly sessionAllowedTools;
+    /** Context-pressure hints fired this session (dedupe; reset under 50%). */
+    private readonly contextHints;
+    /** Wall-clock of the open turn's start (TTFT numerator). */
+    private turnStartedAt;
+    /** Record first-token latency once per turn (P8). */
+    private markFirstToken;
     /**
      * Project-level approvals (`.kiro/approvals.json` in the workspace):
      * tools the user marked "always allow for this project". Seeded at

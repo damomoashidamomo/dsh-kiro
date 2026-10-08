@@ -45,7 +45,8 @@
     "./ui/Autocomplete": "./lib/ui/Autocomplete.js",
     "./ui/ProgressOverlay": "./lib/ui/ProgressOverlay.js",
     "./cordis.patch.yml": "./cordis.patch.yml",
-    "./package.json": "./package.json"
+    "./package.json": "./package.json",
+    "./guardrail": "./lib/guardrail/index.js"
   },
   "files": [
     "lib/**/*.js",

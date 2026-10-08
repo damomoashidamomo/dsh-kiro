@@ -31,6 +31,17 @@ describe('composeSteeringPrompt', () => {
     expect(out).toContain('Use tabs.')
   })
 
+  it('builtin entries sort before user, user before project', () => {
+    const out = composeSteeringPrompt([
+      file('p-rule', 'project', 'P RULE'),
+      file('u-rule', 'user', 'U RULE'),
+      { ...file('README', 'user', 'README HEAD'), source: 'builtin' },
+    ])
+    const pAt = out.indexOf('P RULE'); const uAt = out.indexOf('U RULE'); const bAt = out.indexOf('README HEAD')
+    expect(bAt).toBeLessThan(uAt)
+    expect(uAt).toBeLessThan(pAt)
+  })
+
   it('truncates the payload at the budget cap', () => {
     const huge = 'x'.repeat(40_000)
     const out = composeSteeringPrompt([file('big', 'user', huge), file('tail', 'user', 'NEVER REACHED')])

@@ -58,3 +58,5 @@ export { KIRO_CHECKPOINT } from './checkpoint'
 export { KnowledgeStore, relativePath as relativeKbPath } from './knowledge/store'
 export type { KnowledgeEntry } from './knowledge/store'
 export { KIRO_KNOWLEDGE } from './knowledge'
+
+export { name as guardrailName, GUARDRAIL_TEXT } from './guardrail'

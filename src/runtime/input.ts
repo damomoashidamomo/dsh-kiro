@@ -12,6 +12,9 @@
  * @module @damomoashidamomo/dsh-kiro/runtime/input
  */
 
+import { mkdirSync, writeFileSync } from 'node:fs'
+import { join } from 'node:path'
+
 /** A pending image attachment waiting to be sent alongside the next prompt. */
 export interface PendingImage {
   /** Original file path or data URL. */
@@ -64,6 +67,33 @@ export function emptyBuffer(history: readonly string[] = []): PromptBuffer {
     historyIndex: -1,
     images: [],
   }
+}
+
+/** Paste payload large enough to spill to a file instead of the draft. */
+export const PASTE_SPILL_THRESHOLD = 8192
+
+export interface PasteSpill {
+  /** Absolute path the payload was written to. */
+  readonly path: string
+  /** Workspace-relative path for the @-mention. */
+  readonly mention: string
+  /** Bytes written. */
+  readonly bytes: number
+}
+
+/**
+ * Decide + persist a large paste: the payload goes to
+ * `<cwd>/.kiro/paste/paste-<stamp>.txt` and the caller inserts `note` into
+ * the draft instead of the raw text. Returns undefined below the threshold.
+ */
+export function spillPaste(text: string, cwd: string = process.cwd()): PasteSpill | undefined {
+  if (text.length < PASTE_SPILL_THRESHOLD) return undefined
+  const dir = join(cwd, '.kiro', 'paste')
+  mkdirSync(dir, { recursive: true })
+  const stamp = new Date().toISOString().replace(/[-:T]/g, '').slice(0, 14)
+  const name = `paste-${stamp}.txt`
+  writeFileSync(join(dir, name), text, 'utf8')
+  return { path: join(dir, name), mention: `.kiro/paste/${name}`, bytes: Buffer.byteLength(text, 'utf8') }
 }
 
 /**

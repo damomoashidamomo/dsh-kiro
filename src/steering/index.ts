@@ -24,7 +24,8 @@ export function composeSteeringPrompt(applicable: readonly SteeringFile[]): stri
   if (applicable.length === 0) return ''
   // User-level guidance first, project-level last: later text wins attention,
   // matching the platform's "more specific instructions take precedence".
-  const ordered = [...applicable].sort((a, b) => (a.source === b.source ? 0 : a.source === 'user' ? -1 : 1))
+  const rank: Record<string, number> = { builtin: 0, user: 1, project: 2 }
+  const ordered = [...applicable].sort((a, b) => (rank[a.source] ?? 9) - (rank[b.source] ?? 9))
   let budget = STEERING_MAX_CHARS
   const blocks: string[] = []
   for (const file of ordered) {

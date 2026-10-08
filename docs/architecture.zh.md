@@ -138,3 +138,43 @@ controller 的 `session/event` 监听新增结构性匹配（不走类型增强�
 - 像素 logo：`tools/logo.py` 代码绘制 → 半块 ANSI 真彩（220×120 母版三变体，按终端宽度选优）
 
 **更新后的依赖姿态**：运行时硬依赖新增 `@deepseek-ai/dsh-user-questions`、`@deepseek-ai/dsh-hook-protocol`、`@deepseek-ai/dsh-file-reference{,-local}`（全部 dependencies；后两者经全局树 file: 链接安装，npmjs 不通时的既定通道）。测试基线 224。
+
+
+---
+
+## 2026-10 增量：习惯驱动改善（kiro 日志分析产物）
+
+来源：对本机 96 个 kiro-cli 会话的统计分析（`docs/kiro-habits-analysis.zh.md`，
+只读副本上完成）。五项落地：
+
+### SEAM 15：巨量粘贴保护（P2）
+
+PTY 会把一次大粘贴拆成多个小输入事件，且多字节块中的换行曾被当作
+Enter 逐行提交。现改为：块内**行尾** CR/LF 才是提交（保留"/model\r"类
+快速输入语义），**夹在内容中间**的换行作为换行符入草稿；草稿累计超过
+8KB（`PASTE_SPILL_THRESHOLD`）即整体落盘 `.kiro/paste/paste-<时间戳>.txt`，
+草稿替换为 `[粘贴 NKB → @.kiro/paste/...]`——@ 引用与 fileReferences
+补全天然衔接，模型按需 read。
+
+### SEAM 16：上下文压力提示（P3）+ 首字延迟（P8）
+
+`recordUsage` 按 used/limit 跨过 60%/80% 阈值各推一次系统提示（低于 50%
+重新武装，对应压缩/新会话）；用量条颜色分级 <60% 绿 / ≥60% 黄 / ≥80% 红。
+TTFT：turn/start 盖时间戳，首个 assistant chunk（或聚合 message / 首个
+tool/call，非流式通道也能测）计算延迟，状态栏显示 `首字 X.Xs`。
+
+### SEAM 17：kiro 常载文件对齐（P4）
+
+steering 装载器来源扩展：`README.md` 头 4KB（builtin 级）+
+`.kiro/skills/<name>/SKILL.md` 与 `~/.kiro/skills/<name>/SKILL.md`。
+注入顺序 builtin → user → project（项目级仍最具优先级）；总量仍受 32K
+预算约束；`/steering` 与 `/steering reload` 自动覆盖。
+
+### SEAM 18：内置变更护栏（P11）
+
+`src/guardrail`（patch 行 `kiro-guardrail`，order 640，先于 steering）：
+生产环境变更（服务启停/部署/集群/数据删除）或仓库外配置修改，必须先陈述
+计划与影响面并等用户批准；用户明示"直接做"可豁免本轮。项目 steering 可
+收紧或放宽。实测：要求重启 nginx 时模型只输出计划与确认请求，零执行。
+
+**测试基线 232。**

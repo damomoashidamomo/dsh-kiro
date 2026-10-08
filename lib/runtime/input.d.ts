@@ -73,6 +73,22 @@ export interface PromptBuffer {
 }
 /** Construct a fresh empty buffer. */
 export declare function emptyBuffer(history?: readonly string[]): PromptBuffer;
+/** Paste payload large enough to spill to a file instead of the draft. */
+export declare const PASTE_SPILL_THRESHOLD = 8192;
+export interface PasteSpill {
+    /** Absolute path the payload was written to. */
+    readonly path: string;
+    /** Workspace-relative path for the @-mention. */
+    readonly mention: string;
+    /** Bytes written. */
+    readonly bytes: number;
+}
+/**
+ * Decide + persist a large paste: the payload goes to
+ * `<cwd>/.kiro/paste/paste-<stamp>.txt` and the caller inserts `note` into
+ * the draft instead of the raw text. Returns undefined below the threshold.
+ */
+export declare function spillPaste(text: string, cwd?: string): PasteSpill | undefined;
 /**
  * Apply a picked `@`-mention to the draft: replace the trailing query token
  * (e.g. `@read`) with the formatted candidate (e.g. `@"README.md"` or
