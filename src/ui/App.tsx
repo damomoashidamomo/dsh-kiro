@@ -19,6 +19,7 @@ import { Autocomplete, slashCandidates, type AutocompleteItem } from './Autocomp
 import { banner, palette } from '../theme/palette'
 import { splashMark } from '../theme/banner'
 import Fuse from 'fuse.js'
+import { setMarkdownColumns } from '../markdown/render'
 import { buildEditDiff, isEditableTool, type DiffRow } from './diff'
 import type { SessionController } from '../runtime/session-controller'
 import type { SessionRenderState } from '../runtime/types'
@@ -135,6 +136,12 @@ export function App({ controller, seedTask, activeAgentName, onSubmit, fileSearc
   }, { isActive: true })
 
   const { stdout } = useStdout()
+
+  // Tell the markdown renderer how wide the pane is: tables cap to it and
+  // code blocks truncate — wide content stops exploding the transcript.
+  useEffect(() => {
+    setMarkdownColumns(stdout?.columns !== undefined ? stdout.columns - 2 : undefined)
+  }, [stdout?.columns])
   // Ink's <Static> container is absolutely positioned and hugs its content,
   // so flex centering inside it never spans the terminal width. Center the
   // splash by padding each line with spaces for the real column count.

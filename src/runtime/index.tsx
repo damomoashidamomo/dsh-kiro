@@ -24,6 +24,7 @@ import { createApprovalAnswerer } from './approval-answerer'
 import { createQuestionAnswerer } from './question-answerer'
 import type { ApprovalOutcomeLike, ApprovalRequestLike } from './approval-answerer'
 import { routeTurnInput } from './turn-input'
+import { detectEffortHint, resolveAutoEffort } from './effort-keywords'
 import { contextWindowOf } from './model-catalog'
 import { formatFileMention } from '@deepseek-ai/dsh-file-reference/grammar'
 import type { LocalFileReferenceService } from '@deepseek-ai/dsh-file-reference-local'
@@ -86,6 +87,44 @@ async function mount(ctx: Context, startup: KiroStartup): Promise<void> {
   // The controller is created BEFORE the agent so the agent-scoped listeners
   // registered in `setup` can drive its approval panel immediately.
   const controller = new SessionController()
+  // Model selection + reasoning-effort state live in mount scope so both
+  // the agent-scoped setup and the TUI submit path share one source.
+  const selected: ModelSelectionRef = { current: selection, assembled: undefined }
+  let agentCtxRef: unknown
+  // Reasoning-effort control (habits analysis B-plan): /effort sets a
+  // manual level (persisted via agentDefaultModel); prompts with
+  // escalation keywords auto-raise for THAT turn unless the user pinned
+  // a manual level. Models whose settings entry declares no
+  // reasoningEfforts are skipped gracefully — the dial does not exist
+  // for them.
+  const effortControl = {
+    manual: undefined as string | undefined,
+    lastAuto: undefined as string | undefined,
+    capabilityWarned: new Set<string>(),
+    declaredLevels(providerName: string, modelId: string): readonly string[] | undefined {
+      try {
+        const settings = ctx.get('settings') as { get?: (ns: string) => unknown } | undefined
+        const piAi = settings?.get?.('llm-pi-ai') as {
+          providers?: Record<string, { models?: { id: string; reasoningEfforts?: Record<string, unknown> }[] }>
+        } | undefined
+        const entry = piAi?.providers?.[providerName]?.models?.find((m) => m.id === modelId)
+        if (entry?.reasoningEfforts !== undefined && typeof entry.reasoningEfforts === 'object') {
+          return Object.keys(entry.reasoningEfforts)
+        }
+      } catch {
+        // settings unavailable: treat as undeclared
+      }
+      return undefined
+    },
+    setManual(level: string): void {
+      this.manual = level
+      this.lastAuto = undefined
+    },
+    current(): string | undefined {
+      return this.manual ?? this.lastAuto
+    },
+  }
+
   const { agent } = await agents.create({
     sessionId,
     meta: { cwd: process.cwd() },
@@ -94,8 +133,10 @@ async function mount(ctx: Context, startup: KiroStartup): Promise<void> {
       model: startup.model !== undefined ? startup.model.split('/')[1] ?? selection.model : selection.model,
     },
     setup: (agentCtx) => {
-      const selected: ModelSelectionRef = { current: selection, assembled: undefined }
+      agentCtxRef = agentCtx
       installModelSelection(agentCtx, selected)
+      // Service surface for /effort (command handlers cannot reach this scope).
+      ctx.provide('kiroEffortControl', effortControl)
       // Live mid-session switch: slash commands (e.g. /model) mutate this ref
       // so the NEXT step's request actually uses the new provider/model —
       // installModelSelection reads selection.current per step; settings
@@ -207,6 +248,29 @@ async function mount(ctx: Context, startup: KiroStartup): Promise<void> {
     }
 
     // Plain text → agent followup.
+    // Keyword escalation (B-plan): '深入分析'/'ultrathink' style phrases
+    // raise the effort for THIS turn; a manual /effort wins and is never
+    // overridden. Applied only when the current model declares the level.
+    {
+      const hinted = detectEffortHint(trimmed)
+      const agentState = controller.getState().agent
+      const providerName = agentState.activeProvider
+      const modelId = agentState.activeModel
+      if (hinted !== undefined && effortControl.manual === undefined && providerName !== undefined && modelId !== undefined) {
+        const declared = effortControl.declaredLevels(providerName, modelId)
+        const effective = resolveAutoEffort(hinted, undefined, declared)
+        if (effective !== undefined && effortControl.lastAuto !== effective) {
+          effortControl.lastAuto = effective
+          // ReasoningEffortId is a branded string; the keyword table only
+          // produces the pi-ai level spellings, so the cast is sound.
+          selected.current = { ...selected.current, reasoningEffort: effective } as typeof selected.current
+          controller.pushSystem(`◆ 本回合思考档位：${effective}（关键词触发；/effort <level> 可固定）`)
+        } else if (declared !== undefined && !effortControl.capabilityWarned.has(modelId)) {
+          effortControl.capabilityWarned.add(modelId)
+          controller.pushSystem(`ℹ ${modelId} 未声明思考档位，关键词升档对本模型不生效。`)
+        }
+      }
+    }
     const knowledge = ctx.get(KIRO_KNOWLEDGE) as KnowledgeStore | undefined
     if (knowledge !== undefined && knowledge.size() > 0) {
       // RAG: inject the top BM25 hits as model-facing context (does not wake

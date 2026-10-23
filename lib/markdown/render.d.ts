@@ -16,6 +16,8 @@
  *
  * @module @damomoashidamomo/dsh-kiro/markdown/render
  */
+/** Tell the renderer the available pane width (display columns). */
+export declare function setMarkdownColumns(columns: number | undefined): void;
 /**
  * Render a markdown source string to an ANSI-colored, word-wrapped text block.
  * The result is a single string with embedded `\n` separators — ready for an

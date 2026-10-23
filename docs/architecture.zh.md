@@ -178,3 +178,21 @@ steering 装载器来源扩展：`README.md` 头 4KB（builtin 级）+
 收紧或放宽。实测：要求重启 nginx 时模型只输出计划与确认请求，零执行。
 
 **测试基线 232。**
+
+---
+
+## 2026-10 增量 2：思考档位 seam 打通（/effort 真实化 + 关键词自动升档）
+
+### SEAM 19：reasoningEffort 全链路
+
+六层链路：TUI 命令 → 持久化（agentDefaultModel 第三字段）→ agent-loop 请求配置 → LlmCallConfig → pi-ai 适配器（`reasoning_effort` wire 字段）→ 模型 API。此前上两层断（/effort 空壳 + settings 未声明档位），本增量接通：
+
+- **settings 声明**：`compat.supportsReasoningEffort: true`（路由接受 `reasoning_effort`）+ 模型级 `reasoningEfforts: {low: low, high: high, max: max}`（档位→wire 值映射）+ `reasoning: low`（默认档）。适配器据此翻译并提供校验——未声明档位的模型设 effort 会显式报错（fail-loud）
+- **/effort 真实化**：校验档位在模型声明范围内 → `kiroModelSwitch.apply({provider, model, reasoningEffort})`（下一轮请求即生效）+ `agentDefaultModel.saveSelection`（重启保持）。未声明的模型如实报告"不可用"
+- **关键词自动升档（B 方案）**：`effort-keywords.ts` 确定性短语匹配——「深入分析/仔细推理/排查根因/架构设计/think hard」→ high，「ultrathink/极限模式/全面审查」→ max（强档优先）。手动 /effort 永远优先；模型未声明档位时静默跳过（每模型一次性提示）。档位变化在转录落可见提示行
+- **多模型适配**：机制按"声明即启用"泛化——任何模型在 settings 目录声明 `reasoningEfforts` 即自动接入（关键词 + /effort）；未声明的模型不受影响。声明 wire 值时可重命名（如网关自有词汇 `max: ultra`）
+
+**注意**：多字节粘贴块中的换行语义同批修正（行尾 CR/LF=提交，夹中间=换行入草稿），否则带换行的大粘贴会被逐行提交。
+
+**测试基线 232+（effort 关键词/优先级/命令接线/档位校验，待运行环境恢复后执行）。**
+

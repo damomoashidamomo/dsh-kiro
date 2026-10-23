@@ -1,6 +1,6 @@
 {
   "name": "@damomoashidamomo/dsh-kiro",
-  "version": "0.1.0",
+  "version": "0.5.0",
   "description": "Kiro-CLI equivalent TUI bundle for DeepSeek Harness — rich terminal UI with markdown rendering, slash commands, custom agents, MCP, LSP, checkpointing and knowledge base. Dark-green themed.",
   "type": "module",
   "main": "lib/index.js",
@@ -72,11 +72,11 @@
     "clean": "rm -rf lib *.tsbuildinfo"
   },
   "dependencies": {
+    "@damomoashidamomo/dsh-kiro": "file:/home/gary/deepseek harness work zone/dsh-kiro",
     "@deepseek-ai/dsh-file-reference": "file:/home/gary/.npm-global/lib/node_modules/@deepseek-ai/dsh/node_modules/@deepseek-ai/dsh-file-reference",
     "@deepseek-ai/dsh-file-reference-local": "file:/home/gary/.npm-global/lib/node_modules/@deepseek-ai/dsh/node_modules/@deepseek-ai/dsh-file-reference-local",
     "@deepseek-ai/dsh-hook-protocol": "0.1.2-rc.1",
     "@deepseek-ai/dsh-user-questions": "0.1.2-rc.1",
-    "@modelcontextprotocol/sdk": "^1.0.4",
     "chalk": "^5.3.0",
     "cli-highlight": "^2.1.11",
     "commander": "^12.1.0",

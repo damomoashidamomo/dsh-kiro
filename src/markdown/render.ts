@@ -30,6 +30,68 @@ function stripAnsi(text: string): string {
   return text.replace(/\x1b\[[0-9;]*m/g, '')
 }
 
+/** Terminal columns the renderer may use (set by the TUI each render). */
+let markdownColumns: number | undefined
+
+/** Tell the renderer the available pane width (display columns). */
+export function setMarkdownColumns(columns: number | undefined): void {
+  markdownColumns = columns !== undefined && Number.isFinite(columns) && columns > 20
+    ? Math.floor(columns)
+    : undefined
+}
+
+/** Effective render width: the TUI-provided pane width, else 100. */
+function renderWidth(): number {
+  return markdownColumns ?? MAX_WIDTH
+}
+
+/** Wide (CJK/fullwidth/Hangul) code point -> occupies 2 terminal columns. */
+function isWideCodePoint(cp: number): boolean {
+  return (
+    (cp >= 0x1100 && cp <= 0x115f) ||
+    (cp >= 0x2e80 && cp <= 0x303e) ||
+    (cp >= 0x3041 && cp <= 0x33ff) ||
+    (cp >= 0x3400 && cp <= 0x4dbf) ||
+    (cp >= 0x4e00 && cp <= 0x9fff) ||
+    (cp >= 0xa000 && cp <= 0xa4cf) ||
+    (cp >= 0xac00 && cp <= 0xd7a3) ||
+    (cp >= 0xf900 && cp <= 0xfaff) ||
+    (cp >= 0xfe30 && cp <= 0xfe4f) ||
+    (cp >= 0xff00 && cp <= 0xff60) ||
+    (cp >= 0xffe0 && cp <= 0xffe6) ||
+    (cp >= 0x20000 && cp <= 0x3fffd)
+  )
+}
+
+/** Display width of visible text: CJK/fullwidth count as 2 columns. */
+function displayWidth(text: string): number {
+  let width = 0
+  for (const ch of text) {
+    width += isWideCodePoint(ch.codePointAt(0) ?? 0) ? 2 : 1
+  }
+  return width
+}
+
+/** Break `text` into chunks of at most `width` display columns. */
+function chunkByWidth(text: string, width: number): string[] {
+  const chunks: string[] = []
+  let current = ''
+  let currentWidth = 0
+  for (const ch of text) {
+    const cw = isWideCodePoint(ch.codePointAt(0) ?? 0) ? 2 : 1
+    if (currentWidth + cw > width && current !== '') {
+      chunks.push(current)
+      current = ch
+      currentWidth = cw
+    } else {
+      current += ch
+      currentWidth += cw
+    }
+  }
+  chunks.push(current)
+  return chunks
+}
+
 /** Wrap a single visible-text line at MAX_WIDTH, preserving ANSI codes. */
 function wrapAnsi(text: string, width = MAX_WIDTH): string[] {
   if (text === '') return ['']
@@ -62,7 +124,8 @@ function wrapAnsi(text: string, width = MAX_WIDTH): string[] {
         lines.push('')
         continue
       }
-      if (visibleLen >= width && ch !== ' ') {
+      const charWidth = displayWidth(ch)
+      if (visibleLen + charWidth > width && ch !== ' ') {
         // Wrap on word boundary if possible.
         const spaceIdx = plainBuf.lastIndexOf(' ')
         if (spaceIdx > width * 0.6) {
@@ -70,15 +133,15 @@ function wrapAnsi(text: string, width = MAX_WIDTH): string[] {
           const tail = plainBuf.slice(spaceIdx + 1)
           lines.push(pendingAnsi + head)
           plainBuf = tail + ch
-          visibleLen = stripAnsi(tail + ch).length
+          visibleLen = displayWidth(tail + ch)
         } else {
           lines.push(pendingAnsi + plainBuf)
           plainBuf = ch
-          visibleLen = 1
+          visibleLen = charWidth
         }
       } else {
         plainBuf += ch
-        visibleLen += 1
+        visibleLen += charWidth
       }
     }
   }
@@ -86,9 +149,9 @@ function wrapAnsi(text: string, width = MAX_WIDTH): string[] {
   return lines.length === 0 ? [''] : lines
 }
 
-/** Pad `text` with spaces to `width` visible columns. */
+/** Pad `text` with spaces to `width` display columns. */
 function pad(text: string, width: number, align: 'left' | 'right' | 'center' = 'left'): string {
-  const len = stripAnsi(text).length
+  const len = displayWidth(stripAnsi(text))
   if (len >= width) return text
   const gap = width - len
   if (align === 'right') return ' '.repeat(gap) + text
@@ -100,7 +163,7 @@ function pad(text: string, width: number, align: 'left' | 'right' | 'center' = '
 }
 
 /** Render a fenced code block with cli-highlight syntax coloring. */
-function renderCode(token: Tokens.Code): string {
+function renderCode(token: Tokens.Code, maxWidth?: number): string {
   let highlighted = token.text
   try {
     highlighted = highlight(token.text, {
@@ -110,19 +173,36 @@ function renderCode(token: Tokens.Code): string {
   } catch {
     highlighted = token.text
   }
-  const lines = highlighted.split('\n')
+  const codeCap = Math.max(20, (maxWidth ?? renderWidth()) - 6)
+  // Wide lines TRUNCATE (code alignment beats completeness; the spill path
+  // and the read tool carry full content when needed). Truncation walks
+  // code points so wide (CJK) characters are never split in half.
+  const truncateToWidth = (line: string): string => {
+    const visible = stripAnsi(line)
+    if (displayWidth(visible) <= codeCap) return line
+    let taken = ''
+    let takenWidth = 0
+    for (const ch of visible) {
+      const cw = isWideCodePoint(ch.codePointAt(0) ?? 0) ? 2 : 1
+      if (takenWidth + cw > codeCap - 1) break
+      taken += ch
+      takenWidth += cw
+    }
+    return `${taken}…`
+  }
+  const lines = highlighted.split('\n').map(truncateToWidth)
   // Box-drawing frame: top + body + bottom.
   const visibleWidth = Math.min(
-    MAX_WIDTH - 4,
-    Math.max(...lines.map(line => stripAnsi(line).length), 1),
+    (maxWidth ?? renderWidth()) - 6,
+    Math.max(...lines.map(line => displayWidth(stripAnsi(line))), 1),
   )
   const frame = '─'.repeat(visibleWidth + 2)
   const header = token.lang !== undefined && token.lang !== ''
     ? palette.dim(` ╭─ ${token.lang} `) + palette.dim('─'.repeat(Math.max(0, visibleWidth + 2 - 5 - token.lang.length)))
     : palette.dim(` ╭${frame}╮`)
   const body = lines.map(line => {
-    const visible = stripAnsi(line)
-    const padLen = Math.max(0, visibleWidth - visible.length)
+    const visible = displayWidth(stripAnsi(line))
+    const padLen = Math.max(0, visibleWidth - visible)
     return palette.dim(' │ ') + line + ' '.repeat(padLen) + palette.dim(' │')
   }).join('\n')
   const footer = palette.dim(` ╰${frame}╯`)
@@ -220,20 +300,60 @@ function renderList(token: Tokens.List): string {
   }).join('\n')
 }
 
-/** Render a GFM table. */
-function renderTable(token: Tokens.Table): string {
-  const headerCells = token.header.map(cell => renderInline(cell.tokens))
+/**
+ * Render a GFM table. Column widths use DISPLAY width (CJK = 2 columns);
+ * the whole table is capped to the available pane width by scaling columns
+ * down and WRAPPING cell content into multiple physical lines (borders stay
+ * intact — the kiro-style behaviour: wrap, never truncate).
+ */
+function renderTable(token: Tokens.Table, maxWidth?: number): string {
   const alignments = token.align
-  const widths = headerCells.map((cell, i) =>
+  const headerCells = token.header.map(cell => renderInline(cell.tokens))
+  const rows = token.rows.map(row => row.map(cell => renderInline(cell.tokens)))
+
+  // Natural display width per column.
+  const natural = headerCells.map((cell, i) =>
     Math.max(
-      stripAnsi(cell).length,
-      ...token.rows.map(row => {
-        const c = row[i]
-        const text = c !== undefined ? renderInline(c.tokens) : ''
-        return stripAnsi(text).length
-      }),
+      displayWidth(stripAnsi(cell)),
+      ...rows.map(row => displayWidth(stripAnsi(row[i] ?? ''))),
+      1,
     ),
   )
+
+  // Scale columns to fit the pane (borders cost 3 per column + 1).
+  const overhead = natural.length * 3 + 1
+  const cap = Math.max(20, (maxWidth ?? renderWidth()) - 2)
+  const widths = (() => {
+    const total = natural.reduce((a, b) => a + b, 0)
+    if (total + overhead <= cap) return natural
+    const scale = (cap - overhead) / total
+    const scaled = natural.map(width => Math.max(4, Math.floor(width * scale)))
+    // hand back the overflow the flooring created to the widest column
+    const stillOver = scaled.reduce((a, b) => a + b, 0) + overhead - cap
+    if (stillOver > 0) {
+      const widest = scaled.indexOf(Math.max(...scaled))
+      scaled[widest] = Math.max(4, scaled[widest]! - stillOver)
+    }
+    return scaled
+  })()
+
+  const wrapCell = (text: string, i: number): string[] => {
+    const plain = stripAnsi(text)
+    const width = Math.max(1, (widths[i] ?? 1))
+    return chunkByWidth(plain, width).map(chunk => pad(chunk, width))
+  }
+
+  const physicalRow = (cells: string[][], isHeader = false): string[] => {
+    const height = Math.max(...cells.map(lines => lines.length), 1)
+    const out: string[] = []
+    for (let line = 0; line < height; line += 1) {
+      const segments = cells.map((lines, i) => pad(lines[line] ?? '', widths[i] ?? 0, alignments[i] ?? 'left'))
+      const prefix = isHeader ? palette.heading('') : ''
+      out.push(palette.dim('│ ') + prefix + segments.join(palette.dim(' │ ')) + palette.dim(' │'))
+    }
+    return out
+  }
+
   const sepCells = widths.map((width, i) => {
     const align = alignments[i] ?? 'left'
     const bar = '─'.repeat(Math.max(3, width))
@@ -241,38 +361,37 @@ function renderTable(token: Tokens.Table): string {
     if (align === 'center') return `${palette.dim(':')}${bar.slice(1, -1)}${palette.dim(':')}`
     return `${palette.dim(bar)}`
   })
-  const headerLine = palette.dim('│ ') + headerCells.map((cell, i) => pad(palette.heading(cell), widths[i] ?? 0, alignments[i] ?? 'left')).join(palette.dim(' │ ')) + palette.dim(' │')
-  const sepLine = palette.dim(`├─${sepCells.join('─┼─')}─┤`)
-  const bodyLines = token.rows.map(row =>
-    palette.dim('│ ') + row.map((cell, i) => pad(renderInline(cell.tokens), widths[i] ?? 0, alignments[i] ?? 'left')).join(palette.dim(' │ ')) + palette.dim(' │'),
-  )
+
   const top = palette.dim(`┌─${widths.map(width => '─'.repeat(width)).join('─┬─')}─┐`)
-  const bottom = palette.dim(`└─${widths.map(width => '─'.repeat(width)).join('─┴─')}─┘`)
-  return [top, headerLine, sepLine, ...bodyLines, bottom].join('\n')
+  const headerLines = physicalRow(headerCells.map((cell, i) => wrapCell(palette.heading(cell), i)), true)
+  const sepLine = palette.dim(`├─${sepCells.join('─┼─')}─┤`)
+  const bodyLines = rows.flatMap(row => physicalRow(row.map((cell, i) => wrapCell(cell, i))))
+  const bottom = palette.dim(`└─${widths.map(width => '─'.repeat(width)).join('─┴─')}┘`)
+  return [top, ...headerLines, sepLine, ...bodyLines, bottom].join('\n')
 }
 
 /** Render any sequence of block tokens. */
-function renderTokens(tokens: Tokens.Generic[]): string {
-  return tokens.map(renderBlock).join('\n\n')
+function renderTokens(tokens: Tokens.Generic[], maxWidth?: number): string {
+  return tokens.map(token => renderBlock(token, maxWidth)).join('\n\n')
 }
 
 /** Render a single block token. */
-function renderBlock(token: Tokens.Generic): string {
+function renderBlock(token: Tokens.Generic, maxWidth?: number): string {
   switch (token.type) {
     case 'heading':
       return renderHeading(token as Tokens.Heading)
     case 'paragraph':
       return renderInline(token.tokens ?? [])
     case 'code':
-      return renderCode(token as Tokens.Code)
+      return renderCode(token as Tokens.Code, maxWidth)
     case 'blockquote':
       return renderBlockquote(token as Tokens.Blockquote)
+    case 'table':
+      return renderTable(token as Tokens.Table, maxWidth)
     case 'list':
       return renderList(token as Tokens.List)
-    case 'table':
-      return renderTable(token as Tokens.Table)
     case 'hr':
-      return palette.dim('─'.repeat(MAX_WIDTH))
+      return palette.dim('─'.repeat(Math.min(MAX_WIDTH, renderWidth())))
     case 'space':
       return ''
     default:
@@ -290,8 +409,9 @@ function renderBlock(token: Tokens.Generic): string {
 export function renderMarkdown(source: string): string {
   if (source === '') return ''
   const tokens = marked.lexer(source)
-  const rendered = renderTokens(tokens)
-  return wrapAnsi(rendered).join('\n')
+  const width = renderWidth()
+  const rendered = renderTokens(tokens, width)
+  return wrapAnsi(rendered, width).join('\n')
 }
 
 /** Render the markdown source trimmed of any surrounding whitespace. */
