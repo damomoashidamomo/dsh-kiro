@@ -1,6 +1,6 @@
 import type { CommandDefinition } from '@deepseek-ai/dsh-commands'
 
-const EFFORTS = ['off', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max'] as const
+const EFFORTS = ['auto', 'off', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max'] as const
 type Effort = typeof EFFORTS[number]
 
 function isEffort(value: string): value is Effort {
@@ -15,6 +15,8 @@ interface Services {
   readonly current: string | undefined
   readonly apply: (level: string) => void
   readonly persist: (level: string) => void
+  /** Return to keyword-auto mode (clear the manual pin). */
+  readonly clearManual: () => void
 }
 
 function servicesOf(agentCtx: unknown): Services | undefined {
@@ -49,7 +51,11 @@ function servicesOf(agentCtx: unknown): Services | undefined {
     | { apply?: (next: unknown) => void }
     | undefined
   const effortControl = get.call(ctx, 'kiroEffortControl') as
-    | { setManual?: (level: string) => void; current?: () => string | undefined }
+    | {
+        setManual?: (level: string) => void
+        clearManual?: () => void
+        current?: () => string | undefined
+      }
     | undefined
   const defaultModel = get.call(ctx, 'agentDefaultModel') as
     | { saveSelection?: (next: unknown) => Promise<void> }
@@ -63,6 +69,9 @@ function servicesOf(agentCtx: unknown): Services | undefined {
     apply: (level) => {
       switcher?.apply?.({ provider, model, reasoningEffort: level })
       effortControl?.setManual?.(level)
+    },
+    clearManual: () => {
+      effortControl?.clearManual?.()
     },
     persist: (level) => {
       void defaultModel?.saveSelection?.({ provider, model, reasoningEffort: level })
@@ -85,7 +94,7 @@ export const effortCommand: CommandDefinition = {
   handler: async ({ agent, rawInput }) => {
     const candidate = rawInput.trim().toLowerCase()
     const services = servicesOf(agent)
-    if (candidate === '' || !isEffort(candidate)) {
+    if (candidate === '') {
       const lines = [`usage: /effort <${EFFORTS.join('|')}>`]
       if (services?.declared !== undefined) {
         lines.push(`当前模型 ${services.provider}/${services.model} 声明档位：${services.declared.join(' / ')}`)
@@ -94,6 +103,13 @@ export const effortCommand: CommandDefinition = {
       }
       lines.push('提示词里写「深入分析」「ultrathink」等短语也会按回合自动升档。')
       return { kind: 'success', text: lines.join('\n') }
+    }
+
+    // 'auto' = keyword-escalation mode: clear the manual pin. It is a TUI
+    // dispatch mode, not a wire level — nothing is sent to the model.
+    if (candidate === 'auto') {
+      services?.clearManual?.()
+      return { kind: 'success', text: '已回到自动模式：默认 low 基线，提示词关键词按回合升档。' }
     }
 
     if (services === undefined || services.provider === undefined || services.model === undefined) {

@@ -23,6 +23,8 @@ export declare class SessionController {
     private state;
     private readonly listeners;
     private agent;
+    /** App context (for platform projections such as contextPressure). */
+    private boundCtx;
     private unsubscribe;
     /** In-flight tool calls keyed by platform callId (parallel-safe). */
     private readonly activeTools;
@@ -134,6 +136,13 @@ export declare class SessionController {
     /** Notify subscribers of a state change. */
     private publish;
     /** Apply one session event. */
+    /**
+     * Context usage from the platform's token-meter contextPressure
+     * projection (projectedTokens = confirmed pressure + surface estimate).
+     * Provider usage chunks are unreliable (many gateways send none), so this
+     * projection is the primary source — the same numbers the Web UI shows.
+     */
+    private refreshContextUsage;
     private applyEvent;
     /**
      * Close any tool-call message still marked streaming (a result that never

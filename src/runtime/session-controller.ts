@@ -149,6 +149,8 @@ export class SessionController {
   private state: SessionRenderState = emptyState()
   private readonly listeners = new Set<StateListener>()
   private agent: Agent | undefined
+  /** App context (for platform projections such as contextPressure). */
+  private boundCtx: Context | undefined
   private unsubscribe: (() => void) | undefined
   /** In-flight tool calls keyed by platform callId (parallel-safe). */
   private readonly activeTools = new Map<string, ToolRecord>()
@@ -183,6 +185,7 @@ export class SessionController {
   bindAgent(ctx: Context, agent: Agent): void {
     if (this.agent === agent) return
     this.unsubscribe?.()
+    this.boundCtx = ctx
     this.agent = agent
     this.state = { ...emptyState(), sessionId: String(agent.session.id) }
     this.publish()
@@ -509,7 +512,34 @@ export class SessionController {
   }
 
   /** Apply one session event. */
+  /**
+   * Context usage from the platform's token-meter contextPressure
+   * projection (projectedTokens = confirmed pressure + surface estimate).
+   * Provider usage chunks are unreliable (many gateways send none), so this
+   * projection is the primary source — the same numbers the Web UI shows.
+   */
+  private refreshContextUsage(): void {
+    if (this.agent === undefined || this.boundCtx === undefined) return
+    try {
+      // The registry is a Cordis service: property access on the context
+      // proxy returns undefined without inject — go through ctx.get.
+      const projections = (this.boundCtx as unknown as {
+        get?: (name: string) => unknown
+      }).get?.('sessionProjections') as
+        | { stateOf?: (session: unknown, key: string) => { projectedTokens?: number; pressureTokens?: number } | undefined }
+        | undefined
+      const pressure = projections?.stateOf?.(this.agent.session, 'contextPressure')
+      const used = pressure?.projectedTokens ?? pressure?.pressureTokens
+      if (used !== undefined && used > 0 && used !== this.state.agent.contextUsedTokens) {
+        this.state = { ...this.state, agent: { ...this.state.agent, contextUsedTokens: used } }
+      }
+    } catch {
+      // projection unavailable: chunk-usage sampling remains the fallback
+    }
+  }
+
   private applyEvent(event: SessionEvent): void {
+    this.refreshContextUsage()
     switch (event.type) {
       case 'turn/start': {
         this.turnStartedAt = Date.now()

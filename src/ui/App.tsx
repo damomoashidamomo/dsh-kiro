@@ -164,9 +164,14 @@ export function App({ controller, seedTask, activeAgentName, onSubmit, fileSearc
     return undefined
   }, [state.messages])
 
-  const contextPct = state.agent.contextLimitTokens !== undefined && state.agent.contextLimitTokens > 0
-    ? Math.round((state.agent.contextUsedTokens / state.agent.contextLimitTokens) * 100)
-    : undefined
+  const contextPct = (() => {
+    const limit = state.agent.contextLimitTokens
+    if (limit === undefined || limit <= 0) return undefined
+    const pct = (state.agent.contextUsedTokens / limit) * 100
+    // Under 10% show one decimal so the number is visibly alive on 1M-window
+    // models; above that integers are enough resolution.
+    return pct < 10 ? Math.round(pct * 10) / 10 : Math.round(pct)
+  })()
 
   return (
     <Box flexDirection="column" height="100%">

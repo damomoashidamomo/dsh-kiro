@@ -166,6 +166,42 @@ describe('context-pressure hints (P3)', () => {
   })
 })
 
+describe('context usage from the token-meter projection', () => {
+  function projectionDriver(projection: unknown): { ctrl: SessionController; emit: (e: unknown) => void } {
+    const ctrl = new SessionController()
+    const handlers = new Map<string, (session: unknown, event: unknown) => void>()
+    const ctx = {
+      get: (name: string) => (name === 'sessionProjections'
+        ? { stateOf: (_session: unknown, key: string) => (key === 'contextPressure' ? projection : undefined) }
+        : undefined),
+      on: (type: string, cb: (session: unknown, event: unknown) => void) => {
+        handlers.set(type, cb)
+        return () => handlers.delete(type)
+      },
+    }
+    const session = { id: 's1' }
+    ctrl.bindAgent(ctx as never, { session } as never)
+    return { ctrl, emit: (e) => { handlers.get('session/event')?.(session, e) } }
+  }
+
+  it('contextUsedTokens follows projectedTokens (grows with the conversation)', () => {
+    let projection: { projectedTokens?: number; pressureTokens?: number } = { projectedTokens: 5000, pressureTokens: 4200 }
+    const { ctrl, emit } = projectionDriver(projection)
+    emit({ type: 'assistant/chunk', seq: 1, data: { chunk: { type: 'text-delta', text: 'x' } } })
+    expect(ctrl.state.agent.contextUsedTokens).toBe(5000)
+    projection.projectedTokens = 12000
+    emit({ type: 'assistant/chunk', seq: 2, data: { chunk: { type: 'text-delta', text: 'y' } } })
+    expect(ctrl.state.agent.contextUsedTokens).toBe(12000)
+  })
+
+  it('falls back to pressureTokens when no projection value exists yet', () => {
+    let projection: { pressureTokens?: number } = { pressureTokens: 800 }
+    const { ctrl, emit } = projectionDriver(projection)
+    emit({ type: 'assistant/chunk', seq: 1, data: { chunk: { type: 'text-delta', text: 'x' } } })
+    expect(ctrl.state.agent.contextUsedTokens).toBe(800)
+  })
+})
+
 describe('project-level approval persistence', () => {
   it('allow-project seeds the session set and round-trips through the file', () => {
     const { ctrl, emit } = driver()
@@ -242,7 +278,7 @@ describe('honest context limit', () => {
     expect(contextWindowOf(undefined, 'scnet', 'V4.1')).toBeUndefined()
   })
 
-  it('usage bar shows bare tokens without an invented limit', async () => {
+  it('the usage bar graphic is gone from the status bar', async () => {
     const snap: AgentStatusSnapshot = {
       status: 'idle', activeAgent: undefined, activeModel: 'm', activeProvider: 'p',
       lastTurnReason: undefined, contextUsedTokens: 4200, contextLimitTokens: undefined, planMode: false,
@@ -250,8 +286,8 @@ describe('honest context limit', () => {
     const { lastFrame, unmount } = render(<StatusBar agent={snap} prefix={undefined} />)
     await new Promise((r) => setTimeout(r, 30))
     const frame = lastFrame() ?? ''
-    expect(frame).toContain('4.2k tokens')
-    expect(frame).not.toContain('128')
+    expect(frame).not.toContain('░')
+    expect(frame).not.toContain('tokens')
     unmount()
   })
 })

@@ -58,8 +58,8 @@ export const helpCommand: CommandDefinition = {
     lines.push('                   变色并提醒 /compact）· 首字延迟 · last: 回合结果')
     lines.push('  变更护栏（内置）  生产环境变更 / 仓库外配置修改：先陈述计划与影响面，')
     lines.push('                   等你批准再执行；说"直接做"可豁免当轮')
-    lines.push('  思考档位 /effort  设置模型思考深度（需模型声明档位，如 glm 系）；')
-    lines.push('                   提示词含「深入分析」「ultrathink」等短语按回合自动升档')
+    lines.push('  思考档位 /effort  auto（默认：关键词自动升档）/ low / high / max；')
+    lines.push('                   「深入分析」「ultrathink」等短语按回合自动升档')
 
     lines.push('')
     lines.push('━━━ 全部命令 ━━━')

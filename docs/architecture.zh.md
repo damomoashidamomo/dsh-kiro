@@ -158,10 +158,13 @@ Enter 逐行提交。现改为：块内**行尾** CR/LF 才是提交（保留"/m
 
 ### SEAM 16：上下文压力提示（P3）+ 首字延迟（P8）
 
-`recordUsage` 按 used/limit 跨过 60%/80% 阈值各推一次系统提示（低于 50%
-重新武装，对应压缩/新会话）；用量条颜色分级 <60% 绿 / ≥60% 黄 / ≥80% 红。
-TTFT：turn/start 盖时间戳，首个 assistant chunk（或聚合 message / 首个
-tool/call，非流式通道也能测）计算延迟，状态栏显示 `首字 X.Xs`。
+用量来源改为平台 token-meter 的 **contextPressure 投影**（projectedTokens
+= 已确认压力 + 表面增量估算，Web UI 同源；provider 不回传 usage 也能增长），
+controller 在每个事件读取。recordUsage 的 chunk 采样保留为回退。
+60%/80% 阈值各推一次系统提示（低于 50% 重新武装）。TTFT：turn/start 盖
+时间戳，首个 assistant chunk（或聚合 message / 首个 tool/call，非流式
+通道也能测）计算延迟，状态栏显示 `首字 X.Xs`。
+**状态栏用量条图形已按用户要求移除**（阈值提醒与 /usage 保留）。
 
 ### SEAM 17：kiro 常载文件对齐（P4）
 
@@ -190,6 +193,11 @@ steering 装载器来源扩展：`README.md` 头 4KB（builtin 级）+
 - **settings 声明**：`compat.supportsReasoningEffort: true`（路由接受 `reasoning_effort`）+ 模型级 `reasoningEfforts: {low: low, high: high, max: max}`（档位→wire 值映射）+ `reasoning: low`（默认档）。适配器据此翻译并提供校验——未声明档位的模型设 effort 会显式报错（fail-loud）
 - **/effort 真实化**：校验档位在模型声明范围内 → `kiroModelSwitch.apply({provider, model, reasoningEffort})`（下一轮请求即生效）+ `agentDefaultModel.saveSelection`（重启保持）。未声明的模型如实报告"不可用"
 - **关键词自动升档（B 方案）**：`effort-keywords.ts` 确定性短语匹配——「深入分析/仔细推理/排查根因/架构设计/think hard」→ high，「ultrathink/极限模式/全面审查」→ max（强档优先）。手动 /effort 永远优先；模型未声明档位时静默跳过（每模型一次性提示）。档位变化在转录落可见提示行
+- **/effort auto**（默认态）：清除手动固定，回到关键词模式。auto 是 TUI
+  调度模式，不进 settings 的 reasoningEfforts wire 映射（协议无此值）
+- **全模型声明**：settings 目录 24/24 模型已声明 reasoningEfforts
+  {low,high,max}。风险提示：个别网关若拒绝 reasoning_effort 字段会导致
+  该模型请求报错——删除该模型的 reasoningEfforts 声明即关闭（见 backlog）
 - **多模型适配**：机制按"声明即启用"泛化——任何模型在 settings 目录声明 `reasoningEfforts` 即自动接入（关键词 + /effort）；未声明的模型不受影响。声明 wire 值时可重命名（如网关自有词汇 `max: ultra`）
 
 **注意**：多字节粘贴块中的换行语义同批修正（行尾 CR/LF=提交，夹中间=换行入草稿），否则带换行的大粘贴会被逐行提交。

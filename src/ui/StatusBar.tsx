@@ -32,7 +32,6 @@ export function StatusBar({ agent, prefix, activeAgentName }: StatusBarProps): J
     : agent.status === 'error'
       ? palette.error
       : palette.success
-  const usageBar = renderUsageBar(agent.contextUsedTokens, agent.contextLimitTokens)
   const agentLabel = activeAgentName ?? 'default'
   const modelLabel = agent.activeProvider !== undefined && agent.activeModel !== undefined
     ? `${agent.activeProvider}/${agent.activeModel}`
@@ -65,8 +64,6 @@ export function StatusBar({ agent, prefix, activeAgentName }: StatusBarProps): J
             <Text>{presetChip(agent.permissionPreset)}</Text>
           </>
         ) : null}
-        <Text> {palette.muted('·')} </Text>
-        <Text>{usageBar}</Text>
         {agent.lastTtftMs !== undefined ? (
           <>
             <Text> {palette.muted('·')} </Text>
@@ -97,23 +94,3 @@ function presetChip(preset: string | undefined): string | null {
   return short[preset] ?? `[${preset}]`
 }
 
-/** Render a token-usage bar with a fraction (used / limit). */
-function renderUsageBar(used: number, limit: number | undefined): string {
-  if (limit === undefined) {
-    return palette.muted(`${formatNumber(used)} tokens`)
-  }
-  const ratio = Math.min(1, used / limit)
-  const width = 16
-  const filled = Math.round(ratio * width)
-  const bar = '█'.repeat(filled) + '░'.repeat(width - filled)
-  const pct = `${Math.round(ratio * 100)}%`
-  // Pressure tiers (P3): calm green, cautious amber >=60%, alarm red >=80%.
-  const colored = ratio >= 0.8 ? palette.error(bar) : ratio >= 0.6 ? palette.warning(bar) : palette.usage(bar)
-  return `${colored} ${palette.muted(`${formatNumber(used)}/${formatNumber(limit)} (${pct})`)}`
-}
-
-function formatNumber(value: number): string {
-  if (value < 1000) return String(value)
-  if (value < 1000000) return `${(value / 1000).toFixed(1)}k`
-  return `${(value / 1000000).toFixed(1)}M`
-}
