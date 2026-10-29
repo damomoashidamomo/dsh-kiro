@@ -143,6 +143,12 @@ export declare class SessionController {
      * projection is the primary source — the same numbers the Web UI shows.
      */
     private refreshContextUsage;
+    /**
+     * Permission preset from the platform's permissions projection — the
+     * authoritative CURRENT value. Live events alone miss restored sessions
+     * (the preset event precedes our bind), so read the projection too.
+     */
+    private refreshPermissionPreset;
     private applyEvent;
     /**
      * Close any tool-call message still marked streaming (a result that never

@@ -87,6 +87,8 @@ export interface AgentStatusSnapshot {
   readonly planMode: boolean
   /** Active permission preset (read-only / workspace-write / ...), pinned like plan mode. */
   readonly permissionPreset: string | undefined
+  /** Session workspace directory (fixed at agent creation). */
+  readonly workspace: string | undefined
   /** First-token latency of the latest turn (ms), for the status bar. */
   readonly lastTtftMs: number | undefined
 }

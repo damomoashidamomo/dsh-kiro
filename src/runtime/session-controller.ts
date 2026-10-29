@@ -48,6 +48,7 @@ function emptyState(): SessionRenderState {
       planMode: false,
       permissionPreset: undefined,
       lastTtftMs: undefined,
+      workspace: undefined,
     },
     todos: undefined,
     overlay: { kind: 'none' },
@@ -188,6 +189,15 @@ export class SessionController {
     this.boundCtx = ctx
     this.agent = agent
     this.state = { ...emptyState(), sessionId: String(agent.session.id) }
+    // Session workspace: fixed at agent creation (tools + sandbox anchor to
+    // it). The header is the platform's source of truth.
+    const header = (agent.session as unknown as { header?: { cwd?: string } }).header
+    const cwd = header?.cwd ?? process.cwd()
+    this.state = {
+      ...this.state,
+      agent: { ...this.state.agent, workspace: cwd },
+    }
+    this.refreshPermissionPreset()
     this.publish()
     this.unsubscribe = ctx.on('session/event', (session, event) => {
       if (session !== agent.session) return
@@ -538,8 +548,33 @@ export class SessionController {
     }
   }
 
+  /**
+   * Permission preset from the platform's permissions projection — the
+   * authoritative CURRENT value. Live events alone miss restored sessions
+   * (the preset event precedes our bind), so read the projection too.
+   */
+  private refreshPermissionPreset(): void {
+    if (this.agent === undefined || this.boundCtx === undefined) return
+    try {
+      const projections = (this.boundCtx as unknown as {
+        get?: (name: string) => unknown
+      }).get?.('sessionProjections') as
+        | { stateOf?: (session: unknown, key: string) => { preset?: string | null } | undefined }
+        | undefined
+      const state = projections?.stateOf?.(this.agent.session, 'permissions')
+      const preset = typeof state?.preset === 'string' ? state.preset : undefined
+      if (preset !== undefined && preset !== this.state.agent.permissionPreset) {
+        this.state = { ...this.state, agent: { ...this.state.agent, permissionPreset: preset } }
+      }
+    } catch {
+      // projection unavailable: event-driven updates still apply
+    }
+  }
+
   private applyEvent(event: SessionEvent): void {
     this.refreshContextUsage()
+    this.refreshContextUsage()
+    this.refreshPermissionPreset()
     switch (event.type) {
       case 'turn/start': {
         this.turnStartedAt = Date.now()

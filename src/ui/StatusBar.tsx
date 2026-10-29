@@ -7,6 +7,7 @@
  */
 
 import { Box, Text } from 'ink'
+import { basename } from 'node:path'
 import { palette } from '../theme/palette'
 import type { AgentStatusSnapshot } from '../runtime/types'
 
@@ -48,6 +49,12 @@ export function StatusBar({ agent, prefix, activeAgentName }: StatusBarProps): J
     <Box flexDirection="row" paddingX={1} marginTop={1}>
       <Text>
         <Text color={palette.enabled ? 'green' : undefined}>{palette.agent(`[${agentLabel}]`)}</Text>
+        {agent.workspace !== undefined ? (
+          <>
+            <Text> {palette.muted('·')} </Text>
+            <Text>{palette.accent2(`📁 ${basename(agent.workspace)}`)}</Text>
+          </>
+        ) : null}
         <Text> {palette.muted('·')} </Text>
         <Text>{palette.accent(modelLabel)}</Text>
         <Text> {palette.muted('·')} </Text>
@@ -86,10 +93,10 @@ export function StatusBar({ agent, prefix, activeAgentName }: StatusBarProps): J
 function presetChip(preset: string | undefined): string | null {
   if (preset === undefined) return null
   const short: Record<string, string> = {
-    'read-only': '[read-only]',
-    'workspace-write': '[write]',
-    'danger-full-access': '[full]',
-    custom: '[custom]',
+    'read-only': '[只读]',
+    'workspace-write': '[工作区]',
+    'danger-full-access': '[完全]',
+    custom: '[自定义]',
   }
   return short[preset] ?? `[${preset}]`
 }

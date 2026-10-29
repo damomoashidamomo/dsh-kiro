@@ -211,6 +211,54 @@ describe('project-level approval persistence', () => {
   })
 })
 
+describe('workspace display', () => {
+  it('status bar renders the workspace basename', async () => {
+    const snap: AgentStatusSnapshot = {
+      status: 'idle', activeAgent: undefined, activeModel: 'm', activeProvider: 'p',
+      lastTurnReason: undefined, contextUsedTokens: 0, contextLimitTokens: 1000,
+      planMode: false, permissionPreset: undefined,
+      workspace: '/home/gary/deepseek harness work zone/dsh-kiro',
+    }
+    const { lastFrame, unmount } = render(<StatusBar agent={snap} prefix={undefined} />)
+    await new Promise((r) => setTimeout(r, 30))
+    expect(lastFrame() ?? '').toContain('📁 dsh-kiro')
+    unmount()
+  })
+
+  it('controller seeds workspace from the session header at bind', () => {
+    const ctrl = new SessionController()
+    const handlers = new Map<string, (session: unknown, event: unknown) => void>()
+    const ctx = {
+      on: (type: string, cb: (s: unknown, e: unknown) => void) => {
+        handlers.set(type, cb)
+        return () => handlers.delete(type)
+      },
+    }
+    const session = { id: 's1', header: { cwd: '/tmp/somewhere' } }
+    ctrl.bindAgent(ctx as never, { session } as never)
+    expect(ctrl.state.agent.workspace).toBe('/tmp/somewhere')
+  })
+})
+
+describe('permission preset from projection (restored sessions)', () => {
+  it('bind reads the CURRENT preset even when the event predates us', () => {
+    const ctrl = new SessionController()
+    const handlers = new Map<string, (s: unknown, e: unknown) => void>()
+    const ctx = {
+      get: (name: string) => (name === 'sessionProjections'
+        ? { stateOf: (_s: unknown, key: string) => (key === 'permissions' ? { preset: 'workspace-write' } : undefined) }
+        : undefined),
+      on: (type: string, cb: (s: unknown, e: unknown) => void) => {
+        handlers.set(type, cb)
+        return () => handlers.delete(type)
+      },
+    }
+    const session = { id: 's1' }
+    ctrl.bindAgent(ctx as never, { session } as never)
+    expect(ctrl.state.agent.permissionPreset).toBe('workspace-write')
+  })
+})
+
 describe('permission preset pin', () => {
   it('permission/preset events update the snapshot', () => {
     const { ctrl, emit } = driver()
@@ -226,7 +274,7 @@ describe('permission preset pin', () => {
       lastTurnReason: undefined, contextUsedTokens: 0, contextLimitTokens: 100,
       planMode: false, permissionPreset: preset,
     })
-    for (const [preset, chip] of [['workspace-write', '[write]'], ['read-only', '[read-only]'], ['danger-full-access', '[full]'], ['custom', '[custom]']] as const) {
+    for (const [preset, chip] of [['workspace-write', '[工作区]'], ['read-only', '[只读]'], ['danger-full-access', '[完全]'], ['custom', '[自定义]']] as const) {
       const { lastFrame, unmount } = render(<StatusBar agent={snap(preset)} prefix={undefined} />)
       await new Promise((r) => setTimeout(r, 25))
       expect(lastFrame() ?? '').toContain(chip)
@@ -234,8 +282,8 @@ describe('permission preset pin', () => {
     }
     const none = render(<StatusBar agent={snap(undefined)} prefix={undefined} />)
     await new Promise((r) => setTimeout(r, 25))
-    expect(none.lastFrame() ?? '').not.toContain('[write]')
-    expect(none.lastFrame() ?? '').not.toContain('[read-only]')
+    expect(none.lastFrame() ?? '').not.toContain('[工作区]')
+    expect(none.lastFrame() ?? '').not.toContain('[只读]')
     none.unmount()
   })
 })
