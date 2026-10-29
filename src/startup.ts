@@ -20,6 +20,8 @@ import {
   parseCmdline,
   type AppExit,
 } from '@deepseek-ai/dsh-cmdline'
+import { statSync } from 'node:fs'
+import { resolve } from 'node:path'
 import { banner, resetPalette, colorLevel } from './theme/palette'
 import { splashMark } from './theme/banner'
 
@@ -88,6 +90,8 @@ export interface KiroStartup {
   readonly verbose: number
   /** Profile name override for the launched agent. */
   readonly agent: string | undefined
+  /** Workspace override (--cwd): chdir before the session is created. */
+  readonly workspaceDir: string | undefined
 }
 
 /** Construct the Kiro TUI commander program. */
@@ -105,6 +109,7 @@ function kiroCommand(): Command {
     .option('--session-source <v1|v2>', 'restrict --delete-session lookup to one storage source')
     .option('--list-models', 'list available models and exit')
     .option('--agent <agent>', 'start the TUI with a custom agent by name')
+    .option('--cwd <dir>', 'set the session workspace directory (sandbox + .kiro/ anchor here)')
     .option('--model <model>', 'override the model the agent selects')
     .option('--effort <level>', 'reasoning-effort override: low | medium | high | xhigh | max')
     .option('--agent-engine <v2|v1|kas>', 'select the agent engine; default is v2')
@@ -125,6 +130,7 @@ Examples:
   dsh --profile kiro --resume-picker              open an interactive resume picker
   dsh --profile kiro --agent backend-specialist  start with a custom agent
   dsh --profile kiro --list-models                list available models and exit
+  dsh --profile kiro --cwd ~/it-k8s               set the workspace to ~/it-k8s
   dsh --profile kiro "fix the failing test"       seed the prompt with a task
 `)
   return cmd
@@ -158,6 +164,7 @@ function readStartup(program: Command): KiroStartup {
     legacy?: boolean
     wrap?: 'always' | 'never' | 'auto'
     verbose?: number
+    cwd?: string
   }>()
 
   const taskArg = (program.args as readonly string[]).join(' ').trim()
@@ -175,6 +182,7 @@ function readStartup(program: Command): KiroStartup {
     sessionSource: opts.sessionSource,
     listModels: opts.listModels === true,
     agent: opts.agent,
+    workspaceDir: opts.cwd,
     model: opts.model,
     effort: opts.effort,
     agentEngine: opts.agentEngine,
@@ -265,6 +273,18 @@ export function apply(ctx: Context): void {
   program.action(() => {
     const startup = readStartup(program)
     validate(startup, program)
+    // --cwd: move to the requested workspace BEFORE any session exists —
+    // agent tools, the sandbox and .kiro/ all anchor to the cwd at session
+    // creation. Must be a real, accessible directory (fail loud otherwise).
+    if (startup.workspaceDir !== undefined) {
+      const target = resolve(startup.workspaceDir)
+      const stat = statSync(target, { throwIfNoEntry: false })
+      if (stat === undefined || !stat.isDirectory()) {
+        program.error(`error: --cwd target is not a directory: ${target}`)
+        return
+      }
+      process.chdir(target)
+    }
     const exit = ctx.get('appExit')
     if (exit === undefined) {
       program.error('error: launcher did not provide ctx.appExit')

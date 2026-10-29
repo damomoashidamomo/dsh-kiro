@@ -221,7 +221,7 @@ describe('workspace display', () => {
     }
     const { lastFrame, unmount } = render(<StatusBar agent={snap} prefix={undefined} />)
     await new Promise((r) => setTimeout(r, 30))
-    expect(lastFrame() ?? '').toContain('📁 dsh-kiro')
+    expect(lastFrame() ?? '').toContain('工作区📁 dsh-kiro')
     unmount()
   })
 

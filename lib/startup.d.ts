@@ -74,6 +74,8 @@ export interface KiroStartup {
     readonly verbose: number;
     /** Profile name override for the launched agent. */
     readonly agent: string | undefined;
+    /** Workspace override (--cwd): chdir before the session is created. */
+    readonly workspaceDir: string | undefined;
 }
 /** Mount the kiro-startup plugin. */
 export declare function apply(ctx: Context): void;

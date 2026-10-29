@@ -52,7 +52,7 @@ export function StatusBar({ agent, prefix, activeAgentName }: StatusBarProps): J
         {agent.workspace !== undefined ? (
           <>
             <Text> {palette.muted('·')} </Text>
-            <Text>{palette.accent2(`📁 ${basename(agent.workspace)}`)}</Text>
+            <Text>{palette.accent2(`工作区📁 ${basename(agent.workspace)}`)}</Text>
           </>
         ) : null}
         <Text> {palette.muted('·')} </Text>
