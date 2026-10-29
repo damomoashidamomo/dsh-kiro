@@ -143,10 +143,12 @@ export interface ApprovalRequestUi {
 }
 
 /** The user's answer to a pending {@link ApprovalRequestUi}. */
+export type ApprovalTrustScope = 'tool' | 'command' | 'prefix'
+
 export type ApprovalChoice =
   | { readonly kind: 'allow-once' }
-  | { readonly kind: 'allow-session' }
-  | { readonly kind: 'allow-project' }
+  | { readonly kind: 'allow-session'; readonly scope?: ApprovalTrustScope; readonly pattern?: string }
+  | { readonly kind: 'allow-project'; readonly scope?: ApprovalTrustScope; readonly pattern?: string }
   | { readonly kind: 'deny'; readonly reason: string | undefined }
   | { readonly kind: 'cancelled' }
 

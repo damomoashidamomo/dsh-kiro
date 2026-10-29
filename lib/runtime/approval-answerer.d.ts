@@ -39,6 +39,20 @@ export interface ApprovalUi {
     allowToolForSession(toolName: string): void;
     /** Persist a project-wide allowance (.kiro/approvals.json). */
     allowToolForProject(toolName: string): void;
+    /** Full argument payload of the pending tool call (for pattern trust). */
+    latestToolArgs?(toolName: string): string | undefined;
+    /** Whether the request matches a stored command/prefix trust pattern. */
+    matchesTrustPattern?(toolName: string, args: string | undefined): boolean;
+    /** Remember a session-scoped trust pattern. */
+    allowPatternForSession?(pattern: {
+        tool: string;
+        prefix: string;
+    }): void;
+    /** Persist a project-scoped trust pattern. */
+    allowPatternForProject?(pattern: {
+        tool: string;
+        prefix: string;
+    }): void;
     openApproval(request: ApprovalRequestUi, signal?: ApprovalRequestLike['signal']): Promise<ApprovalChoice>;
 }
 /**

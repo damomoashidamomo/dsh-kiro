@@ -14,6 +14,11 @@ import type { Agent } from '@deepseek-ai/dsh-agent';
 import type { AgentStatusSnapshot, ApprovalChoice, ApprovalRequestUi, OverlayKind, PickerItem, QuestionChoice, QuestionRequestUi, SessionRenderState } from './types';
 /** Subscriber callback when the render state changes. */
 export type StateListener = (state: SessionRenderState) => void;
+/** One finer-grained trust entry: commands of `tool` starting with `prefix`. */
+export interface ApprovalPattern {
+    readonly tool: string;
+    readonly prefix: string;
+}
 /**
  * The controller that projects session events onto UI state. One instance per
  * runtime plugin; the controller does not own the agent — it follows whatever
@@ -86,10 +91,14 @@ export declare class SessionController {
     private markFirstToken;
     /**
      * Project-level approvals (`.kiro/approvals.json` in the workspace):
-     * tools the user marked "always allow for this project". Seeded at
-     * construction and rewritten on each allow-project choice.
+     * tools the user marked "always allow for this project" (whole-tool), and
+     * command-prefix patterns for finer trust (e.g. every `grep ...` inside
+     * bash). Seeded at construction and rewritten on each allow choice.
      */
     private readonly projectAllowedTools;
+    private readonly projectPatterns;
+    /** Session-scoped prefix patterns (chosen via 本会话 + 前缀). */
+    private readonly sessionPatterns;
     constructor();
     /** Resolver for the currently pending question, if any. */
     private questionResolve;
@@ -116,6 +125,27 @@ export declare class SessionController {
     allowToolForSession(toolName: string): void;
     /** Remember a project-wide allowance (本项目始终允许) and persist it. */
     allowToolForProject(toolName: string): void;
+    /** Persist a finer-grained project trust pattern (命令/前缀). */
+    allowPatternForProject(pattern: ApprovalPattern): void;
+    /** Remember a session-scoped trust pattern. */
+    allowPatternForSession(pattern: ApprovalPattern): void;
+    /**
+     * Whether a pending tool request matches a stored trust pattern. `args`
+     * is the full argument JSON from the tool/call event; matching compares
+     * the command-relevant string (bash: `command`, others: full JSON) as a
+     * prefix.
+     */
+    matchesTrustPattern(toolName: string, args: string | undefined): boolean;
+    /** Latest recorded argument payload for a tool name (or undefined). */
+    latestToolArgs(toolName: string): string | undefined;
+    /** Snapshot of persisted + session trust entries, for /approvals. */
+    trustListing(): {
+        projectTools: readonly string[];
+        projectPatterns: readonly ApprovalPattern[];
+        sessionPatterns: readonly ApprovalPattern[];
+    };
+    /** Remove a persisted entry by its /approvals listing coordinates. */
+    removeTrustEntry(kind: 'project-tool' | 'project-pattern' | 'session-pattern', index: number): boolean;
     /**
      * Put a structured question to the user (plan review, generic ask).
      * Resolves when the UI answers, or with `{ kind: 'dismissed' }` when the

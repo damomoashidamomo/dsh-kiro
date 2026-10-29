@@ -45,6 +45,14 @@ export interface ApprovalUi {
   allowToolForSession(toolName: string): void
   /** Persist a project-wide allowance (.kiro/approvals.json). */
   allowToolForProject(toolName: string): void
+  /** Full argument payload of the pending tool call (for pattern trust). */
+  latestToolArgs?(toolName: string): string | undefined
+  /** Whether the request matches a stored command/prefix trust pattern. */
+  matchesTrustPattern?(toolName: string, args: string | undefined): boolean
+  /** Remember a session-scoped trust pattern. */
+  allowPatternForSession?(pattern: { tool: string; prefix: string }): void
+  /** Persist a project-scoped trust pattern. */
+  allowPatternForProject?(pattern: { tool: string; prefix: string }): void
   openApproval(
     request: ApprovalRequestUi,
     signal?: ApprovalRequestLike['signal'],
@@ -60,6 +68,10 @@ export function createApprovalAnswerer(
   feedback: ApprovalFeedback,
 ): (req: ApprovalRequestLike) => Promise<ApprovalOutcomeLike> {
   return async (req) => {
+    // Finer-grained trust first: a stored command/prefix pattern covering
+    // this request auto-allows WITHOUT the panel (kiro scope semantics).
+    const args = ui.latestToolArgs?.(req.toolName)
+    if (ui.matchesTrustPattern?.(req.toolName, args) === true) return 'allowed-once'
     if (ui.isToolAllowedForSession(req.toolName)) return 'allowed-once'
     const choice = await ui.openApproval(
       { toolName: req.toolName, reason: req.reason },
@@ -67,10 +79,22 @@ export function createApprovalAnswerer(
     )
     switch (choice.kind) {
       case 'allow-session':
-        ui.allowToolForSession(req.toolName)
+        if (choice.scope === 'command' && choice.pattern !== undefined) {
+          ui.allowPatternForSession?.({ tool: req.toolName, prefix: choice.pattern })
+        } else if (choice.scope === 'prefix' && choice.pattern !== undefined) {
+          ui.allowPatternForSession?.({ tool: req.toolName, prefix: choice.pattern })
+        } else {
+          ui.allowToolForSession(req.toolName)
+        }
         return 'allowed-once'
       case 'allow-project':
-        ui.allowToolForProject(req.toolName)
+        if (choice.scope === 'command' && choice.pattern !== undefined) {
+          ui.allowPatternForProject?.({ tool: req.toolName, prefix: choice.pattern })
+        } else if (choice.scope === 'prefix' && choice.pattern !== undefined) {
+          ui.allowPatternForProject?.({ tool: req.toolName, prefix: choice.pattern })
+        } else {
+          ui.allowToolForProject(req.toolName)
+        }
         return 'allowed-once'
       case 'deny':
         if (choice.reason !== undefined && choice.reason !== '') {

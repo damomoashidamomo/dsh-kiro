@@ -30,6 +30,7 @@ import { promptsCommand } from './prompts'
 import { hooksCommand } from './hooks'
 import { steeringCommand } from './steering'
 import { workspaceCommand } from './workspace'
+import { approvalsCommand } from './approvals'
 import { usageCommand } from './usage'
 import { issueCommand } from './issue'
 import { changelogCommand } from './changelog'
@@ -62,6 +63,7 @@ export const ALL_COMMANDS: readonly CommandDefinition[] = [
   hooksCommand,
   steeringCommand,
   workspaceCommand,
+  approvalsCommand,
   usageCommand,
   issueCommand,
   changelogCommand,

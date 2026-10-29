@@ -35,12 +35,40 @@ const OPTIONS = [
 export function ApprovalOverlay(props: {
   /** Edit-tool diff rows (B1): red/green view of what the call changes. */
   diff?: readonly DiffRow[] | undefined,
+  /** The shell command of the pending request (bash) — enables the trust
+   * scope selector (whole tool / this command / command prefix). */
+  approvalCommand?: string | undefined,
   request: ApprovalRequestUi
   onResolve: (choice: ApprovalChoice) => void
 }): React.ReactElement {
   const [selected, setSelected] = useState(0)
   const [reasonMode, setReasonMode] = useState(false)
   const [reason, setReason] = useState('')
+  const [scopeStep, setScopeStep] = useState<'allow-session' | 'allow-project' | undefined>(undefined)
+
+
+  // Trust-scope second step (after 本会话始终 / 本项目始终): kiro-style
+  // granularity — whole tool, exactly this command, or commands starting
+  // with the same first word (e.g. every `grep ...`).
+  const command = (props.approvalCommand ?? '').trim()
+  const prefixWord = command.split(/\s+/u)[0] ?? ''
+  const scopeOptions: { label: string; resolve: () => void }[] = scopeStep === undefined ? [] : [
+    {
+      label: `整个工具（${props.request.toolName} 的所有调用）`,
+      resolve: () => props.onResolve({ kind: scopeStep, scope: 'tool' }),
+    },
+    ...(command !== '' ? [
+      {
+        label: `仅此命令（${command.length > 40 ? `${command.slice(0, 39)}…` : command}）`,
+        resolve: () => props.onResolve({ kind: scopeStep, scope: 'command', pattern: command }),
+      },
+      ...(prefixWord !== '' ? [{
+        label: `前缀「${prefixWord} …」（以 ${prefixWord} 开头的命令）`,
+        resolve: () => props.onResolve({ kind: scopeStep, scope: 'prefix', pattern: `${prefixWord} ` }),
+      }] : []),
+    ] : []),
+  ]
+  const [scopeSelected, setScopeSelected] = useState(0)
 
   useInput((input, key) => {
     // Deny helper: empty/whitespace reason denies outright.
@@ -52,6 +80,31 @@ export function ApprovalOverlay(props: {
     // React state updates do not apply inside one synchronous loop, so a
     // PTY-batched chunk (`3no\r`) is folded through LOCAL mode/buffer state
     // first; the committed state catches up at the end.
+    if (scopeStep !== undefined) {
+      const commit = (idx: number): void => {
+        scopeOptions[idx]?.resolve()
+      }
+      if (input === '') {
+        if (key.return) commit(scopeSelected)
+        else if (key.upArrow) setScopeSelected((prev) => Math.max(0, prev - 1))
+        else if (key.downArrow) setScopeSelected((prev) => Math.min(scopeOptions.length - 1, prev + 1))
+        else if (key.escape) setScopeStep(undefined)
+        return
+      }
+      // A literal CR byte (single-char chunk) commits like Enter.
+      if (input === '\r' || input === '\n') {
+        commit(scopeSelected)
+        return
+      }
+      const idx = input.trim()
+      if (idx !== '' && /^[0-9]+$/.test(idx)) {
+        commit(Number(idx) - 1)
+        return
+      }
+      if (input === '\x1b') setScopeStep(undefined)
+      return
+    }
+
     if (reasonMode) {
       if (input === '') {
         if (key.return) {
@@ -87,9 +140,17 @@ export function ApprovalOverlay(props: {
         setReasonMode(true)
         return
       }
-      if (index === 1) props.onResolve({ kind: 'allow-session' })
-      else if (index === 2) props.onResolve({ kind: 'allow-project' })
-      else props.onResolve({ kind: 'allow-once' })
+      if (index === 1 || index === 2) {
+        // Finer-grained trust: with a shell command present, ask for the
+        // trust scope (whole tool / this command / prefix) kiro-style.
+        if (command !== '') {
+          setScopeStep(index === 1 ? 'allow-session' : 'allow-project')
+          return
+        }
+        props.onResolve(index === 1 ? { kind: 'allow-session' } : { kind: 'allow-project' })
+        return
+      }
+      props.onResolve({ kind: 'allow-once' })
     }
 
     if (input === '') {
@@ -127,6 +188,10 @@ export function ApprovalOverlay(props: {
         enteringReason = true
         continue
       }
+      if (direct === 1 || direct === 2) {
+        pick(direct)
+        return
+      }
       if (direct >= 0) {
         pick(direct)
         return
@@ -162,6 +227,17 @@ export function ApprovalOverlay(props: {
           ))}
         </Box>
       )}
+      {scopeStep !== undefined ? (
+        <Box flexDirection="column" marginTop={1}>
+          <Text>{palette.accent('信任范围（↑↓ 选择，Enter 确认，Esc 返回）：')}</Text>
+          {scopeOptions.map((option, idx) => (
+            <Text key={option.label}>
+              {idx === scopeSelected ? palette.accent('❯ ') : palette.muted('  ')}
+              {idx === scopeSelected ? palette.accent(option.label) : palette.muted(option.label)}
+            </Text>
+          ))}
+        </Box>
+      ) : (
       <Box flexDirection="column" marginTop={1}>
         {reasonMode ? (
           <>
@@ -181,6 +257,7 @@ export function ApprovalOverlay(props: {
           ))
         )}
       </Box>
+      )}
     </Box>
   )
 }

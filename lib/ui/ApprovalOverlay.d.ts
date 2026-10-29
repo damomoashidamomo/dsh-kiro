@@ -24,6 +24,9 @@ import type { DiffRow } from './diff';
 export declare function ApprovalOverlay(props: {
     /** Edit-tool diff rows (B1): red/green view of what the call changes. */
     diff?: readonly DiffRow[] | undefined;
+    /** The shell command of the pending request (bash) — enables the trust
+     * scope selector (whole tool / this command / command prefix). */
+    approvalCommand?: string | undefined;
     request: ApprovalRequestUi;
     onResolve: (choice: ApprovalChoice) => void;
 }): React.ReactElement;

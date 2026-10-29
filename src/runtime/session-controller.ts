@@ -75,26 +75,66 @@ function projectApprovalsPath(): string {
   return join(process.cwd(), '.kiro', 'approvals.json')
 }
 
-/** Read the persisted project-allowed tool names (missing file -> none). */
+/** One finer-grained trust entry: commands of `tool` starting with `prefix`. */
+export interface ApprovalPattern {
+  readonly tool: string
+  readonly prefix: string
+}
+
+/** Read persisted approvals (v2 patterns + v1 tools; missing file -> none). */
 function loadProjectApprovals(): string[] {
+  return loadProjectApprovalStore().tools
+}
+
+function loadProjectPatterns(): ApprovalPattern[] {
+  return loadProjectApprovalStore().patterns
+}
+
+function loadProjectApprovalStore(): { tools: string[]; patterns: ApprovalPattern[] } {
   try {
     const raw = readFileSync(projectApprovalsPath(), 'utf8')
-    const parsed = JSON.parse(raw) as { tools?: unknown }
-    if (!Array.isArray(parsed.tools)) return []
-    return parsed.tools.filter((t): t is string => typeof t === 'string' && t !== '')
+    const parsed = JSON.parse(raw) as { tools?: unknown; patterns?: unknown }
+    const tools = Array.isArray(parsed.tools)
+      ? parsed.tools.filter((t): t is string => typeof t === 'string' && t !== '')
+      : []
+    const patterns = Array.isArray(parsed.patterns)
+      ? parsed.patterns.filter((p): p is ApprovalPattern => {
+          return typeof p === 'object' && p !== null
+            && typeof (p as { tool?: unknown }).tool === 'string'
+            && typeof (p as { prefix?: unknown }).prefix === 'string'
+        })
+      : []
+    return { tools, patterns }
   } catch {
-    return []
+    return { tools: [], patterns: [] }
   }
 }
 
-/** Persist the project-allowed tool names (best effort). */
-function saveProjectApprovals(tools: readonly string[]): void {
+/** Persist approvals (best effort): tools + command-prefix patterns. */
+function saveProjectApprovals(tools: readonly string[], patterns: readonly ApprovalPattern[] = []): void {
   try {
     mkdirSync(join(process.cwd(), '.kiro'), { recursive: true })
-    writeFileSync(projectApprovalsPath(), `${JSON.stringify({ tools: [...tools].sort() }, null, 2)}\n`, 'utf8')
+    const payload = { tools: [...tools].sort(), patterns: [...patterns] }
+    writeFileSync(projectApprovalsPath(), `${JSON.stringify(payload, null, 2)}\n`, 'utf8')
   } catch {
     // Unwritable workspace: the allowance still holds for this session.
   }
+}
+
+/**
+ * The command-relevant string of a pending request: bash -> `command`,
+ * everything else -> the full argument JSON (prefix trust on non-shell
+ * tools compares the whole payload).
+ */
+function commandTextOf(toolName: string, argsJson: string | undefined): string | undefined {
+  if (argsJson === undefined) return undefined
+  try {
+    const args = JSON.parse(argsJson) as { command?: unknown }
+    if (toolName === 'bash' && typeof args.command === 'string') return args.command.trim()
+  } catch {
+    // fall through to raw JSON
+  }
+  return argsJson.trim()
 }
 
 /**
@@ -357,10 +397,14 @@ export class SessionController {
 
   /**
    * Project-level approvals (`.kiro/approvals.json` in the workspace):
-   * tools the user marked "always allow for this project". Seeded at
-   * construction and rewritten on each allow-project choice.
+   * tools the user marked "always allow for this project" (whole-tool), and
+   * command-prefix patterns for finer trust (e.g. every `grep ...` inside
+   * bash). Seeded at construction and rewritten on each allow choice.
    */
   private readonly projectAllowedTools = new Set<string>(loadProjectApprovals())
+  private readonly projectPatterns: ApprovalPattern[] = loadProjectPatterns()
+  /** Session-scoped prefix patterns (chosen via 本会话 + 前缀). */
+  private readonly sessionPatterns: ApprovalPattern[] = []
 
   constructor() {
     for (const tool of this.projectAllowedTools) this.sessionAllowedTools.add(tool)
@@ -445,7 +489,71 @@ export class SessionController {
   allowToolForProject(toolName: string): void {
     this.sessionAllowedTools.add(toolName)
     this.projectAllowedTools.add(toolName)
-    saveProjectApprovals([...this.projectAllowedTools])
+    saveProjectApprovals([...this.projectAllowedTools], this.projectPatterns)
+  }
+
+  /** Persist a finer-grained project trust pattern (命令/前缀). */
+  allowPatternForProject(pattern: ApprovalPattern): void {
+    this.projectPatterns.push(pattern)
+    saveProjectApprovals([...this.projectAllowedTools], this.projectPatterns)
+  }
+
+  /** Remember a session-scoped trust pattern. */
+  allowPatternForSession(pattern: ApprovalPattern): void {
+    this.sessionPatterns.push(pattern)
+  }
+
+  /**
+   * Whether a pending tool request matches a stored trust pattern. `args`
+   * is the full argument JSON from the tool/call event; matching compares
+   * the command-relevant string (bash: `command`, others: full JSON) as a
+   * prefix.
+   */
+  matchesTrustPattern(toolName: string, args: string | undefined): boolean {
+    const text = commandTextOf(toolName, args)
+    if (text === undefined) return false
+    const match = (p: ApprovalPattern): boolean =>
+      p.tool === toolName && text.startsWith(p.prefix)
+    return this.sessionPatterns.some(match) || this.projectPatterns.some(match)
+  }
+
+  /** Latest recorded argument payload for a tool name (or undefined). */
+  latestToolArgs(toolName: string): string | undefined {
+    for (let i = this.state.messages.length - 1; i >= 0; i -= 1) {
+      const message = this.state.messages[i]
+      if (message?.kind === 'tool-call' && message.tool?.name === toolName) {
+        return message.tool.argsRaw
+      }
+    }
+    return undefined
+  }
+
+  /** Snapshot of persisted + session trust entries, for /approvals. */
+  trustListing(): {
+    projectTools: readonly string[]
+    projectPatterns: readonly ApprovalPattern[]
+    sessionPatterns: readonly ApprovalPattern[]
+  } {
+    return {
+      projectTools: [...this.projectAllowedTools],
+      projectPatterns: [...this.projectPatterns],
+      sessionPatterns: [...this.sessionPatterns],
+    }
+  }
+
+  /** Remove a persisted entry by its /approvals listing coordinates. */
+  removeTrustEntry(kind: 'project-tool' | 'project-pattern' | 'session-pattern', index: number): boolean {
+    if (kind === 'project-tool') {
+      const tools = [...this.projectAllowedTools]
+      const [removed] = tools.splice(index, 1)
+      if (removed === undefined) return false
+      this.projectAllowedTools.delete(removed)
+      this.sessionAllowedTools.delete(removed)
+      saveProjectApprovals([...this.projectAllowedTools], this.projectPatterns)
+      return true
+    }
+    const list = kind === 'project-pattern' ? this.projectPatterns : this.sessionPatterns
+    return index >= 0 && index < list.length ? (list.splice(index, 1), true) : false
   }
 
   /**

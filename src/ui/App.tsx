@@ -30,6 +30,23 @@ import { ALL_COMMANDS } from '../commands/registry'
  * Diff rows for a pending approval: match the most recent tool-call record
  * of the named tool and build red/green rows from its recorded arguments.
  */
+/** The shell command of the pending bash request, for scope trust. */
+function approvalCommandOf(state: SessionRenderState, toolName: string): string | undefined {
+  if (toolName !== 'bash') return undefined
+  for (let i = state.messages.length - 1; i >= 0; i -= 1) {
+    const message = state.messages[i]
+    if (message?.kind === 'tool-call' && message.tool?.name === toolName) {
+      try {
+        const args = JSON.parse(message.tool.argsRaw ?? '{}') as { command?: unknown }
+        return typeof args.command === 'string' ? args.command : undefined
+      } catch {
+        return undefined
+      }
+    }
+  }
+  return undefined
+}
+
 function approvalDiff(state: SessionRenderState, toolName: string): readonly DiffRow[] | undefined {
   if (!isEditableTool(toolName)) return undefined
   for (let i = state.messages.length - 1; i >= 0; i -= 1) {
@@ -194,6 +211,7 @@ export function App({ controller, seedTask, activeAgentName, onSubmit, fileSearc
         <ApprovalOverlay
           request={state.approval}
           diff={approvalDiff(state, state.approval.toolName)}
+          approvalCommand={approvalCommandOf(state, state.approval.toolName)}
           onResolve={(choice) => controller.resolveApproval(choice)}
         />
       ) : state.picker !== undefined ? (
