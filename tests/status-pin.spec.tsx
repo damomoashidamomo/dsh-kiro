@@ -221,7 +221,7 @@ describe('workspace display', () => {
     }
     const { lastFrame, unmount } = render(<StatusBar agent={snap} prefix={undefined} />)
     await new Promise((r) => setTimeout(r, 30))
-    expect(lastFrame() ?? '').toContain('工作区📁 dsh-kiro')
+    expect(lastFrame() ?? '').toContain('工作区: ~/deepseek harness work zone/dsh-kiro')
     unmount()
   })
 
@@ -268,23 +268,16 @@ describe('permission preset pin', () => {
     expect(ctrl.state.agent.permissionPreset).toBe('read-only')
   })
 
-  it('the status bar shows the short chip per preset', async () => {
-    const snap = (preset: string | undefined): AgentStatusSnapshot => ({
+  it('the permission chip is gone from the status bar (workspace segment carries the line)', async () => {
+    const snap: AgentStatusSnapshot = {
       status: 'idle', activeAgent: undefined, activeModel: 'm', activeProvider: 'p',
       lastTurnReason: undefined, contextUsedTokens: 0, contextLimitTokens: 100,
-      planMode: false, permissionPreset: preset,
-    })
-    for (const [preset, chip] of [['workspace-write', '[工作区]'], ['read-only', '[只读]'], ['danger-full-access', '[完全]'], ['custom', '[自定义]']] as const) {
-      const { lastFrame, unmount } = render(<StatusBar agent={snap(preset)} prefix={undefined} />)
-      await new Promise((r) => setTimeout(r, 25))
-      expect(lastFrame() ?? '').toContain(chip)
-      unmount()
+      planMode: false, permissionPreset: 'workspace-write',
     }
-    const none = render(<StatusBar agent={snap(undefined)} prefix={undefined} />)
+    const { lastFrame, unmount } = render(<StatusBar agent={snap} prefix={undefined} />)
     await new Promise((r) => setTimeout(r, 25))
-    expect(none.lastFrame() ?? '').not.toContain('[工作区]')
-    expect(none.lastFrame() ?? '').not.toContain('[只读]')
-    none.unmount()
+    expect(lastFrame() ?? '').not.toContain('[工作区]')
+    unmount()
   })
 })
 
