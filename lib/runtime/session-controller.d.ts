@@ -32,6 +32,8 @@ export declare class SessionController {
     private boundCtx;
     /** Disposer for the agent/assistant-stream live-chunk listener. */
     private unsubscribeStream;
+    /** Coalesced publish timer for streaming deltas (anti-flicker). */
+    private publishTimer;
     private unsubscribe;
     /** In-flight tool calls keyed by platform callId (parallel-safe). */
     private readonly activeTools;
@@ -49,6 +51,8 @@ export declare class SessionController {
     clearTranscript(): void;
     /** Replace the controlled agent and rebind session events. */
     bindAgent(ctx: Context, agent: Agent): void;
+    /** Abort the active turn via the platform's kiroInterrupt service. */
+    cancelActiveTurn(): void;
     /** Detach the controlled agent. */
     unbind(): void;
     /** Push a UI overlay state change. */
@@ -165,6 +169,13 @@ export declare class SessionController {
     cancelQuestion(): void;
     /** Patch the agent snapshot (used by status bar updates outside the event bus). */
     patchAgent(snapshot: Partial<AgentStatusSnapshot>): void;
+    /**
+     * Coalesce streaming-delta publishes: the gateway emits ~40 chunks/s,
+     * and one full React/Ink re-render per chunk makes the terminal flicker.
+     * Trailing-edge throttle at ~12 fps keeps text flowing while cutting the
+     * redraw rate of the tall live region.
+     */
+    private publishStreaming;
     /** Notify subscribers of a state change. */
     private publish;
     /** Apply one session event. */

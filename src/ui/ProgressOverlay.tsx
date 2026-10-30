@@ -7,7 +7,6 @@
  */
 
 import { Box, Text } from 'ink'
-import Spinner from 'ink-spinner'
 import { palette } from '../theme/palette'
 
 export interface ProgressOverlayProps {
@@ -22,13 +21,13 @@ export interface ProgressOverlayProps {
 /** Render a transient progress bar with a spinner. */
 export function ProgressOverlay({ toolName, busy, subtext }: ProgressOverlayProps): JSX.Element | null {
   if (!busy && toolName === undefined) return null
-  const label = toolName !== undefined ? palette.accent(`running ${toolName}`) : palette.warning('thinking')
+  // STATIC indicator — an animated spinner re-renders the whole live
+  // region ~10-20x/s and makes the terminal visibly shake while streaming.
+  const label = toolName !== undefined ? palette.accent(`running ${toolName}`) : palette.warning('thinking…')
   const right = subtext !== undefined ? palette.muted(subtext) : ''
   return (
     <Box flexDirection="row" paddingX={1} marginTop={0}>
-      <Text color={palette.enabled ? 'green' : undefined}>
-        <Spinner type="dots" />
-      </Text>
+      <Text>{palette.accentSoft('◆')}</Text>
       <Text> {label}</Text>
       {right !== '' ? <Text>  {right}</Text> : null}
     </Box>

@@ -79,6 +79,8 @@ export function App({ controller, seedTask, activeAgentName, onSubmit, fileSearc
   const [slashMenuOpen, setSlashMenuOpen] = useState<boolean>(false)
   const [prefixQuery, setPrefixQuery] = useState<string>('')
   const [autocompleteSelected, setAutocompleteSelected] = useState<number>(0)
+  /** Submitted drafts, ↑/↓ recall (oldest first). */
+  const [submitHistory, setSubmitHistory] = useState<readonly string[]>([])
   const [atItems, setAtItems] = useState<readonly AutocompleteItem[]>([])
   const [atInsert, setAtInsert] = useState<{ token: string; insert: string; seq: number } | undefined>(undefined)
   const insertSeq = useRef(0)
@@ -97,6 +99,11 @@ export function App({ controller, seedTask, activeAgentName, onSubmit, fileSearc
     }, 120)
     return () => { cancelled = true; clearTimeout(timer) }
   }, [prefix, prefixQuery, fileSearch])
+  /** Abort the in-flight LLM request (Ctrl+C first press). */
+  const cancelTurn = (): void => {
+    controller.cancelActiveTurn()
+  }
+
   // kiro-style two-stage Ctrl+C: first press cancels the running turn, a
   // second press while still cancelling exits the TUI back to the shell.
   const interruptArmed = useRef<boolean>(false)
@@ -136,6 +143,8 @@ export function App({ controller, seedTask, activeAgentName, onSubmit, fileSearc
         } else {
           interruptArmed.current = true
           controller.patchAgent({ status: 'cancelling' })
+          // Actually abort the in-flight request via the platform.
+          cancelTurn()
         }
       } else {
         // Idle: kiro exits on a single Ctrl+C (kiro.dev issue #6442).
@@ -232,7 +241,11 @@ export function App({ controller, seedTask, activeAgentName, onSubmit, fileSearc
         <Prompt
           busy={state.agent.status === 'running'}
           contextPct={contextPct}
+          history={submitHistory}
           onSubmit={(text) => {
+            if (text.trim() !== '') {
+              setSubmitHistory((prev) => (prev[prev.length - 1] === text ? prev : [...prev, text]))
+            }
             onSubmit(text)
             setPrefix(undefined)
             setPrefixQuery('')

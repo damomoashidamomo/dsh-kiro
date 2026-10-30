@@ -194,6 +194,8 @@ export class SessionController {
   private boundCtx: Context | undefined
   /** Disposer for the agent/assistant-stream live-chunk listener. */
   private unsubscribeStream: (() => void) | undefined
+  /** Coalesced publish timer for streaming deltas (anti-flicker). */
+  private publishTimer: ReturnType<typeof setTimeout> | undefined
   private unsubscribe: (() => void) | undefined
   /** In-flight tool calls keyed by platform callId (parallel-safe). */
   private readonly activeTools = new Map<string, ToolRecord>()
@@ -258,6 +260,19 @@ export class SessionController {
           this.applyEvent({ type: 'assistant/chunk', seq: 0, data: { chunk: frame.chunk } } as SessionEvent)
         }
       })
+    }
+  }
+
+  /** Abort the active turn via the platform's kiroInterrupt service. */
+  cancelActiveTurn(): void {
+    if (this.boundCtx === undefined) return
+    try {
+      const interrupt = (this.boundCtx as unknown as {
+        get?: (name: string) => unknown
+      }).get?.('kiroInterrupt') as { cancel?: () => void } | undefined
+      interrupt?.cancel?.()
+    } catch {
+      // service not mounted or agent already idle
     }
   }
 
@@ -639,6 +654,20 @@ export class SessionController {
     this.publish()
   }
 
+  /**
+   * Coalesce streaming-delta publishes: the gateway emits ~40 chunks/s,
+   * and one full React/Ink re-render per chunk makes the terminal flicker.
+   * Trailing-edge throttle at ~12 fps keeps text flowing while cutting the
+   * redraw rate of the tall live region.
+   */
+  private publishStreaming(): void {
+    if (this.publishTimer !== undefined) return
+    this.publishTimer = setTimeout(() => {
+      this.publishTimer = undefined
+      this.publish()
+    }, 100)
+  }
+
   /** Notify subscribers of a state change. */
   private publish(): void {
     const snapshot = this.state
@@ -1005,7 +1034,7 @@ export class SessionController {
       })
     }
     this.state = { ...this.state, messages }
-    this.publish()
+    this.publishStreaming()
   }
 
   /** Append a reasoning block to a dedicated message. */
@@ -1028,7 +1057,7 @@ export class SessionController {
       })
     }
     this.state = { ...this.state, messages }
-    this.publish()
+    this.publishStreaming()
   }
 
   /** Record the latest token-usage sample for the StatusBar. */

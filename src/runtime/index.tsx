@@ -137,6 +137,17 @@ async function mount(ctx: Context, startup: KiroStartup): Promise<void> {
       installModelSelection(agentCtx, selected)
       // Service surface for /effort (command handlers cannot reach this scope).
       ctx.provide('kiroEffortControl', effortControl)
+      // Cancel the active turn (Ctrl+C): the platform aborts the in-flight
+      // request and drains the driver. UI state alone does nothing.
+      ctx.provide('kiroInterrupt', {
+        cancel(): void {
+          try {
+            agent.cancel({ kind: 'user' })
+          } catch {
+            // already idle or already cancelled — no-op
+          }
+        },
+      })
       // Live mid-session switch: slash commands (e.g. /model) mutate this ref
       // so the NEXT step's request actually uses the new provider/model —
       // installModelSelection reads selection.current per step; settings

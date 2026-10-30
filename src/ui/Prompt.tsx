@@ -181,16 +181,19 @@ export function Prompt({
       return
     }
     if (key.upArrow) {
-      if (onAutocompleteMove !== undefined) {
-        onAutocompleteMove(-1)
+      // Only when a completion popup is genuinely open — otherwise recall
+      // the previous submission (the old check always won because App
+      // always passes onAutocompleteMove).
+      if (autocompleteActive === true) {
+        onAutocompleteMove?.(-1)
         return
       }
       handle({ kind: 'history-prev' })
       return
     }
     if (key.downArrow) {
-      if (onAutocompleteMove !== undefined) {
-        onAutocompleteMove(+1)
+      if (autocompleteActive === true) {
+        onAutocompleteMove?.(+1)
         return
       }
       handle({ kind: 'history-next' })
