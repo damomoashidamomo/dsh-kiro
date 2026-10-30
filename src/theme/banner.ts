@@ -8,19 +8,14 @@
  */
 
 export const BANNER = String.raw`
-  ✦                      /~~~~                     ~~~~\                   ✦
-                      //     ▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄   \\
-                    //       █~‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾~█    \\     ~
-              ✧   //         █     ◕       ◕      █       \\   ~
-         ~▄▄▄▄▄▄//           █          ‿         █         ▄▄▄▄▄▄▄▄~~
-          █o   o█            █   |  ▽      ▽   |  █        ▐  •    ▐≈≈
-       ~~ █     █       \    ▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀  /     ▀▀▀▀▀▀▀▀   ~~
-          ▀≈≈≈≈≈≈▀  \              |   |                 /     \\
-            // (o)                \   /                      (o)
-                                  \ /
-    ✧                                                                    ✧
+██████╗  ███████╗ ██╗  ██╗     ██╗  ██╗ ██╗ ██████╗   ██████╗
+██╔══██╗ ██╔════╝ ██║  ██║     ██║ ██╔╝ ██║ ██╔══██╗ ██╔═══██╗
+██║  ██║ ███████╗ ███████║ ███ █████╔╝  ██║ ██████╔╝ ██║   ██║
+██║  ██║ ╚════██║ ██╔══██╗     ██╔═██╗  ██║ ██╔══██╗ ██║   ██║
+██████╔╝ ███████║ ██║  ██╗     ██║  ██╗ ██║ ██║  ██║ ╚██████╔╝
+╚═════╝  ╚══════╝ ╚═╝  ╚═╝     ╚═╝  ╚═╝ ╚═╝ ╚═╝  ╚═╝  ╚═════╝
 
-                                    Kiro CLI · DeepSeek Harness
+                          Kiro CLI · DeepSeek Harness
 `
 
 
@@ -35,8 +30,7 @@ import { banner, colorLevel } from './palette'
  * variants (220/165/110 cols) the largest that fits `columns` wins.
  */
 export function splashMark(columns: number | undefined): string {
-  if (colorLevel() < 3) return banner(BANNER)
-  const usable = (columns ?? 80) - 2
-  const fit = LOGO_VARIANTS.find((variant) => variant.cols <= usable)
-  return fit !== undefined ? fit.ansi : banner(BANNER)
+  // The ANSI-Shadow wordmark is the splash for every terminal — the
+  // gradient in banner() degrades gracefully at lower color levels.
+  return banner(BANNER)
 }
