@@ -30,6 +30,8 @@ export declare class SessionController {
     private agent;
     /** App context (for platform projections such as contextPressure). */
     private boundCtx;
+    /** Disposer for the agent/assistant-stream live-chunk listener. */
+    private unsubscribeStream;
     private unsubscribe;
     /** In-flight tool calls keyed by platform callId (parallel-safe). */
     private readonly activeTools;

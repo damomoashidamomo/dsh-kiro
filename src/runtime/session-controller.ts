@@ -10,7 +10,7 @@
  * @module @damomoashidamomo/dsh-kiro/runtime/session-controller
  */
 
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
+import { appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import type { Context } from '@deepseek-ai/cordis'
 import type { SessionEvent } from '@deepseek-ai/dsh-session'
@@ -192,6 +192,8 @@ export class SessionController {
   private agent: Agent | undefined
   /** App context (for platform projections such as contextPressure). */
   private boundCtx: Context | undefined
+  /** Disposer for the agent/assistant-stream live-chunk listener. */
+  private unsubscribeStream: (() => void) | undefined
   private unsubscribe: (() => void) | undefined
   /** In-flight tool calls keyed by platform callId (parallel-safe). */
   private readonly activeTools = new Map<string, ToolRecord>()
@@ -243,6 +245,20 @@ export class SessionController {
       if (session !== agent.session) return
       this.applyEvent(event)
     })
+    // Streaming chunks arrive on the Cordis 'agent/assistant-stream' channel,
+    // NOT through session/event — the agent-loop dispatches live frames here
+    // before the durable assistant/message commit. Without this listener the
+    // transcript only updates at step boundaries (non-streaming feel).
+    const onStream = (ctx as unknown as {
+      on?: (event: string, cb: (payload: { frame?: { type?: string; chunk?: unknown } }) => void) => () => void
+    }).on?.bind(ctx)
+    if (onStream !== undefined) {
+      this.unsubscribeStream = onStream('agent/assistant-stream', ({ frame }) => {
+        if (frame?.type === 'chunk' && frame.chunk !== undefined) {
+          this.applyEvent({ type: 'assistant/chunk', seq: 0, data: { chunk: frame.chunk } } as SessionEvent)
+        }
+      })
+    }
   }
 
   /** Detach the controlled agent. */
