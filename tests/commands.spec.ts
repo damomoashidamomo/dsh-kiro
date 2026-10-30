@@ -34,10 +34,10 @@ describe('renderMarkdown', () => {
     expect(out).toContain('•')
   })
 
-  it('renders GFM tables with box-drawing chars', () => {
+  it('renders GFM tables with kiro-style pipe separators', () => {
     const out = renderMarkdown('| a | b |\n|---|---|\n| 1 | 2 |')
-    expect(out).toContain('┌')
-    expect(out).toContain('└')
+    expect(out).toContain('│')
+    expect(out).toContain('1')
     expect(out).toContain('│')
   })
 

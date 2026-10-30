@@ -9,6 +9,7 @@
  */
 
 import { Box, Text } from 'ink'
+import { useEffect, useState } from 'react'
 import { renderMarkdown } from '../markdown/render'
 import { palette, ICONS } from '../theme/palette'
 import type { Message as MessageRecord, TodoItem } from '../runtime/types'
@@ -25,7 +26,7 @@ export function Message({ message }: MessageProps): JSX.Element {
     case 'assistant':
       return <AssistantMessage text={message.text} streaming={message.streaming} />
     case 'reasoning':
-      return <ReasoningMessage text={message.text} streaming={message.streaming} />
+      return <ReasoningMessage text={message.text} streaming={message.streaming} createdAt={message.createdAt} />
     case 'tool-call':
       return <ToolMessage message={message} />
     case 'todo':
@@ -71,12 +72,19 @@ function AssistantMessage({ text, streaming }: { text: string; streaming: boolea
 /** Render a reasoning block in italic muted-green. */
 /**
  * Reasoning stays COLLAPSED to one line — the full chain would bury the
- * conversation (kiro-style cleanliness). The text itself lives on in the
- * message record for a future expand affordance.
+ * conversation (kiro-style cleanliness). While streaming, the live char
+ * count and elapsed seconds tick so the user sees the model working
+ * instead of a frozen "思考中…".
  */
-function ReasoningMessage({ text, streaming }: { text: string; streaming: boolean }): JSX.Element {
+function ReasoningMessage({ text, streaming, createdAt }: { text: string; streaming: boolean; createdAt: number }): JSX.Element {
+  const [elapsed, setElapsed] = useState(0)
+  useEffect(() => {
+    if (!streaming) return
+    const timer = setInterval(() => { setElapsed(Math.floor((Date.now() - createdAt) / 1000)) }, 1000)
+    return () => { clearInterval(timer) }
+  }, [streaming, createdAt])
   const label = streaming
-    ? '思考中…'
+    ? `思考中 · 已推理 ${formatCharCount(text.length)} · ${elapsed}s…`
     : `已思考 · ${formatCharCount(text.length)}`
   return (
     <Box flexDirection="row" marginTop={1}>

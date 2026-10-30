@@ -301,10 +301,11 @@ function renderList(token: Tokens.List): string {
 }
 
 /**
- * Render a GFM table. Column widths use DISPLAY width (CJK = 2 columns);
- * the whole table is capped to the available pane width by scaling columns
- * down and WRAPPING cell content into multiple physical lines (borders stay
- * intact — the kiro-style behaviour: wrap, never truncate).
+ * Render a GFM table — kiro-cli style: no enclosing box borders, just
+ * colored column headers, a thin separator, and pipe-separated data rows.
+ * Column widths use DISPLAY width (CJK = 2 columns); the whole table caps
+ * to the available pane width by scaling columns down and WRAPPING cell
+ * content into multiple physical lines.
  */
 function renderTable(token: Tokens.Table, maxWidth?: number): string {
   const alignments = token.align
@@ -320,7 +321,7 @@ function renderTable(token: Tokens.Table, maxWidth?: number): string {
     ),
   )
 
-  // Scale columns to fit the pane (borders cost 3 per column + 1).
+  // Scale columns to fit the pane (separator cost: 3 per column + 1).
   const overhead = natural.length * 3 + 1
   const cap = Math.max(20, (maxWidth ?? renderWidth()) - 2)
   const widths = (() => {
@@ -328,7 +329,6 @@ function renderTable(token: Tokens.Table, maxWidth?: number): string {
     if (total + overhead <= cap) return natural
     const scale = (cap - overhead) / total
     const scaled = natural.map(width => Math.max(4, Math.floor(width * scale)))
-    // hand back the overflow the flooring created to the widest column
     const stillOver = scaled.reduce((a, b) => a + b, 0) + overhead - cap
     if (stillOver > 0) {
       const widest = scaled.indexOf(Math.max(...scaled))
@@ -343,31 +343,28 @@ function renderTable(token: Tokens.Table, maxWidth?: number): string {
     return chunkByWidth(plain, width).map(chunk => pad(chunk, width))
   }
 
-  const physicalRow = (cells: string[][], isHeader = false): string[] => {
-    const height = Math.max(...cells.map(lines => lines.length), 1)
-    const out: string[] = []
+  // Header row: bold accent.
+  const headerLine = palette.bold(
+    headerCells.map((cell, i) => pad(stripAnsi(cell), widths[i] ?? 0, alignments[i] ?? 'left'))
+      .join(palette.dim(' │ ')),
+  )
+  // Thin separator.
+  const separator = palette.dim(widths.map(width => '─'.repeat(Math.max(3, width))).join('─┼─'))
+  // Data rows: pipe-separated, clean.
+  const dataLines = rows.flatMap(row => {
+    const cellLines = row.map((cell, i) => wrapCell(cell, i))
+    const height = Math.max(...cellLines.map(lines => lines.length), 1)
+    const lines: string[] = []
     for (let line = 0; line < height; line += 1) {
-      const segments = cells.map((lines, i) => pad(lines[line] ?? '', widths[i] ?? 0, alignments[i] ?? 'left'))
-      const prefix = isHeader ? palette.heading('') : ''
-      out.push(palette.dim('│ ') + prefix + segments.join(palette.dim(' │ ')) + palette.dim(' │'))
+      const segments = cellLines.map((cls, i) =>
+        pad(cls[line] ?? '', widths[i] ?? 0, alignments[i] ?? 'left'),
+      )
+      lines.push(segments.join(palette.dim(' │ ')))
     }
-    return out
-  }
-
-  const sepCells = widths.map((width, i) => {
-    const align = alignments[i] ?? 'left'
-    const bar = '─'.repeat(Math.max(3, width))
-    if (align === 'right') return `${palette.dim(':')}${bar.slice(1)}${palette.dim(':')}`
-    if (align === 'center') return `${palette.dim(':')}${bar.slice(1, -1)}${palette.dim(':')}`
-    return `${palette.dim(bar)}`
+    return lines
   })
 
-  const top = palette.dim(`┌─${widths.map(width => '─'.repeat(width)).join('─┬─')}─┐`)
-  const headerLines = physicalRow(headerCells.map((cell, i) => wrapCell(palette.heading(cell), i)), true)
-  const sepLine = palette.dim(`├─${sepCells.join('─┼─')}─┤`)
-  const bodyLines = rows.flatMap(row => physicalRow(row.map((cell, i) => wrapCell(cell, i))))
-  const bottom = palette.dim(`└─${widths.map(width => '─'.repeat(width)).join('─┴─')}┘`)
-  return [top, ...headerLines, sepLine, ...bodyLines, bottom].join('\n')
+  return [headerLine, separator, ...dataLines].join('\n')
 }
 
 /** Render any sequence of block tokens. */
