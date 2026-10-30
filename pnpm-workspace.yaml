@@ -5,3 +5,6 @@ allowBuilds:
   koffi: set this to true or false
   node-pty: set this to true or false
   protobufjs: set this to true or false
+
+overrides:
+  '@alcalzone/ansi-tokenize': 0.3.1
