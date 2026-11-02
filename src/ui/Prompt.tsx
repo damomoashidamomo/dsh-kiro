@@ -266,9 +266,12 @@ export function Prompt({
   //      each frame write and undoes them before the next erase.
   const { stdout } = useStdout()
   const columns = Math.max(20, stdout?.columns ?? 80)
+  // Gutter colors are applied with ANSI so the DRAFT text after it stays
+  // uncolored — putting the whole pre-wrapped line in one color=<green> Text
+  // turned the user's input green.
   const gutter =
     (contextPct !== undefined ? palette.dim(`${contextPct}% `) : '')
-    + (busy ? palette.warning(`${ICONS.agent} `) : palette.accent('> '))
+    + (busy ? palette.warning(`${ICONS.agent} `) : palette.success('> '))
   const gutterWidth = displayWidth(gutter)
   const body = draft === '' && placeholderText !== ''
     ? palette.muted(placeholderText)
@@ -305,7 +308,7 @@ export function Prompt({
       {/* ONE string child (never a null → <Text> insert: Ink drops the
           following sibling) — the pre-wrapped input lines joined by newlines
           keep Ink from re-wrapping, so the caret math above stays exact. */}
-      <Text color={palette.enabled ? 'green' : undefined}>{lines.join('\n')}</Text>
+      <Text>{lines.join('\n')}</Text>
     </Box>
   )
 }
