@@ -280,11 +280,15 @@ export function Prompt({
               <Text>{draft.slice(1)}</Text>
             </Text>
           ) : draft === '' && placeholderText !== '' ? (
-            <Text dimColor>{placeholderText}</Text>
+            // Empty draft: the cursor belongs right after `> ` — INSIDE the
+            // placeholder Text, prefixing it (an escape-only leading sibling
+            // Text gets dropped by Ink's text squashing). The IME anchor then
+            // sits where typing starts, not at the end of the hint text.
+            <Text dimColor>{SHOW_CURSOR + placeholderText}</Text>
           ) : (
             <Text>{draft}</Text>
           )}
-          <Text>{SHOW_CURSOR}</Text>
+          {draft === '' || prefix !== undefined ? null : <Text>{SHOW_CURSOR}</Text>}
         </Box>
       </Box>
     </Box>
