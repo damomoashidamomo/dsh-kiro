@@ -207,8 +207,24 @@ export declare class SessionController {
      * the model demonstrably moved on (text, a tool call) and at turn end.
      */
     private closeStreamingReasoning;
-    /** Append to the last assistant message, creating it if absent. */
+    /**
+     * Append to the streaming assistant segment, settling complete blocks.
+     *
+     * Ink's live region is erased and rewritten in full on every frame, so a
+     * streaming answer that stays whole makes the redraw cost (and the visible
+     * flicker) grow with the answer length. Instead, each delta first settles
+     * every COMPLETE safe block (see `settleCut`) into its own finished
+     * `continuation` message — those go into Ink's `<Static>` and are printed
+     * exactly once — and only the unfinished tail stays live.
+     */
     private appendToLastAssistant;
+    /**
+     * Finalize a trailing streaming assistant segment in place: drop the part
+     * already settled (it was emitted as continuation messages) and mark the
+     * remainder finished. Used by the durable `assistant/message` commit and as
+     * the safety net on turn end / cancel.
+     */
+    private closeStreamingAssistant;
     /** Append a reasoning block to a dedicated message. */
     private appendReasoning;
     /** Record the latest token-usage sample for the StatusBar. */

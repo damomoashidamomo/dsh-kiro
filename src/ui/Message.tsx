@@ -24,7 +24,14 @@ export function Message({ message }: MessageProps): JSX.Element {
     case 'user':
       return <UserMessage text={message.text} />
     case 'assistant':
-      return <AssistantMessage text={message.text} streaming={message.streaming} />
+      return (
+        <AssistantMessage
+          text={message.text}
+          streaming={message.streaming}
+          settledUpTo={message.settledUpTo}
+          continuation={message.continuation}
+        />
+      )
     case 'reasoning':
       return <ReasoningMessage text={message.text} streaming={message.streaming} createdAt={message.createdAt} />
     case 'tool-call':
@@ -52,13 +59,26 @@ function UserMessage({ text }: { text: string }): JSX.Element {
   )
 }
 
-/** Render an assistant message with markdown and streaming cursor. */
-function AssistantMessage({ text, streaming }: { text: string; streaming: boolean }): JSX.Element {
-  if (text.trim() === '') return <></>
-  const rendered = renderMarkdown(text)
+/**
+ * Render an assistant message with markdown and streaming cursor. A streamed
+ * answer settles block-by-block: this message shows only the UNSETTLED tail
+ * (`text.slice(settledUpTo)`), while earlier pieces were already emitted as
+ * finished continuation messages — that keeps Ink's live region small.
+ */
+function AssistantMessage({ text, streaming, settledUpTo, continuation }: {
+  text: string
+  streaming: boolean
+  settledUpTo?: number
+  continuation?: boolean
+}): JSX.Element {
+  const settled = settledUpTo ?? 0
+  const body = settled > 0 ? text.slice(settled) : text
+  if (body.trim() === '') return <></>
+  const rendered = renderMarkdown(body)
+  const isContinuation = settled > 0 || continuation === true
   return (
-    <Box flexDirection="row" marginTop={1}>
-      <Text>{palette.accent2(`${ICONS.assistant} `)}</Text>
+    <Box flexDirection="row" marginTop={isContinuation ? 0 : 1}>
+      {isContinuation ? null : <Text>{palette.accent2(`${ICONS.assistant} `)}</Text>}
       <Box flexDirection="column" flexGrow={1}>
         <Text>
           {rendered}

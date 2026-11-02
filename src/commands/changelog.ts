@@ -8,6 +8,11 @@ export const changelogCommand: CommandDefinition = {
       kind: 'success',
       text: [
         'dsh-kiro changelog:',
+        '  0.5.x  链接可点击与防闪烁：',
+        '        - 回答里的链接 Ctrl+点击 直达（OSC 8；修复 Ink 依赖拆坏超链接）',
+        '        - 流式输出按块沉入 Static：空闲 0 重绘，长回答不再整屏闪烁',
+        '        - 修复回答渲染两遍（流式副本 + durable 副本叠加）',
+        '        - /paste list|clean 管理落盘粘贴文件',
         '  0.4.x  习惯驱动改善（基于 96 个 kiro 会话分析）：',
         '        - 巨量粘贴自动落盘 .kiro/paste 并以 @ 引用（P2）',
         '        - 上下文 60%/80% 阈值提醒 + 用量条变色（P3）',

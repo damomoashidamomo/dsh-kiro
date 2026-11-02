@@ -61,6 +61,15 @@ export interface Message {
     } | undefined;
     /** Whether the assistant stream is still being appended. */
     streaming: boolean;
+    /**
+     * Streamed answers settle block-by-block to keep Ink's live region (which
+     * is erased and rewritten on every frame) small: `text.slice(0,
+     * settledUpTo)` has already been emitted as separate finished messages.
+     * Undefined/0 = nothing settled yet.
+     */
+    settledUpTo?: number;
+    /** Continuation piece of one logical answer: no ◆ marker, no top margin. */
+    continuation?: boolean;
 }
 /** Agent state derived from session events. */
 export interface AgentStatusSnapshot {
