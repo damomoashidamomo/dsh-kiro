@@ -1,3 +1,19 @@
+diff --git a/build/hooks/use-input.js b/build/hooks/use-input.js
+index 0a345aeec3abe17c28414b78b5cc5fd2343cce57..93430c207f620aba356325d5a89f47f86ead05db 100644
+--- a/build/hooks/use-input.js
++++ b/build/hooks/use-input.js	
+@@ -58,6 +58,11 @@ const useInput = (inputHandler, options = {}) => {
+                 tab: keypress.name === 'tab',
+                 backspace: keypress.name === 'backspace',
+                 delete: keypress.name === 'delete',
++                // dsh-kiro patch: parse-keypress maps \x1b[H/\x1b[F to
++                // home/end but the key object never surfaced them, so TUI
++                // prompts could not react to the Home/End keys at all.
++                home: keypress.name === 'home',
++                end: keypress.name === 'end',
+                 // `parseKeypress` parses \u001B\u001B[A (meta + up arrow) as meta = false
+                 // but with option = true, so we need to take this into account here
+                 // to avoid breaking changes in Ink.
 diff --git a/build/ink.js b/build/ink.js
 index a9c444ff161ed4b6ea13909591844909015fe97c..9a92875bd51b98ba99dba498a2159a01d29d2c02 100644
 --- a/build/ink.js

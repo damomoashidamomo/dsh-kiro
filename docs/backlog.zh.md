@@ -24,7 +24,6 @@
 | # | 项 | 备注 |
 |---|---|---|
 | T-1 | 拆分 session-controller（879 行上帝对象） | 投影/交互状态机/策略存储三块 |
-| T-2 | PTY E2E 入仓 | scripts/e2e/*.py + pnpm e2e，可 CI 化 |
 | T-3 | 依赖可移植性 | 两个 file: 依赖指向本机全局树，clone 后无法构建 |
 | T-4 | UI 文案目录化 | 62 处硬编码中文与英文混排 |
 | T-5 | CI 工作流 | typecheck + test + build |
@@ -44,5 +43,7 @@
       paste-*.txt，目录空则一并删除）
 - ✅ 模型抖动反馈（B-9）：回合失败按 超时/限流/5xx/鉴权/网络/模型 分类，
       给出 /retry 重发、等待退避、/model 切换等具体建议；新增 /retry 命令
+- ✅ PTY E2E 入仓（T-2）：scripts/e2e/（harness + 13 用例）+ pnpm e2e；
+      强制 truecolor（历史 bug 只在真彩暴露）；不调模型，全程 /tmp
 - ⏸ checkpoint / 子代理 UI——**数据驱动放弃**（96 会话 0/2 次使用）
 - ⏸ P1 bash 自动放开——安全降级，不做（B2 的项目级持久化已覆盖需求）

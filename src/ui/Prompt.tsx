@@ -163,13 +163,15 @@ export function Prompt({
       handle({ kind: 'cursor-right', word: true })
       return
     }
-    // ink's useInput does not surface home/end as key flags — match the raw
-    // escape sequences its parse-keypress still accepts as plain input.
-    if (input === '\x1b[H' || input === '\x1b[1~' || input === '\x1bOH' || input === '\x1b[7~') {
+    // home/end arrive as key flags via the dsh-kiro ink patch (upstream
+    // useInput never surfaced them even though parse-keypress parses the
+    // sequences); the type just lags behind.
+    const kx = key as typeof key & { home?: boolean; end?: boolean }
+    if (kx.home === true) {
       handle({ kind: 'cursor-home' })
       return
     }
-    if (input === '\x1b[F' || input === '\x1b[4~' || input === '\x1bOF' || input === '\x1b[8~') {
+    if (kx.end === true) {
       handle({ kind: 'cursor-end' })
       return
     }
