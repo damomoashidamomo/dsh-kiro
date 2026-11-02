@@ -11,7 +11,6 @@
 
 | # | 项 | 备注 |
 |---|---|---|
-| B-1 | MCP 面板 | /mcp 命令存在，overlay 占位；服务器状态/启停 UI |
 | B-2 | Checkpoint 面板 | /checkpoint 命令存在，overlay 占位；**依据使用数据你不用 checkpoint，优先级最低** |
 | B-3 | Agent picker | /agent 仍是占位；**会话切换已落地**（/chat resume 在 TUI 内直接切换并回放历史，/chat new 存盘换新） |
 | B-4 | Knowledge / Editor 面板 | overlay 占位 |
@@ -26,8 +25,6 @@
 | T-3 | 依赖可移植性 | 两个 file: 依赖指向本机全局树，clone 后无法构建 |
 | T-4 | UI 文案目录化 | 62 处硬编码中文与英文混排 |
 | T-5 | CI 工作流 | typecheck + test + build |
-| T-6 | /doctor 诊断命令 | 平台版本/缝健康度/装载状态 |
-| T-7 | 占位 overlay 清理 | 未实现的 overlay kind 从类型与 /help 移除或实现 |
 | T-8 | Prompt 输入逻辑归并 runtime/input.ts | 折叠/粘贴/前缀逻辑部分在组件内 |
 
 ## 归档（已完成或放弃）
@@ -47,5 +44,12 @@
 - ✅ 思考档位通用策略（B-6，升级为全模型方案）：档位阶梯解析
       模型声明 > Provider 默认 > 名称推断（标注来源）；/effort probe 实测
       网关是否转发 reasoning_effort；档位字段被拒归类为新失败类并给建议
+- ✅ /doctor 诊断（T-6）：版本/服务装载/ink 补丁与 tokenize 版本自检/
+      当前模型窗口与档位来源/终端能力/工作区 .kiro 状态，一键输出
+- ✅ 恢复会话上下文估算（N-1）：回放后状态栏显示「约 N%」，真实投影
+      到达后自动替换为准确值
+- ✅ 占位清理（T-7）：/code /tangent /prompts 描述明确标注「未实现」
+- ✅ MCP 面板（B-1）：/mcp 输出 manager 状态表（configured/starting/
+      ok/error + 工具清单）与首个服务器配置指引；启停待 phase 5 连接器
 - ⏸ checkpoint / 子代理 UI——**数据驱动放弃**（96 会话 0/2 次使用）
 - ⏸ P1 bash 自动放开——安全降级，不做（B2 的项目级持久化已覆盖需求）

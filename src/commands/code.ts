@@ -9,7 +9,7 @@ function parseSubcommand(input: string): { name: string; args: string[] } {
 
 export const codeCommand: CommandDefinition = {
   name: 'code',
-  description: 'Code intelligence (LSP): init, status, logs, overview, summary',
+  description: 'Code intelligence (LSP): init, status, logs, overview, summary（未实现：LSP 为 phase 5）',
   input: { hint: '<init|status|logs|overview|summary>' },
   handler: async ({ rawInput }) => {
     const { name: sub } = parseSubcommand(rawInput)

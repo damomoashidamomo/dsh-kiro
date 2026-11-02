@@ -9,7 +9,7 @@ function parseSubcommand(input: string): { name: string; args: string[] } {
 
 export const promptsCommand: CommandDefinition = {
   name: 'prompts',
-  description: 'Manage saved prompts — list, get, create, edit, remove',
+  description: 'Manage saved prompts — list, get, create, edit, remove（未实现：phase 4）',
   input: { hint: '<list|get|create|edit|remove>' },
   handler: async ({ rawInput }) => {
     const { name: sub } = parseSubcommand(rawInput)

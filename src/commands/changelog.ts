@@ -16,6 +16,8 @@ export const changelogCommand: CommandDefinition = {
         '        - /chat resume <id> / /chat new：TUI 内直接切换会话（回放最近 300 条事件）',
         '        - 一体式输入行 + 真实光标（IME 候选框锚定在输入行内）；/ 弹窗支持带参数过滤',
         '        - 回合失败分类提示（超时/限流/5xx/鉴权/网络/模型）+ /retry 一键重发',
+        '        - 思考档位通用策略：模型声明>Provider 默认>名称推断 + /effort probe 实测',
+        '        - /doctor 一键体检；恢复会话显示「约 N%」上下文估算；/mcp 状态面板',
         '  0.4.x  习惯驱动改善（基于 96 个 kiro 会话分析）：',
         '        - 巨量粘贴自动落盘 .kiro/paste 并以 @ 引用（P2）',
         '        - 上下文 60%/80% 阈值提醒 + 用量条变色（P3）',

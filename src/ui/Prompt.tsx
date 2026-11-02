@@ -30,6 +30,8 @@ export interface PromptProps {
   readonly busy: boolean
   /** Context usage percent (0-100) rendered left of the gutter, kiro-style. */
   readonly contextPct?: number
+  /** True while contextPct is a replay-based estimate (resumed session). */
+  readonly contextApprox?: boolean
   /** Placeholder when the draft is empty. */
   readonly placeholder?: string
   /** Submit handler — receives the trimmed text and pending images. */
@@ -59,6 +61,7 @@ export interface PromptProps {
 export function Prompt({
   busy,
   contextPct,
+  contextApprox,
   placeholder,
   onSubmit,
   onPrefix,
@@ -272,7 +275,7 @@ export function Prompt({
   // uncolored — putting the whole pre-wrapped line in one color=<green> Text
   // turned the user's input green.
   const gutter =
-    (contextPct !== undefined ? palette.dim(`${contextPct}% `) : '')
+    (contextPct !== undefined ? palette.dim(`${contextApprox === true ? '约 ' : ''}${contextPct}% `) : '')
     + (busy ? palette.warning(`${ICONS.agent} `) : palette.success('> '))
   const gutterWidth = displayWidth(gutter)
   const body = draft === '' && placeholderText !== ''

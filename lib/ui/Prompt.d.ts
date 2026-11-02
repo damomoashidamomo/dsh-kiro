@@ -14,6 +14,8 @@ export interface PromptProps {
     readonly busy: boolean;
     /** Context usage percent (0-100) rendered left of the gutter, kiro-style. */
     readonly contextPct?: number;
+    /** True while contextPct is a replay-based estimate (resumed session). */
+    readonly contextApprox?: boolean;
     /** Placeholder when the draft is empty. */
     readonly placeholder?: string;
     /** Submit handler — receives the trimmed text and pending images. */
@@ -43,4 +45,4 @@ export interface PromptProps {
     readonly autocompleteActive?: boolean;
 }
 /** Render the prompt input row. */
-export declare function Prompt({ busy, contextPct, placeholder, onSubmit, onPrefix, history, onAutocompleteMove, onAutocompleteCommit, pendingInsert, autocompleteActive, }: PromptProps): JSX.Element;
+export declare function Prompt({ busy, contextPct, contextApprox, placeholder, onSubmit, onPrefix, history, onAutocompleteMove, onAutocompleteCommit, pendingInsert, autocompleteActive, }: PromptProps): JSX.Element;

@@ -283,7 +283,25 @@ export class SessionController {
     this.closeStreamingAssistant()
     this.closeStreamingReasoning()
     this.sweepOrphanedToolCalls()
-    this.stateValue = { ...this.state, agent: { ...this.state.agent, status: 'idle' } }
+    // Context estimate: the token-meter projection only counts pressure
+    // confirmed in THIS process, so a resumed session reads 0 until the next
+    // turn. Estimate from the replayed transcript (CJK ~0.8 token/char,
+    // latin ~0.25) so the gutter shows an honest 约 N% instead of 0%.
+    let cjk = 0
+    let latin = 0
+    for (const m of this.state.messages) {
+      for (const text of [m.text, m.tool?.argsPreview ?? '', m.tool?.output ?? '']) {
+        for (const ch of text) {
+          if ((ch.codePointAt(0) ?? 0) > 0x2e80) cjk += 1
+          else latin += 1
+        }
+      }
+    }
+    const estimate = Math.round(cjk * 0.8 + latin * 0.25)
+    this.stateValue = {
+      ...this.state,
+      agent: { ...this.state.agent, status: 'idle', contextUsedTokens: estimate, contextApprox: true },
+    }
     this.publish()
   }
 
@@ -759,7 +777,7 @@ export class SessionController {
       const pressure = projections?.stateOf?.(this.agent.session, 'contextPressure')
       const used = pressure?.projectedTokens ?? pressure?.pressureTokens
       if (used !== undefined && used > 0 && used !== this.state.agent.contextUsedTokens) {
-        this.stateValue = { ...this.state, agent: { ...this.state.agent, contextUsedTokens: used } }
+        this.stateValue = { ...this.state, agent: { ...this.state.agent, contextUsedTokens: used, contextApprox: false } }
       }
     } catch {
       // projection unavailable: chunk-usage sampling remains the fallback
@@ -1216,7 +1234,7 @@ export class SessionController {
     const total = usage.totalTokens ?? input + output
     this.stateValue = {
       ...this.state,
-      agent: { ...this.state.agent, contextUsedTokens: total },
+      agent: { ...this.state.agent, contextUsedTokens: total, contextApprox: false },
     }
     const messages = [...this.state.messages]
     const last = messages.at(-1)

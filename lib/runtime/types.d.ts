@@ -79,6 +79,8 @@ export interface AgentStatusSnapshot {
     readonly activeProvider: string | undefined;
     readonly lastTurnReason: string | undefined;
     readonly contextUsedTokens: number;
+    /** True while contextUsedTokens is a replay-based ESTIMATE (resume), until a real projection lands. */
+    readonly contextApprox?: boolean;
     readonly contextLimitTokens: number | undefined;
     /** Whether plan mode is active for this session (pinned in the status bar). */
     readonly planMode: boolean;

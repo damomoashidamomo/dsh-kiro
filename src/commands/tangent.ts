@@ -8,7 +8,7 @@ import type { CommandDefinition } from '@deepseek-ai/dsh-commands'
 
 export const tangentCommand: CommandDefinition = {
   name: 'tangent',
-  description: 'Toggle tangent mode — isolated side conversations that do not pollute the main context',
+  description: 'Toggle tangent mode — isolated side conversations that do not pollute the main context（未实现：phase 5）',
   handler: async () => {
     return {
       kind: 'success',

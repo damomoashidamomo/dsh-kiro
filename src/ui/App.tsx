@@ -194,6 +194,8 @@ export function App({ controller, seedTask, activeAgentName, onSubmit, fileSearc
   // space is arguments (`/chat resume`) and must not empty the match list.
   const slashQuery = (prefixQuery.split(/\s+/u)[0] ?? '').trim()
 
+  const contextApprox = state.agent.contextApprox === true
+
   const contextPct = (() => {
     const limit = state.agent.contextLimitTokens
     if (limit === undefined || limit <= 0) return undefined
@@ -245,6 +247,7 @@ export function App({ controller, seedTask, activeAgentName, onSubmit, fileSearc
         <Prompt
           busy={state.agent.status === 'running'}
           contextPct={contextPct}
+          contextApprox={contextApprox}
           history={submitHistory}
           onSubmit={(text) => {
             if (text.trim() !== '') {
