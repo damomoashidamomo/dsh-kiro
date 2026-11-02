@@ -15,7 +15,23 @@ import { join } from 'node:path'
 import type { Context } from '@deepseek-ai/cordis'
 import type { SessionEvent } from '@deepseek-ai/dsh-session'
 import type { Agent } from '@deepseek-ai/dsh-agent'
+export type { ApprovalPattern } from './trust-store'
 import { classifyTurnFailure, type TurnFailureLike } from './turn-failure'
+import {
+  loadProjectApprovals,
+  loadProjectPatterns,
+  saveProjectApprovals,
+  commandTextOf,
+  type ApprovalPattern,
+} from './trust-store'
+import { settleCut, settlePieceText } from './streaming-settle'
+import {
+  findToolCallIndex,
+  previewValue,
+  truncate,
+  truncateLabel,
+  contentToText,
+} from './event-helpers'
 import type {
   AgentStatusSnapshot,
   ApprovalChoice,
@@ -65,151 +81,7 @@ function idFor(kind: string, seq: number): string {
   return `${kind}-${seq}`
 }
 
-/**
- * Find the offset just past the LAST safe line boundary for settling a
- * streaming answer into `<Static>` pieces. A boundary is unsafe when:
- * - it would cut inside a fenced code block (``` / ~~~ unbalanced),
- * - either adjacent line contains `|` (GFM table rows must stay together),
- * - the next line is a fenced opener or a setext underline (=== / ---),
- * - there would be no non-empty tail left to keep streaming.
- * Returns -1 when nothing can be settled yet.
- */
-function settleCut(text: string): number {
-  if (!text.includes('\n')) return -1
-  const lines = text.split('\n')
-  let offset = 0
-  let fenceOpen = false
-  let cut = -1
-  for (let i = 0; i < lines.length - 1; i++) {
-    const line = lines[i] ?? ''
-    const next = lines[i + 1] ?? ''
-    if (/^\s*(```|~~~)/u.test(line)) fenceOpen = !fenceOpen
-    offset += line.length + 1
-    if (fenceOpen) continue
-    if (offset >= text.length) continue
-    if (line.includes('|') || next.includes('|')) continue
-    if (/^\s{0,3}(={2,}|-{2,})\s*$/u.test(next)) continue
-    cut = offset
-  }
-  return cut
-}
 
-/** Truncate a status-bar reason label to a single readable line. */
-function truncateLabel(text: string, max = 48): string {
-  const single = text.replace(/\s+/g, ' ').trim()
-  return single.length <= max ? single : `${single.slice(0, max - 1)}…`
-}
-
-/** Path of the project-level approval store inside the workspace. */
-function projectApprovalsPath(): string {
-  return join(process.cwd(), '.kiro', 'approvals.json')
-}
-
-/** One finer-grained trust entry: commands of `tool` starting with `prefix`. */
-export interface ApprovalPattern {
-  readonly tool: string
-  readonly prefix: string
-}
-
-/** Read persisted approvals (v2 patterns + v1 tools; missing file -> none). */
-function loadProjectApprovals(): string[] {
-  return loadProjectApprovalStore().tools
-}
-
-function loadProjectPatterns(): ApprovalPattern[] {
-  return loadProjectApprovalStore().patterns
-}
-
-function loadProjectApprovalStore(): { tools: string[]; patterns: ApprovalPattern[] } {
-  try {
-    const raw = readFileSync(projectApprovalsPath(), 'utf8')
-    const parsed = JSON.parse(raw) as { tools?: unknown; patterns?: unknown }
-    const tools = Array.isArray(parsed.tools)
-      ? parsed.tools.filter((t): t is string => typeof t === 'string' && t !== '')
-      : []
-    const patterns = Array.isArray(parsed.patterns)
-      ? parsed.patterns.filter((p): p is ApprovalPattern => {
-          return typeof p === 'object' && p !== null
-            && typeof (p as { tool?: unknown }).tool === 'string'
-            && typeof (p as { prefix?: unknown }).prefix === 'string'
-        })
-      : []
-    return { tools, patterns }
-  } catch {
-    return { tools: [], patterns: [] }
-  }
-}
-
-/** Persist approvals (best effort): tools + command-prefix patterns. */
-function saveProjectApprovals(tools: readonly string[], patterns: readonly ApprovalPattern[] = []): void {
-  try {
-    mkdirSync(join(process.cwd(), '.kiro'), { recursive: true })
-    const payload = { tools: [...tools].sort(), patterns: [...patterns] }
-    writeFileSync(projectApprovalsPath(), `${JSON.stringify(payload, null, 2)}\n`, 'utf8')
-  } catch {
-    // Unwritable workspace: the allowance still holds for this session.
-  }
-}
-
-/**
- * The command-relevant string of a pending request: bash -> `command`,
- * everything else -> the full argument JSON (prefix trust on non-shell
- * tools compares the whole payload).
- */
-function commandTextOf(toolName: string, argsJson: string | undefined): string | undefined {
-  if (argsJson === undefined) return undefined
-  try {
-    const args = JSON.parse(argsJson) as { command?: unknown }
-    if (toolName === 'bash' && typeof args.command === 'string') return args.command.trim()
-  } catch {
-    // fall through to raw JSON
-  }
-  return argsJson.trim()
-}
-
-/**
- * Find the LAST tool-call message whose record pairs with `callId`
- * (findLastIndex is not in this tsconfig's lib target).
- */
-function findToolCallIndex(messages: readonly Message[], callId: string): number {
-  for (let i = messages.length - 1; i >= 0; i -= 1) {
-    const message = messages[i]
-    if (message?.kind === 'tool-call' && message.tool?.callId === callId) return i
-  }
-  return -1
-}
-
-/** Render-friendly preview of an arbitrary JSON value. */
-function previewValue(value: unknown): string {
-  if (value === undefined) return ''
-  if (typeof value === 'string') return value
-  try {
-    return JSON.stringify(value, null, 2)
-  } catch {
-    return String(value)
-  }
-}
-
-/** Truncate a preview to a UI-friendly size. */
-function truncate(text: string, max = 120): string {
-  if (text.length <= max) return text
-  return `${text.slice(0, max - 1)}…`
-}
-
-/** Coerce a content-block array to plain text. */
-function contentToText(content: readonly unknown[]): string {
-  return content
-    .map(block => {
-      if (typeof block === 'object' && block !== null && 'type' in block) {
-        const b = block as { type: string; text?: string; content?: unknown[] }
-        if (b.type === 'text' && typeof b.text === 'string') return b.text
-        // Tool-result blocks keep their payload nested one level down.
-        if (b.type === 'tool-result' && Array.isArray(b.content)) return contentToText(b.content)
-      }
-      return ''
-    })
-    .join('')
-}
 
 /**
  * The controller that projects session events onto UI state. One instance per
@@ -1151,7 +1023,7 @@ export class SessionController {
           id: idFor('assistant-settled', messages.length),
           kind: 'assistant',
           // Drop the boundary newline — a piece is its own markdown block.
-          text: segment.text.slice(settledUpTo, cut).replace(/\n$/u, ''),
+          text: settlePieceText(segment.text, settledUpTo, cut),
           tool: undefined,
           createdAt: segment.createdAt,
           seq: segment.seq,

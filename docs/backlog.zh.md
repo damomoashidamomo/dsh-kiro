@@ -12,20 +12,13 @@
 | # | 项 | 备注 |
 |---|---|---|
 | B-2 | Checkpoint 面板 | /checkpoint 命令存在，overlay 占位；**依据使用数据你不用 checkpoint，优先级最低** |
-| B-3 | Agent picker | /agent 仍是占位；**会话切换已落地**（/chat resume 在 TUI 内直接切换并回放历史，/chat new 存盘换新） |
-| B-4 | Knowledge / Editor 面板 | overlay 占位 |
 | B-5 | 图像生成插件修复 | settings 里 `Qwen-Image-2.0` 是无效模型名（正确为 `Qwen-Image-2512`），且插件发的 OpenAI 格式与网关要求的 `input.prompt` schema 不符——后者是 harness 侧代码，本仓库修不了 |
-| B-10 | logo 眨眼动画 | 纯装饰 |
 
 ## 工程债（评估报告遗留，见评估对话）
 
 | # | 项 | 备注 |
 |---|---|---|
-| T-1 | 拆分 session-controller（879 行上帝对象） | 投影/交互状态机/策略存储三块 |
 | T-3 | 依赖可移植性 | 两个 file: 依赖指向本机全局树，clone 后无法构建 |
-| T-4 | UI 文案目录化 | 62 处硬编码中文与英文混排 |
-| T-5 | CI 工作流 | typecheck + test + build |
-| T-8 | Prompt 输入逻辑归并 runtime/input.ts | 折叠/粘贴/前缀逻辑部分在组件内 |
 
 ## 归档（已完成或放弃）
 
@@ -51,5 +44,18 @@
 - ✅ 占位清理（T-7）：/code /tangent /prompts 描述明确标注「未实现」
 - ✅ MCP 面板（B-1）：/mcp 输出 manager 状态表（configured/starting/
       ok/error + 工具清单）与首个服务器配置指引；启停待 phase 5 连接器
+- ✅ 拆分 session-controller（T-1）：trust-store（策略存储）/ event-helpers
+      （投影纯函数）/ streaming-settle（沉降边界）三个模块拆出；交互状态机
+      因与 publish/unbind 耦合留在控制器（1264→~1130 行）
+- ✅ Knowledge 浏览（B-4a）：/knowledge view <ref> 渲染源文件前 80 行
+- ✅ CI（T-5）：.github/workflows/ci.yml——install（补丁/override 生效）
+      + test + build，PTY E2E 在有 dsh 的 runner 上自动跑
+- ✅ /agent swap（B-3 诚实子集）：应用预设声明的模型/档位；人格级隔离
+      待平台支持（swap 输出会提示）
+- ✅ logo 眨眼（B-10）：启动时 tagline 分隔符在 live 区闪 4 次后冻结 Static
+- ✅ Prompt 输入归并（T-8）：多字节折叠 foldInputChunk 抽入 runtime/input
+- ✅ UI 文案目录（T-4 最小集）：ui/strings.ts 收口常驻界面文案
+- ⏸ Editor 面板化（B-4b）——外部 $EDITOR 已可用，TUI 内置多行编辑器
+      体量大，待确认是否值得
 - ⏸ checkpoint / 子代理 UI——**数据驱动放弃**（96 会话 0/2 次使用）
 - ⏸ P1 bash 自动放开——安全降级，不做（B2 的项目级持久化已覆盖需求）

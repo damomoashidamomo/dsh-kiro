@@ -31,6 +31,7 @@ interface KnowledgeService {
   addDir(dir: string, options?: { labelPrefix?: string }): unknown[]
   update(ref: string): unknown
   remove(ref: string): boolean
+  resolveRef(ref: string): { id: string; label: string; path: string } | undefined
   clear(): void
   query(input: string, limit?: number): Array<{ entry: unknown; score: number; snippet: string }>
 }
@@ -102,6 +103,27 @@ export const knowledgeCommand: CommandDefinition = {
           lines.push(`  ${entry.label} — ${displayPath(entry.path)}`)
         }
         if (entries.length > 8) lines.push(`  … and ${entries.length - 8} more (use /knowledge list)`)
+        return { kind: 'success', text: lines.join('\n') }
+      }
+      case 'view': {
+        // Browse panel body view: resolve by index/label/id/path and render
+        // the source file's head — the one thing `list` (stats) and `search`
+        // (snippets) cannot show.
+        const ref = args.join(' ')
+        if (ref === '') return { kind: 'error', text: 'usage: /knowledge view <序号|标签|路径>' }
+        const entry = svc.resolveRef(ref)
+        if (entry === undefined) return { kind: 'error', text: `未找到条目：${ref}` }
+        if (!existsSync(entry.path)) {
+          return { kind: 'error', text: `源文件已不存在：${entry.path}（可 /knowledge update 或 remove）` }
+        }
+        const { readFileSync } = await import('node:fs')
+        const body = readFileSync(entry.path, 'utf8').split('\n').slice(0, 80)
+        const stat = statSync(entry.path)
+        const lines = [
+          `◆ ${entry.label} — ${displayPath(entry.path)}（${formatSize(stat.size)}，预览前 80 行）`,
+          '─'.repeat(60),
+          ...body,
+        ]
         return { kind: 'success', text: lines.join('\n') }
       }
       case 'add': {

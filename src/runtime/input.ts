@@ -97,6 +97,44 @@ export function spillPaste(text: string, cwd: string = process.cwd()): PasteSpil
 }
 
 /**
+ * Fold one raw multi-byte input chunk (T-8, moved out of the Prompt
+ * component so it is unit-testable): PTY batching delivers "/model\r" or
+ * "\b\bh" as a single useInput call. Per character: \r/\n at the END is a
+ * typed Enter (submit), an EMBEDDED newline is a paste (kept in the draft
+ * so the spill threshold judges the whole payload), \b/\x7f backspace,
+ * everything else inserts.
+ */
+export type FoldAction =
+  | { kind: 'insert'; text: string }
+  | { kind: 'backspace' }
+  | { kind: 'newline' }
+  | { kind: 'submit' }
+
+export function foldInputChunk(input: string, draft: string): readonly FoldAction[] {
+  if (input.length <= 1 || !/[\b\x7f\r\n]/.test(input)) {
+    return [{ kind: 'insert', text: input }]
+  }
+  const actions: FoldAction[] = []
+  const chars = [...input]
+  for (let i = 0; i < chars.length; i += 1) {
+    const ch = chars[i]!
+    if (ch !== '\r' && ch !== '\n') {
+      if (ch === '\b' || ch === '\x7f') actions.push({ kind: 'backspace' })
+      else actions.push({ kind: 'insert', text: ch })
+      continue
+    }
+    const rest = chars.slice(i + 1)
+    const trailingOnly = rest.every((c) => c === '\r' || c === '\n')
+    if (trailingOnly) {
+      actions.push({ kind: 'submit' })
+      break
+    }
+    actions.push({ kind: 'newline' })
+  }
+  return actions
+}
+
+/**
  * Apply a picked `@`-mention to the draft: replace the trailing query token
  * (e.g. `@read`) with the formatted candidate (e.g. `@"README.md"` or
  * `@src/`) plus one trailing space, so the popup closes and the user keeps

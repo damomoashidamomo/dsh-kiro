@@ -171,6 +171,24 @@ export function App({ controller, seedTask, activeAgentName, onSubmit, fileSearc
   // Ink's <Static> container is absolutely positioned and hugs its content,
   // so flex centering inside it never spans the terminal width. Center the
   // splash by padding each line with spaces for the real column count.
+  // Boot blink (B-10, decorative): the tagline dot pulses a few times in
+  // the LIVE region, then the splash freezes into <Static> as the header —
+  // animating a Static item would violate its print-once contract.
+  const [splashBlink, setSplashBlink] = useState(false)
+  const [splashSettled, setSplashSettled] = useState(false)
+  useEffect(() => {
+    let ticks = 0
+    const timer = setInterval(() => {
+      ticks += 1
+      setSplashBlink((blink) => !blink)
+      if (ticks >= 4) {
+        clearInterval(timer)
+        setSplashSettled(true)
+      }
+    }, 350)
+    return () => clearInterval(timer)
+  }, [])
+
   const splash = useMemo(() => {
     const raw = splashMark(stdout?.columns)
     const columns = stdout?.columns ?? 100
@@ -180,6 +198,12 @@ export function App({ controller, seedTask, activeAgentName, onSubmit, fileSearc
     if (pad === 0) return raw
     return lines.map((line) => ' '.repeat(pad) + line).join('\n')
   }, [stdout?.columns])
+
+  // While blinking, the live splash swaps the tagline separator each frame.
+  const liveSplash = useMemo(() => {
+    if (splashSettled || !splashBlink) return undefined
+    return splash.replace('Kiro CLI · DeepSeek Harness', 'Kiro CLI ◉ DeepSeek Harness')
+  }, [splash, splashBlink, splashSettled])
   const activeToolName = useMemo(() => {
     for (let i = state.messages.length - 1; i >= 0; i -= 1) {
       const msg = state.messages[i]
@@ -207,9 +231,14 @@ export function App({ controller, seedTask, activeAgentName, onSubmit, fileSearc
 
   return (
     <Box flexDirection="column" height="100%">
+      {splashSettled ? null : (
+        <Box flexDirection="column">
+          <Text>{liveSplash ?? splash}</Text>
+        </Box>
+      )}
       <Transcript
         messages={state.messages}
-        header={{ kind: 'splash', key: 'splash', content: splash }}
+        header={splashSettled ? { kind: 'splash', key: 'splash', content: splash } : undefined}
       />
       <ProgressOverlay
         toolName={activeToolName}

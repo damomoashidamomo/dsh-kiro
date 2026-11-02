@@ -56,7 +56,7 @@ export const agentCommand: CommandDefinition = {
   name: 'agent',
   description: 'Manage custom agents: list, swap, create, edit, delete, show',
   input: { hint: '<list|swap|create|edit|delete|show|generate> [args]' },
-  handler: async ({ rawInput }) => {
+  handler: async ({ agent, rawInput }) => {
     const { name: sub, args } = parseSubcommand(rawInput)
     switch (sub) {
       case 'list':
@@ -85,7 +85,47 @@ export const agentCommand: CommandDefinition = {
           return { kind: 'success', text: `error reading ${match.path}: ${error instanceof Error ? error.message : String(error)}` }
         }
       }
-      case 'swap':
+      case 'swap': {
+        // Honest subset: apply the preset's declared provider/model/effort
+        // to the CURRENT session via the live model-switch machinery. A
+        // persona-level switch (separate system prompt / toolset per agent)
+        // has no first-class platform switch yet — the preset's `prompt`
+        // field is reported instead of silently ignored.
+        const target = args[0]
+        if (target === undefined) return { kind: 'success', text: 'usage: /agent swap <name>' }
+        const match = listAgents().find((a) => a.name === target)
+        if (match === undefined) return { kind: 'error', text: `no agent named "${target}"` }
+        let preset: { model?: string; provider?: string; effort?: string; prompt?: string } = {}
+        try {
+          preset = JSON.parse(readFileSync(match.path, 'utf8')) as typeof preset
+        } catch {
+          return { kind: 'error', text: `${match.path} 不是有效 JSON` }
+        }
+        const ctx = (agent as { ctx?: unknown }).ctx
+        const get = (ctx as { get?: (name: string) => unknown } | undefined)?.get
+        const switcher = get?.call(ctx, 'kiroModelSwitch') as { apply?: (next: unknown) => void } | undefined
+        const effort = get?.call(ctx, 'kiroEffortControl') as { setManual?: (level: string) => void } | undefined
+        const applied: string[] = []
+        const full = preset.model !== undefined
+          ? `${preset.provider ?? (preset.model.includes('/') ? preset.model.split('/')[0] : undefined)}/${preset.model.includes('/') ? preset.model.split('/')[1] : preset.model}`
+          : undefined
+        if (full !== undefined && switcher?.apply !== undefined) {
+          const [provider, model] = full.split('/')
+          switcher.apply({ provider, model })
+          applied.push(`模型 → ${full}`)
+        }
+        if (preset.effort !== undefined && effort?.setManual !== undefined) {
+          effort.setManual(preset.effort)
+          applied.push(`档位 → ${preset.effort}`)
+        }
+        const lines = [`已切换到 agent「${target}」（${match.source} 级）：`]
+        lines.push(applied.length > 0 ? `  ${applied.join(' · ')}` : '  未声明模型/档位，保持现状。')
+        if (preset.prompt !== undefined) {
+          lines.push(`  该预设带人格提示（${preset.prompt.length} 字）——平台暂无按 agent 隔离系统提示的开关，`)
+          lines.push('  如需生效可放入 .kiro/steering/<name>.md 后 /steering reload。')
+        }
+        return { kind: 'success', text: lines.join('\n') }
+      }
       case 'create':
       case 'edit':
       case 'delete':

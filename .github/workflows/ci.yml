@@ -1,0 +1,42 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install (patches + overrides apply here)
+        run: pnpm install --frozen-lockfile=false
+
+      - name: Typecheck + unit tests
+        run: pnpm test
+
+      - name: Build (tsc + fix-imports)
+        run: pnpm build
+
+      # PTY E2E boots the real TUI — it needs the profile deployed, which
+      # needs a DSH_HOME with the base bundles; run it only when the runner
+      # has the harness available. Keep the fast lane green everywhere.
+      - name: PTY E2E (skipped without DSH harness)
+        run: |
+          if command -v dsh >/dev/null 2>&1; then
+            pnpm e2e
+          else
+            echo "dsh not installed on this runner — skipping PTY E2E"
+          fi

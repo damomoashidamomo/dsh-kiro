@@ -12,14 +12,11 @@
 import type { Context } from '@deepseek-ai/cordis';
 import type { SessionEvent } from '@deepseek-ai/dsh-session';
 import type { Agent } from '@deepseek-ai/dsh-agent';
+export type { ApprovalPattern } from './trust-store';
+import { type ApprovalPattern } from './trust-store';
 import type { AgentStatusSnapshot, ApprovalChoice, ApprovalRequestUi, OverlayKind, PickerItem, QuestionChoice, QuestionRequestUi, SessionRenderState } from './types';
 /** Subscriber callback when the render state changes. */
 export type StateListener = (state: SessionRenderState) => void;
-/** One finer-grained trust entry: commands of `tool` starting with `prefix`. */
-export interface ApprovalPattern {
-    readonly tool: string;
-    readonly prefix: string;
-}
 /**
  * The controller that projects session events onto UI state. One instance per
  * runtime plugin; the controller does not own the agent — it follows whatever

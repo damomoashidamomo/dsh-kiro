@@ -12,6 +12,7 @@ import { Box, Text } from 'ink'
 import { useEffect, useState } from 'react'
 import { renderMarkdown } from '../markdown/render'
 import { palette, ICONS } from '../theme/palette'
+import { STRINGS } from './strings'
 import type { Message as MessageRecord, TodoItem } from '../runtime/types'
 
 export interface MessageProps {
@@ -104,8 +105,8 @@ function ReasoningMessage({ text, streaming, createdAt }: { text: string; stream
     return () => { clearInterval(timer) }
   }, [streaming, createdAt])
   const label = streaming
-    ? `思考中 · 已推理 ${formatCharCount(text.length)} · ${elapsed}s…`
-    : `已思考 · ${formatCharCount(text.length)}`
+    ? STRINGS.transcript.thinking(formatCharCount(text.length), elapsed)
+    : STRINGS.transcript.thought(formatCharCount(text.length))
   return (
     <Box flexDirection="row" marginTop={1}>
       <Text>{palette.accentSoft(`${ICONS.reasoning} `)}</Text>
@@ -141,7 +142,7 @@ function TodoMessage({ todos }: { todos: readonly TodoItem[] }): JSX.Element {
   }
   return (
     <Box flexDirection="column" marginTop={1}>
-      <Text>{palette.accentSoft(`✻ 任务清单 (${done}/${todos.length})`)}</Text>
+      <Text>{palette.accentSoft(STRINGS.transcript.taskList(done, todos.length))}</Text>
       {rows}
     </Box>
   )
