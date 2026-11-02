@@ -255,6 +255,18 @@ async function mount(ctx: Context, startup: KiroStartup): Promise<void> {
   // selection) without needing a back-reference to this closure.
   ctx.provide('kiroController', controller)
 
+  // Bridge to sessionQuery.readSession for slash commands: calling the
+  // engine through an agent-scoped ctx.get goes through a cordis shadow
+  // proxy that swaps `this`, so the engine's private fields vanish
+  // (TypeError reading '_corpus'). The service captured HERE — the runtime
+  // mount scope — calls with the right receiver.
+  const sessionQueryService = (ctx as unknown as { get?: <T>(key: string) => T | undefined }).get?.('sessionQuery') as
+    | { readSession?: (id: SessionId) => Promise<{ events: unknown[] }> }
+    | undefined
+  ctx.provide('kiroSessionReader', {
+    readSession: (id: string) => sessionQueryService?.readSession?.(brandString<SessionId>(id)),
+  })
+
   // In-TUI session switching (/chat resume <id>, /chat new): swap the live
   // agent without unmounting Ink. flush + dispose the old agent, resume (or
   // create) through the registry with the SAME setup, rebind, replay history.

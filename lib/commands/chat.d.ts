@@ -14,13 +14,14 @@
  * equivalents handled by `startup.ts` + the runtime mount.
  */
 import type { CommandDefinition } from '@deepseek-ai/dsh-commands';
-/** Render the listing table. */
+/** Render the listing table: one line per session, id · date · summary. */
 declare function listText(rows: ReadonlyArray<{
     id: string;
     cwd: string;
     createdAt: number;
 }>, opts: {
     all: boolean;
+    titles?: ReadonlyMap<string, string>;
 }): string;
 export declare const chatCommand: CommandDefinition;
 export { listText };

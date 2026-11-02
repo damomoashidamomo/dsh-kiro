@@ -277,21 +277,21 @@ export function Prompt({
           {(contextPct !== undefined ? palette.dim(`${contextPct}% `) : '') + (busy ? palette.warning(`${ICONS.agent} `) : palette.accent('> '))}
         </Text>
         <Box flexGrow={1} flexDirection="row">
-          {prefix !== undefined ? (
-            <Text>
-              <Text color={palette.enabled ? 'green' : undefined}>{prefix}</Text>
-              <Text>{draft.slice(1)}</Text>
-            </Text>
-          ) : draft === '' && placeholderText !== '' ? (
+          {draft === '' && placeholderText !== '' ? (
             // Empty draft: the cursor belongs right after `> ` — INSIDE the
             // placeholder Text, prefixing it (an escape-only leading sibling
             // Text gets dropped by Ink's text squashing). The IME anchor then
             // sits where typing starts, not at the end of the hint text.
             <Text dimColor>{SHOW_CURSOR + placeholderText}</Text>
           ) : (
-            <Text>{draft}</Text>
+            // The show-cursor escape sits AT the logical cursor position, so
+            // ←/→/Home/End move the REAL terminal cursor (and the IME anchor)
+            // through the text — it is the caret. ONE string child: inserting
+            // a <Text> child before others makes Ink drop the sibling.
+            <Text>
+              {draft.slice(0, buffer.cursor) + SHOW_CURSOR + draft.slice(buffer.cursor)}
+            </Text>
           )}
-          {draft === '' || prefix !== undefined ? null : <Text>{SHOW_CURSOR}</Text>}
         </Box>
       </Box>
     </Box>

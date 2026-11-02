@@ -35,6 +35,71 @@ function switchServiceOf(agentCtx: unknown): SessionSwitchService | undefined {
     : undefined
 }
 
+/** Truncate a title for one-line display (width-aware for CJK). */
+function clipTitle(title: string, maxUnits = 48): string {
+  const oneLine = title.replace(/\s+/gu, ' ').trim()
+  if (oneLine === '') return ''
+  let units = 0
+  let out = ''
+  for (const ch of oneLine) {
+    const w = ch.charCodeAt(0) > 0xff ? 2 : 1
+    if (units + w > maxUnits - 1) return `${out}…`
+    units += w
+    out += ch
+  }
+  return out
+}
+
+/**
+ * Best-effort one-line description of a session: the platform's
+ * `session/title` event (session-title-llm summarizes with the model and
+ * logs it durably), falling back to the first user message excerpt. Reads
+ * run through sessionQuery.readSession; failures just yield no title.
+ */
+async function loadTitles(agentCtx: unknown, ids: readonly string[], limit = 10): Promise<Map<string, string>> {
+  // Through the runtime-provided bridge (see kiro-runtime index.tsx): a
+  // direct agent-scope ctx.get('sessionQuery') hits a cordis shadow proxy
+  // that breaks the engine's receiver.
+  const ctx = (agentCtx as { ctx?: unknown }).ctx
+  const get = (ctx as { get?: (name: string) => unknown } | undefined)?.get
+  const readSession = typeof get === 'function'
+    ? (get.call(ctx, 'kiroSessionReader') as
+      | { readSession?: (id: string) => Promise<{ events: ReadonlyArray<{ type: string; data: unknown }> }> }
+      | undefined)?.readSession
+    : undefined
+  const titles = new Map<string, string>()
+  if (readSession === undefined) return titles
+  await Promise.all(ids.slice(0, limit).map(async (id) => {
+    try {
+      const snapshot = await readSession(id)
+      let title = ''
+      let firstUser = ''
+      for (const event of snapshot.events ?? []) {
+        if (event.type === 'session/title') {
+          const data = event.data as { title?: unknown }
+          if (typeof data?.title === 'string' && data.title.trim() !== '') title = data.title
+        }
+        if (firstUser === '' && event.type === 'user/message') {
+          const data = event.data as { content?: unknown[]; source?: { kind?: string } }
+          if (data?.source?.kind === 'user' && Array.isArray(data.content)) {
+            const text = data.content
+              .filter((c): c is { type: 'text'; text: string } => typeof c === 'object' && c !== null && (c as { type?: string }).type === 'text')
+              .map((c) => c.text)
+              .join(' ')
+              .trim()
+            if (text !== '') firstUser = text
+          }
+        }
+      }
+      const clipped = clipTitle(title !== '' ? title : firstUser)
+      if (clipped !== '') titles.set(id, clipped)
+    } catch {
+      // unreadable log — no title for this row
+    }
+  }))
+  return titles
+}
+
 function parseSubcommand(input: string): { name: string; args: string[] } {
   const trimmed = input.trim()
   if (trimmed === '') return { name: 'list', args: [] }
@@ -42,10 +107,10 @@ function parseSubcommand(input: string): { name: string; args: string[] } {
   return { name: tokens[0] ?? 'list', args: tokens.slice(1) }
 }
 
-/** Render the listing table. */
+/** Render the listing table: one line per session, id · date · summary. */
 function listText(rows: ReadonlyArray<{
   id: string; cwd: string; createdAt: number
-}>, opts: { all: boolean }): string {
+}>, opts: { all: boolean; titles?: ReadonlyMap<string, string> }): string {
   if (rows.length === 0) {
     return opts.all
       ? '(no sessions under $DSH_HOME/sessions)'
@@ -55,24 +120,29 @@ function listText(rows: ReadonlyArray<{
   const lines: string[] = [header]
   for (const row of rows.slice(0, 50)) {
     const date = formatTimestamp(row.createdAt)
-    const cwd = row.cwd === '' ? '(no cwd)' : row.cwd
-    lines.push(`  ${row.id.padEnd(40)}  ${date}  ${cwd}`)
+    const title = opts.titles?.get(row.id) ?? ''
+    const tail = title !== ''
+      ? (opts.all ? `${title}  ${row.cwd}` : title)
+      : (opts.all ? row.cwd : '')
+    lines.push(`  ${row.id.padEnd(40)}  ${date}  ${tail}`.trimEnd())
   }
   if (rows.length > 50) lines.push(`  … and ${rows.length - 50} more`)
   return lines.join('\n')
 }
 
 /** Short resume hint when no id was given: the recent sessions for this cwd. */
-function resumeHint(): string {
+async function resumeHint(agent: unknown): Promise<string> {
   const rows = filterSessions(listSessions()).slice(0, 5)
   const lines = ['usage: /chat resume <session-id>  —  在当前 TUI 内直接切换，无需重启']
   if (rows.length === 0) {
     lines.push('（当前目录还没有历史会话；/chat list --all 查看全部）')
     return lines.join('\n')
   }
+  const titles = await loadTitles(agent, rows.map((r) => r.id))
   lines.push('当前目录最近的会话：')
   for (const row of rows) {
-    lines.push(`  ${row.id}  ${formatTimestamp(row.createdAt)}`)
+    const title = titles.get(row.id)
+    lines.push(`  ${row.id}  ${formatTimestamp(row.createdAt)}  ${title ?? ''}`.trimEnd())
   }
   return lines.join('\n')
 }
@@ -99,11 +169,12 @@ export const chatCommand: CommandDefinition = {
         const all = args.includes('--all')
         const summaries = listSessions()
         const filtered = all ? summaries : filterSessions(summaries)
-        return { kind: 'success', text: listText(filtered, { all }) }
+        const titles = await loadTitles(agent, filtered.slice(0, 10).map((r) => r.id))
+        return { kind: 'success', text: listText(filtered, { all, titles }) }
       }
       case 'resume': {
         const id = args[0]
-        if (id === undefined) return { kind: 'success', text: resumeHint() }
+        if (id === undefined) return { kind: 'success', text: await resumeHint(agent) }
         const service = switchServiceOf(agent)
         if (service === undefined) {
           return { kind: 'error', text: '/chat resume: 会话切换服务不可用' }
