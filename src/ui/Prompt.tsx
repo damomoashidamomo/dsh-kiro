@@ -269,9 +269,12 @@ export function Prompt({
         </Box>
       ) : null}
       <Box flexDirection="row">
+        {/* ONE string child, never a null → <Text> insert: Ink's reconciler
+            drops the following sibling when a Text child appears before it
+            (the contextPct showing up after a session switch erased `> `).
+            The dim contextPct is applied with ANSI, not a nested <Text>. */}
         <Text color={palette.enabled ? 'green' : undefined}>
-          {contextPct !== undefined ? <Text dimColor>{`${contextPct}% `}</Text> : null}
-          {busy ? palette.warning(`${ICONS.agent} `) : palette.accent('> ')}
+          {(contextPct !== undefined ? palette.dim(`${contextPct}% `) : '') + (busy ? palette.warning(`${ICONS.agent} `) : palette.accent('> '))}
         </Text>
         <Box flexGrow={1} flexDirection="row">
           {prefix !== undefined ? (
