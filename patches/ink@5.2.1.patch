@@ -1,12 +1,38 @@
+diff --git a/build/ink.js b/build/ink.js
+index a9c444ff161ed4b6ea13909591844909015fe97c..9a92875bd51b98ba99dba498a2159a01d29d2c02 100644
+--- a/build/ink.js
++++ b/build/ink.js	
+@@ -129,7 +129,7 @@ export default class Ink {
+             this.options.stdout.write(staticOutput);
+             this.log(output);
+         }
+-        if (!hasStaticOutput && output !== this.lastOutput) {
++        if (!hasStaticOutput && (output !== this.lastOutput || this.log.caretMoved())) {
+             this.throttledLog(output);
+         }
+         this.lastOutput = output;
 diff --git a/build/log-update.js b/build/log-update.js
-index 547421e47903fbdce8ecab87e4fbdce901663f03..af468981094d6f6149bf23f72f681151223ac279 100644
+index 547421e47903fbdce8ecab87e4fbdce901663f03..bb2e8804dbb5315de9e7c24059ba0e7d56846aaf 100644
 --- a/build/log-update.js
 +++ b/build/log-update.js	
-@@ -9,12 +9,20 @@ const create = (stream, { showCursor = false } = {}) => {
+@@ -2,6 +2,11 @@ import ansiEscapes from 'ansi-escapes';
+ import cliCursor from 'cli-cursor';
+ const create = (stream, { showCursor = false } = {}) => {
+     let previousLineCount = 0;
++    let activeCaret;
++    const readCaret = () => (typeof globalThis.__kiroCaret === 'object' && globalThis.__kiroCaret !== null)
++        ? globalThis.__kiroCaret
++        : undefined;
++    const sameCaret = (a, b) => a === b || (a && b && a.up === b.up && a.col === b.col);
+     let previousOutput = '';
+     let hasHiddenCursor = false;
+     const render = (str) => {
+@@ -9,16 +14,62 @@ const create = (stream, { showCursor = false } = {}) => {
              cliCursor.hide();
              hasHiddenCursor = true;
          }
 -        const output = str + '\n';
+-        if (output === previousOutput) {
 +        // dsh-kiro patch: no trailing newline. Ink used to append '\n'
 +        // after every frame, which pushed the real terminal cursor onto an
 +        // empty line BELOW the frame — the cursor could never sit inside
@@ -16,12 +42,57 @@ index 547421e47903fbdce8ecab87e4fbdce901663f03..af468981094d6f6149bf23f72f681151
 +        // frame still clears the same lines, but the cursor may sit mid-
 +        // line, so reset to column 0 with '\r' before writing.
 +        const output = str;
-         if (output === previousOutput) {
++        // dsh-kiro caret: the app publishes the caret's position relative to
++        // the frame bottom (globalThis.__kiroCaret). After each frame write
++        // the real terminal cursor ends up at the END of the last line — an
++        // in-band escape cannot position it — so relative moves (CUU · CR ·
++        // CUF · show) follow the write, and unjump() walks back down before
++        // the next erase (eraseLines needs the cursor on the region's bottom
++        // line or it clears the wrong rows).
++        const caret = readCaret();
++        if (output === previousOutput && sameCaret(caret, activeCaret)) {
              return;
          }
-         previousOutput = output;
+-        previousOutput = output;
 -        stream.write(ansiEscapes.eraseLines(previousLineCount) + output);
-+        stream.write(ansiEscapes.eraseLines(previousLineCount) + '\r' + output);
-         previousLineCount = output.split('\n').length;
+-        previousLineCount = output.split('\n').length;
++        unjump();
++        if (output !== previousOutput) {
++            previousOutput = output;
++            stream.write(ansiEscapes.eraseLines(previousLineCount) + '\r' + output);
++            previousLineCount = output.split('\n').length;
++        }
++        activeCaret = caret;
++        if (activeCaret !== undefined) {
++            stream.write((activeCaret.up > 0 ? `\x1b[${activeCaret.up}A` : '')
++                + '\r'
++                + (activeCaret.col > 0 ? `\x1b[${activeCaret.col}C` : '')
++                + '\x1b[?25h');
++        }
++        else {
++            stream.write('\x1b[?25h');
++        }
++    };
++    // Walk the cursor back to the region's bottom line after a caret jump.
++    // Called before erasing AND (via ink's static writes) before any raw
++    // stdout.write that would otherwise land mid-frame.
++    const unjump = () => {
++        if (activeCaret !== undefined && activeCaret.up > 0) {
++            stream.write(`\x1b[${activeCaret.up}B`);
++        }
++        activeCaret = undefined;
      };
++    render.unjump = unjump;
++    // Whether the published caret differs from the one last jumped to — ink
++    // skips identical-output re-renders, but a caret-only move (arrow keys)
++    // still needs the jump re-emitted.
++    render.caretMoved = () => !sameCaret(activeCaret, readCaret());
      render.clear = () => {
+-        stream.write(ansiEscapes.eraseLines(previousLineCount));
++        unjump();
++        // '\r': after a caret jump the cursor column is the caret column —
++        // static output written right after clear() must start at column 0.
++        stream.write(ansiEscapes.eraseLines(previousLineCount) + '\r');
+         previousOutput = '';
+         previousLineCount = 0;
+     };

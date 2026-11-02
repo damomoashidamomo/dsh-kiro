@@ -40,7 +40,8 @@ function autolinkText(text: string): string {
 }
 
 /** Strip ANSI escape codes for length measurement. */
-function stripAnsi(text: string): string {
+/** Strip SGR colors and OSC 8 envelopes. */
+export function stripAnsi(text: string): string {
   // eslint-disable-next-line no-control-regex
   return text.replace(/\x1b\[[0-9;]*m|\x1b\]8;;[^\x1b]*\x1b\\/g, '')
 }
@@ -79,7 +80,8 @@ function isWideCodePoint(cp: number): boolean {
 }
 
 /** Display width of visible text: CJK/fullwidth count as 2 columns. */
-function displayWidth(text: string): number {
+/** Visible width of text with ANSI (SGR + OSC 8) stripped. */
+export function displayWidth(text: string): number {
   let width = 0
   for (const ch of text) {
     width += isWideCodePoint(ch.codePointAt(0) ?? 0) ? 2 : 1
@@ -114,7 +116,8 @@ function chunkByWidth(text: string, width: number): string[] {
  * pendingAnsi-prefix design OVERWROTE consecutive escapes, which silently
  * dropped link openings.
  */
-function wrapAnsi(text: string, width = MAX_WIDTH): string[] {
+/** Wrap a styled line at `width` columns; escapes kept verbatim, zero width. */
+export function wrapAnsi(text: string, width = MAX_WIDTH): string[] {
   const lines: string[] = []
   let current = ''
   let lineWidth = 0

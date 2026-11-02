@@ -9,9 +9,10 @@
  * @module @damomoashidamomo/dsh-kiro/ui/Prompt
  */
 
-import { Box, Text, useInput } from 'ink'
+import { Box, Text, useInput, useStdout } from 'ink'
 import { useEffect, useRef, useState, useCallback } from 'react'
 import { palette, ICONS } from '../theme/palette'
+import { displayWidth, stripAnsi, wrapAnsi } from '../markdown/render'
 import {
   applyMentionInsert,
   applyOutcome,
@@ -86,21 +87,11 @@ export function Prompt({
   const handle = useCallback((outcome: InputOutcome) => {
     setBuffer(prev => {
       const next = applyOutcome(prev, outcome)
-      // The TUI prompt is a single-line shell: every keystroke that mutates
-      // the text also snaps the cursor to the end. Without this, the forward-
-      // delete key (the macOS "Delete" / "Backspace" key, which sends \x7f
-      // and reports as key.delete in Ink) would be a no-op whenever the
-      // cursor is already at the end of the draft, and the same keypress on
-      // Linux would delete the wrong character. Snapping makes backspace
-      // and forward-delete behave identically from the user's perspective.
-      if (
-        outcome.kind === 'insert'
-        || outcome.kind === 'backspace'
-        || outcome.kind === 'delete'
-        || outcome.kind === 'newline'
-      ) {
-        return { ...next, cursor: next.text.length }
-      }
+      // No cursor snapping: the real terminal caret is POSITIONED at
+      // buffer.cursor every frame (see the render below), so edits keep the
+      // caret where applyOutcome puts it — insert grows it by the inserted
+      // length, backspace steps it left, word jumps land on boundaries. (The
+      // old snap-to-end was a workaround from before the caret could move.)
       if (outcome.kind === 'submit') {
         const text = prev.text.trim()
         const images = prev.images
@@ -170,6 +161,16 @@ export function Prompt({
     }
     if (key.rightArrow && key.meta) {
       handle({ kind: 'cursor-right', word: true })
+      return
+    }
+    // ink's useInput does not surface home/end as key flags — match the raw
+    // escape sequences its parse-keypress still accepts as plain input.
+    if (input === '\x1b[H' || input === '\x1b[1~' || input === '\x1bOH' || input === '\x1b[7~') {
+      handle({ kind: 'cursor-home' })
+      return
+    }
+    if (input === '\x1b[F' || input === '\x1b[4~' || input === '\x1bOF' || input === '\x1b[8~') {
+      handle({ kind: 'cursor-end' })
       return
     }
     if (key.leftArrow) {
@@ -255,11 +256,44 @@ export function Prompt({
   const placeholderText = draft === '' ? (busy ? busyPlaceholder : idlePlaceholder) : ''
 
   // Kiro-style single input line: `55% > draft` with the REAL terminal
-  // cursor shown at its end. Ink hides the cursor on every frame; this
-  // trailing show-cursor escape re-shows it and lands it right after the
-  // draft, so the terminal (and the IME preedit/candidate window) anchors
-  // inside the input line instead of at the bottom of the live region.
-  const SHOW_CURSOR = '\u001b[?25h'
+  // cursor parked AT the logical caret. The caret cannot be positioned with
+  // an in-band escape (the terminal cursor always ends up wherever the frame
+  // write STOPPED, i.e. the end of the last line), so this component:
+  //   1. pre-wraps the whole input line itself (Ink never re-wraps it), so
+  //      the caret's visual line/column are exactly computable, and
+  //   2. publishes them on globalThis.__kiroCaret; the patched ink
+  //      log-update emits the relative moves (up · CR · col · show) AFTER
+  //      each frame write and undoes them before the next erase.
+  const { stdout } = useStdout()
+  const columns = Math.max(20, stdout?.columns ?? 80)
+  const gutter =
+    (contextPct !== undefined ? palette.dim(`${contextPct}% `) : '')
+    + (busy ? palette.warning(`${ICONS.agent} `) : palette.accent('> '))
+  const gutterWidth = displayWidth(gutter)
+  const body = draft === '' && placeholderText !== ''
+    ? palette.muted(placeholderText)
+    : draft
+  const line = gutter + body
+  const lines = wrapAnsi(line, columns)
+  const caretAbs = gutterWidth + displayWidth(draft === '' && placeholderText !== '' ? '' : draft.slice(0, buffer.cursor))
+  let acc = 0
+  let caretUp = 0
+  let caretCol = 0
+  for (let i = 0; i < lines.length; i++) {
+    const w = displayWidth(stripAnsi(lines[i] ?? ''))
+    if (caretAbs <= acc + w || i === lines.length - 1) {
+      caretCol = Math.min(caretAbs - acc, w)
+      caretUp = lines.length - 1 - i
+      break
+    }
+    acc += w
+  }
+  ;(globalThis as { __kiroCaret?: { up: number; col: number } }).__kiroCaret = { up: caretUp, col: caretCol }
+  useEffect(() => () => {
+    // When an overlay replaces the Prompt, its stale caret must not keep
+    // pulling the terminal cursor to a line that no longer exists.
+    ;(globalThis as { __kiroCaret?: { up: number; col: number } }).__kiroCaret = undefined
+  }, [])
 
   return (
     <Box flexDirection="column" marginTop={1}>
@@ -268,32 +302,10 @@ export function Prompt({
           <Text dimColor>[{buffer.images.length} pending image(s)]</Text>
         </Box>
       ) : null}
-      <Box flexDirection="row">
-        {/* ONE string child, never a null → <Text> insert: Ink's reconciler
-            drops the following sibling when a Text child appears before it
-            (the contextPct showing up after a session switch erased `> `).
-            The dim contextPct is applied with ANSI, not a nested <Text>. */}
-        <Text color={palette.enabled ? 'green' : undefined}>
-          {(contextPct !== undefined ? palette.dim(`${contextPct}% `) : '') + (busy ? palette.warning(`${ICONS.agent} `) : palette.accent('> '))}
-        </Text>
-        <Box flexGrow={1} flexDirection="row">
-          {draft === '' && placeholderText !== '' ? (
-            // Empty draft: the cursor belongs right after `> ` — INSIDE the
-            // placeholder Text, prefixing it (an escape-only leading sibling
-            // Text gets dropped by Ink's text squashing). The IME anchor then
-            // sits where typing starts, not at the end of the hint text.
-            <Text dimColor>{SHOW_CURSOR + placeholderText}</Text>
-          ) : (
-            // The show-cursor escape sits AT the logical cursor position, so
-            // ←/→/Home/End move the REAL terminal cursor (and the IME anchor)
-            // through the text — it is the caret. ONE string child: inserting
-            // a <Text> child before others makes Ink drop the sibling.
-            <Text>
-              {draft.slice(0, buffer.cursor) + SHOW_CURSOR + draft.slice(buffer.cursor)}
-            </Text>
-          )}
-        </Box>
-      </Box>
+      {/* ONE string child (never a null → <Text> insert: Ink drops the
+          following sibling) — the pre-wrapped input lines joined by newlines
+          keep Ink from re-wrapping, so the caret math above stays exact. */}
+      <Text color={palette.enabled ? 'green' : undefined}>{lines.join('\n')}</Text>
     </Box>
   )
 }
