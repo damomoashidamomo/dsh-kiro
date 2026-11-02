@@ -19,7 +19,7 @@ export interface TurnFailureLike {
 /** Classified failure with the guidance appended to the error notice. */
 export interface TurnFailureHint {
     /** Stable class id. */
-    readonly kind: 'rate-limit' | 'timeout' | 'server' | 'auth' | 'network' | 'model' | 'unknown';
+    readonly kind: 'rate-limit' | 'timeout' | 'server' | 'auth' | 'network' | 'effort-field' | 'model' | 'unknown';
     /** True when the class usually heals on its own after a wait. */
     readonly transient: boolean;
     /** Complete user-facing notice (error line + hint lines). */

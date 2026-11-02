@@ -43,7 +43,7 @@ export const name = 'kiro-runtime'
  * signal: `ctx.inject(['loader'], …)` fires as soon as the Loader itself
  * exists — long before the bundle patches have created the dsh-base rows.
  */
-export const inject = ['kiroStartup', 'agents', 'agentDefaultModel', 'sessions', 'commands']
+export const inject = ['kiroStartup', 'agents', 'agentDefaultModel', 'sessions', 'commands', 'llm']
 
 /** Mount the Ink render loop once every required service is live. */
 export function apply(ctx: Context): void {
@@ -266,6 +266,43 @@ async function mount(ctx: Context, startup: KiroStartup): Promise<void> {
   // /retry: resubmit the last user prompt after a failed turn (B-9). The
   // command reads the transcript's last user message and calls submit —
   // the same path as a fresh keystroke, so steering/escalation all apply.
+  // /effort probe bridge: calling ctx.llm.stream through an agent-scope
+  // ctx.get hits the cordis shadow proxy (receiver lost — the same trap as
+  // sessionQuery.readSession). The runtime-scope capture calls cleanly.
+  ctx.provide('kiroEffortProbe', {
+    async probe(provider: string, model: string): Promise<string> {
+      const llm = (ctx as { llm?: { stream?: (options: unknown) => AsyncIterable<unknown> } }).llm
+      const runtime = llm as { stream: (options: unknown) => AsyncIterable<unknown> } | undefined
+      if (runtime === undefined || typeof runtime.stream !== 'function') return '/effort probe: llm 服务不可用'
+      const attempt = async (effort?: string): Promise<string> => {
+        const options = {
+          provider,
+          model,
+          system: 'probe',
+          maxTokens: 16,
+          messages: [createUserMessage({ content: [{ type: 'text', text: 'hi' }], source: { kind: 'user' } })],
+          ...(effort !== undefined ? { reasoningEffort: effort } : {}),
+          signal: AbortSignal.timeout(30000),
+        }
+        try {
+          for await (const _chunk of runtime.stream(options)) break
+          return 'ok'
+        } catch (error) {
+          return error instanceof Error ? error.message : String(error)
+        }
+      }
+      const baseline = await attempt(undefined)
+      if (baseline !== 'ok') {
+        return [`/effort probe：基线请求就失败了（未带档位字段）——先解决模型可达性：`, `  ${baseline.slice(0, 160)}`].join('\n')
+      }
+      const withEffort = await attempt('low')
+      if (withEffort === 'ok') {
+        return '/effort probe: ok'
+      }
+      return `/effort probe: rejected: ${withEffort.slice(0, 160)}`
+    },
+  })
+
   ctx.provide('kiroRetry', {
     lastUserPrompt(): string | undefined {
       for (let i = controller.state.messages.length - 1; i >= 0; i -= 1) {

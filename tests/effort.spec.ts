@@ -77,11 +77,16 @@ describe('/effort command (real wiring)', () => {
     expect((out as { text: string }).text).toContain('low / high / max')
   })
 
-  it('reports honestly for models without declarations', async () => {
+  it('undeclared models now work off the inferred ladder (B-6 strategy)', async () => {
     const { agent } = agentStub({ declared: undefined, model: 'Qwen3.8-Flash', provider: 'scnet' })
+    // No declaration anywhere: the name heuristic ('flash') yields low/high,
+    // so 'high' applies instead of being rejected outright.
     const out = await effortCommand.handler!({ agent, rawInput: 'high' } as never)
-    expect(out.kind).toBe('error')
-    expect((out as { text: string }).text).toContain('未声明思考档位')
+    expect(out.kind).toBe('success')
+    // 'max' is outside the inferred flash ladder -> still rejected.
+    const outMax = await effortCommand.handler!({ agent, rawInput: 'max' } as never)
+    expect(outMax.kind).toBe('error')
+    expect((outMax as { text: string }).text).toContain('low / high')
   })
 
   it('bare /effort prints usage', async () => {

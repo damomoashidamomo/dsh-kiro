@@ -21,7 +21,7 @@ export interface TurnFailureLike {
 /** Classified failure with the guidance appended to the error notice. */
 export interface TurnFailureHint {
   /** Stable class id. */
-  readonly kind: 'rate-limit' | 'timeout' | 'server' | 'auth' | 'network' | 'model' | 'unknown'
+  readonly kind: 'rate-limit' | 'timeout' | 'server' | 'auth' | 'network' | 'effort-field' | 'model' | 'unknown'
   /** True when the class usually heals on its own after a wait. */
   readonly transient: boolean
   /** Complete user-facing notice (error line + hint lines). */
@@ -89,6 +89,28 @@ export function classifyTurnFailure(error: TurnFailureLike | undefined, message:
       text: [
         `✗ 回合失败（网络）：${message}`,
         '↳ 连不上模型端点。检查网络/代理是否放行该网关域名；恢复后 /retry 重发。',
+      ].join('\n'),
+    }
+  }
+  if (blob.includes('reasoning_effort') || (blob.includes('thinking') && (blob.includes('invalid') || blob.includes('unknown') || blob.includes('unsupported') || blob.includes('not supported')))) {
+    return {
+      kind: 'effort-field',
+      transient: false,
+      text: [
+        `✗ 回合失败（思考档位字段被拒）：${message}`,
+        '↳ 该网关不接受 reasoning_effort/thinking 字段。回到 /effort auto（不再发送档位），',
+        '  或用 /effort probe 实测后按结果调整声明。',
+      ].join('\n'),
+    }
+  }
+  if (blob.includes('reasoning_effort') || (blob.includes('thinking') && (blob.includes('invalid') || blob.includes('unknown') || blob.includes('unsupported') || blob.includes('not supported')))) {
+    return {
+      kind: 'effort-field',
+      transient: false,
+      text: [
+        `\u2717 回合失败（思考档位字段被拒）：${message}`,
+        '\u21b3 该网关不接受 reasoning_effort/thinking 字段。回到 /effort auto（不再发送档位），',
+        '  或用 /effort probe 实测后按结果调整声明。',
       ].join('\n'),
     }
   }

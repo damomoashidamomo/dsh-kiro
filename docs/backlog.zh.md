@@ -16,7 +16,6 @@
 | B-3 | Agent picker | /agent 仍是占位；**会话切换已落地**（/chat resume 在 TUI 内直接切换并回放历史，/chat new 存盘换新） |
 | B-4 | Knowledge / Editor 面板 | overlay 占位 |
 | B-5 | 图像生成插件修复 | settings 里 `Qwen-Image-2.0` 是无效模型名（正确为 `Qwen-Image-2512`），且插件发的 OpenAI 格式与网关要求的 `input.prompt` schema 不符——后者是 harness 侧代码，本仓库修不了 |
-| B-6 | scnet DeepSeek/V4 系思考档位声明 | 若 scnet 网关确认转发 `reasoning_effort`，给 V4 系模型加 reasoningEfforts 声明即可接入 /effort 与关键词升档（同 glm 做法） |
 | B-10 | logo 眨眼动画 | 纯装饰 |
 
 ## 工程债（评估报告遗留，见评估对话）
@@ -45,5 +44,8 @@
       给出 /retry 重发、等待退避、/model 切换等具体建议；新增 /retry 命令
 - ✅ PTY E2E 入仓（T-2）：scripts/e2e/（harness + 13 用例）+ pnpm e2e；
       强制 truecolor（历史 bug 只在真彩暴露）；不调模型，全程 /tmp
+- ✅ 思考档位通用策略（B-6，升级为全模型方案）：档位阶梯解析
+      模型声明 > Provider 默认 > 名称推断（标注来源）；/effort probe 实测
+      网关是否转发 reasoning_effort；档位字段被拒归类为新失败类并给建议
 - ⏸ checkpoint / 子代理 UI——**数据驱动放弃**（96 会话 0/2 次使用）
 - ⏸ P1 bash 自动放开——安全降级，不做（B2 的项目级持久化已覆盖需求）
