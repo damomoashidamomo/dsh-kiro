@@ -190,6 +190,10 @@ export function App({ controller, seedTask, activeAgentName, onSubmit, fileSearc
     return undefined
   }, [state.messages])
 
+  // The '/' popup filters on the COMMAND NAME only — text after the first
+  // space is arguments (`/chat resume`) and must not empty the match list.
+  const slashQuery = (prefixQuery.split(/\s+/u)[0] ?? '').trim()
+
   const contextPct = (() => {
     const limit = state.agent.contextLimitTokens
     if (limit === undefined || limit <= 0) return undefined
@@ -280,11 +284,16 @@ export function App({ controller, seedTask, activeAgentName, onSubmit, fileSearc
               setAutocompleteSelected(0)
               return
             }
-            const items = slashCandidates(ALL_COMMANDS.map((c) => ({ name: c.name, description: c.description })))
-            const filtered = items.filter((it) => prefix === '/')
-            const visible = filtered.slice(autocompleteSelected, autocompleteSelected + 1)
-            if (visible[0] !== undefined) {
-              onSubmit(visible[0].insert)
+            // Args already typed (`/chat resume`) — commit submits the full
+            // draft; committing only the highlighted name would drop them.
+            if (prefix === '/' && prefixQuery.includes(' ')) {
+              onSubmit(`/${prefixQuery.trim()}`)
+            } else {
+              const items = slashCandidates(ALL_COMMANDS.map((c) => ({ name: c.name, description: c.description })))
+              const visible = items.slice(autocompleteSelected, autocompleteSelected + 1)
+              if (visible[0] !== undefined) {
+                onSubmit(visible[0].insert)
+              }
             }
             setPrefix(undefined)
             setPrefixQuery('')
@@ -296,7 +305,7 @@ export function App({ controller, seedTask, activeAgentName, onSubmit, fileSearc
       {prefix === '/' && !slashMenuOpen ? (
         <Autocomplete
           trigger="/"
-          query={prefixQuery}
+          query={slashQuery}
           candidates={slashCandidates(ALL_COMMANDS.map((c) => ({ name: c.name, description: c.description })))}
           selected={autocompleteSelected}
         />

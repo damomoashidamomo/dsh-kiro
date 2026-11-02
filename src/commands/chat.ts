@@ -1,5 +1,5 @@
 /**
- * `/chat` — manage saved sessions: list, resume, delete.
+ * `/chat` — manage saved sessions: list, resume, switch, delete.
  *
  * Reads headers directly from `$DSH_HOME/sessions/<source>/<id>/session.v3.jsonl.zstd`
  * via {@link import('../utils/sessions').listSessions}, which keeps the
@@ -8,9 +8,10 @@
  * (or is a parent of) the current `cwd` — most users only want their own
  * recent sessions.
  *
- * `--resume`, `--resume-id`, and `--resume-picker` continue to be handled
- * by `startup.ts` before the runtime mounts, so this command focuses on
- * in-chat operations.
+ * `resume`/`new` switch sessions IN PLACE through the `kiroSessionSwitch`
+ * service (flush + dispose + agents.resume/create + transcript replay) —
+ * no exit/restart needed. `--resume`/`--resume-id` remain boot-time
+ * equivalents handled by `startup.ts` + the runtime mount.
  */
 
 import type { CommandDefinition } from '@deepseek-ai/dsh-commands'
@@ -20,6 +21,19 @@ import {
   formatTimestamp,
   listSessions,
 } from '../utils/sessions'
+
+interface SessionSwitchService {
+  switchTo(target: string | undefined): Promise<{ ok: boolean; message: string }>
+}
+
+function switchServiceOf(agentCtx: unknown): SessionSwitchService | undefined {
+  const ctx = (agentCtx as { ctx?: unknown }).ctx
+  if (ctx === undefined || ctx === null) return undefined
+  const get = (ctx as { get?: (name: string) => unknown }).get
+  return typeof get === 'function'
+    ? get.call(ctx, 'kiroSessionSwitch') as SessionSwitchService | undefined
+    : undefined
+}
 
 function parseSubcommand(input: string): { name: string; args: string[] } {
   const trimmed = input.trim()
@@ -48,18 +62,38 @@ function listText(rows: ReadonlyArray<{
   return lines.join('\n')
 }
 
+/** Short resume hint when no id was given: the recent sessions for this cwd. */
+function resumeHint(): string {
+  const rows = filterSessions(listSessions()).slice(0, 5)
+  const lines = ['usage: /chat resume <session-id>  —  在当前 TUI 内直接切换，无需重启']
+  if (rows.length === 0) {
+    lines.push('（当前目录还没有历史会话；/chat list --all 查看全部）')
+    return lines.join('\n')
+  }
+  lines.push('当前目录最近的会话：')
+  for (const row of rows) {
+    lines.push(`  ${row.id}  ${formatTimestamp(row.createdAt)}`)
+  }
+  return lines.join('\n')
+}
+
 export const chatCommand: CommandDefinition = {
   name: 'chat',
-  description: 'Manage sessions: list, delete, resume',
-  input: { hint: '<list|delete|resume> [args]' },
-  handler: async ({ rawInput }) => {
+  description: 'Manage sessions: list, resume, switch, delete',
+  input: { hint: '<list|resume|new|delete> [args]' },
+  handler: async ({ agent, rawInput }) => {
     const { name: sub, args } = parseSubcommand(rawInput)
     switch (sub) {
-      case 'new':
-        return {
-          kind: 'success',
-          text: 'A fresh session starts the next time `dsh --profile kiro` boots — exit (Ctrl+D) to begin one.',
+      case 'new': {
+        const service = switchServiceOf(agent)
+        if (service === undefined) {
+          return { kind: 'error', text: '/chat new: 会话切换服务不可用' }
         }
+        const result = await service.switchTo(undefined)
+        return result.ok
+          ? { kind: 'success', text: '◇ 已开启新会话。' }
+          : { kind: 'error', text: result.message }
+      }
       case 'list':
       case '': {
         const all = args.includes('--all')
@@ -69,11 +103,15 @@ export const chatCommand: CommandDefinition = {
       }
       case 'resume': {
         const id = args[0]
-        if (id === undefined) return { kind: 'success', text: 'usage: /chat resume <session-id>' }
-        return {
-          kind: 'success',
-          text: `Resume ${id} — exit the TUI (Ctrl+D) and re-run: dsh --profile kiro --resume-id ${id}`,
+        if (id === undefined) return { kind: 'success', text: resumeHint() }
+        const service = switchServiceOf(agent)
+        if (service === undefined) {
+          return { kind: 'error', text: '/chat resume: 会话切换服务不可用' }
         }
+        const result = await service.switchTo(id)
+        return result.ok
+          ? { kind: 'success', text: result.message }
+          : { kind: 'error', text: result.message }
       }
       case 'delete': {
         const target = args[0]
@@ -84,7 +122,7 @@ export const chatCommand: CommandDefinition = {
           : { kind: 'error', text: `no session found for "${target}"` }
       }
       case 'help':
-        return { kind: 'success', text: '/chat <list|delete|resume|new> [args]\n  list [--all]  list sessions for this cwd (or every session with --all)' }
+        return { kind: 'success', text: '/chat <list|resume|new|delete> [args]\n  list [--all]        list sessions for this cwd (or all with --all)\n  resume <id>         在当前 TUI 内切换到该会话（回放最近 300 条事件）\n  new                 存盘当前会话并开启新会话\n  delete <id>         删除一个存盘会话' }
       default:
         return { kind: 'success', text: `unknown subcommand: ${sub}. Try /chat help.` }
     }

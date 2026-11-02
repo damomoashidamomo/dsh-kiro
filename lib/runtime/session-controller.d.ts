@@ -10,6 +10,7 @@
  * @module @damomoashidamomo/dsh-kiro/runtime/session-controller
  */
 import type { Context } from '@deepseek-ai/cordis';
+import type { SessionEvent } from '@deepseek-ai/dsh-session';
 import type { Agent } from '@deepseek-ai/dsh-agent';
 import type { AgentStatusSnapshot, ApprovalChoice, ApprovalRequestUi, OverlayKind, PickerItem, QuestionChoice, QuestionRequestUi, SessionRenderState } from './types';
 /** Subscriber callback when the render state changes. */
@@ -49,6 +50,13 @@ export declare class SessionController {
     getState(): SessionRenderState;
     /** Wipe the visible transcript without touching the durable session log. */
     clearTranscript(): void;
+    /**
+     * Rebuild the transcript from a persisted session log (resume). Events are
+     * applied through the normal projection with publishing suppressed — a
+     * publish per replayed event would re-render the whole tree hundreds of
+     * times — then leftovers are closed and ONE publish fires at the end.
+     */
+    replayEvents(events: readonly SessionEvent[]): void;
     /** Replace the controlled agent and rebind session events. */
     bindAgent(ctx: Context, agent: Agent): void;
     /** Abort the active turn via the platform's kiroInterrupt service. */
@@ -176,6 +184,8 @@ export declare class SessionController {
      * redraw rate of the tall live region.
      */
     private publishStreaming;
+    /** Replay mode: applyEvent must not publish per event (see replayEvents). */
+    private replaying;
     /** Notify subscribers of a state change. */
     private publish;
     /** Apply one session event. */

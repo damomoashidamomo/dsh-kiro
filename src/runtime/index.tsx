@@ -12,7 +12,7 @@ import { render } from 'ink'
 import type { Context } from '@deepseek-ai/cordis'
 import { brandString } from '@deepseek-ai/dsh-brand'
 import { installModelSelection } from '@deepseek-ai/dsh-agent'
-import type { Agent, ModelSelection, ModelSelectionRef } from '@deepseek-ai/dsh-agent'
+import type { Agent, AgentHandle, AgentSetup, ModelSelection, ModelSelectionRef } from '@deepseek-ai/dsh-agent'
 import { createUserMessage } from '@deepseek-ai/dsh-llm'
 import { SessionId } from '@deepseek-ai/dsh-session'
 import { parseCommand } from '@deepseek-ai/dsh-commands'
@@ -31,6 +31,7 @@ import type { LocalFileReferenceService } from '@deepseek-ai/dsh-file-reference-
 import type { PiAiConfig } from './model-catalog'
 import { parseShellCommand, runShell } from '../utils/shell'
 import { KIRO_KNOWLEDGE, renderKnowledgeContext } from '../knowledge'
+import { filterSessions, listSessions } from '../utils/sessions'
 import type { KnowledgeStore } from '../knowledge/store'
 
 /** Stable Cordis plugin name. */
@@ -125,38 +126,44 @@ async function mount(ctx: Context, startup: KiroStartup): Promise<void> {
     },
   }
 
-  const { agent } = await agents.create({
-    sessionId,
-    meta: { cwd: process.cwd() },
-    agentOptions: {
-      provider: startup.model !== undefined ? startup.model.split('/')[0] ?? selection.provider : selection.provider,
-      model: startup.model !== undefined ? startup.model.split('/')[1] ?? selection.model : selection.model,
+  // The live agent behind the TUI. Session switching (/chat resume, /chat new)
+  // swaps it WITHOUT unmounting Ink — every closure below reads the ref so
+  // submissions, cancels, flushes, and steering always target the CURRENT agent.
+  const agentRef: { current: Agent | undefined } = { current: undefined }
+  let agentHandle: AgentHandle | undefined
+
+  const agentOptions = {
+    provider: startup.model !== undefined ? startup.model.split('/')[0] ?? selection.provider : selection.provider,
+    model: startup.model !== undefined ? startup.model.split('/')[1] ?? selection.model : selection.model,
+  }
+
+  /**
+   * Agent-scoped wiring shared by create AND resume: approval answerer, plan
+   * review, model/effort services. Defined once so a switched-to session gets
+   * the exact same world.
+   */
+  // Agent-independent services, provided ONCE at the runtime scope: setup
+  // runs again on every session switch, and re-providing would throw
+  // "already registered". All of these reach the CURRENT agent via agentRef.
+  ctx.provide('kiroEffortControl', effortControl)
+  ctx.provide('kiroInterrupt', {
+    cancel(): void {
+      try {
+        agentRef.current?.cancel({ kind: 'user' })
+      } catch {
+        // already idle or already cancelled — no-op
+      }
     },
-    setup: (agentCtx) => {
+  })
+  ctx.provide('kiroModelSwitch', {
+    apply(next: ModelSelection): void {
+      selected.current = next
+    },
+  })
+
+  const setupAgent: AgentSetup = (agentCtx) => {
       agentCtxRef = agentCtx
       installModelSelection(agentCtx, selected)
-      // Service surface for /effort (command handlers cannot reach this scope).
-      ctx.provide('kiroEffortControl', effortControl)
-      // Cancel the active turn (Ctrl+C): the platform aborts the in-flight
-      // request and drains the driver. UI state alone does nothing.
-      ctx.provide('kiroInterrupt', {
-        cancel(): void {
-          try {
-            agent.cancel({ kind: 'user' })
-          } catch {
-            // already idle or already cancelled — no-op
-          }
-        },
-      })
-      // Live mid-session switch: slash commands (e.g. /model) mutate this ref
-      // so the NEXT step's request actually uses the new provider/model —
-      // installModelSelection reads selection.current per step; settings
-      // writes alone would only persist for the next launch.
-      ctx.provide('kiroModelSwitch', {
-        apply(next: ModelSelection): void {
-          selected.current = next
-        },
-      })
       // kiro-style tool-permission panel: answer the platform's
       // `approval/request` waterfall (dsh-user-approval). Registered on the
       // agent scope so only this agent's questions reach the TUI. The event's
@@ -168,7 +175,7 @@ async function mount(ctx: Context, startup: KiroStartup): Promise<void> {
       ) => void
       onApprovalRequest('approval/request', createApprovalAnswerer(controller, {
         inject: (text) => {
-          agent.inject(createUserMessage({
+          agentRef.current?.inject(createUserMessage({
             content: [{ type: 'text', text }],
             source: { kind: 'user' },
           }))
@@ -180,9 +187,47 @@ async function mount(ctx: Context, startup: KiroStartup): Promise<void> {
       // Agent-scoped like the approval answerer; this bundle DOES depend on
       // dsh-user-questions, so the typed augmentation applies.
       agentCtx.on('user-questions/request', createQuestionAnswerer(controller))
-    },
-  })
+  }
 
+  // --resume-id <id> resumes that persisted session; bare --resume picks the
+  // most recent one for this cwd. agents.resume loads the persisted log so
+  // the model continues with full history; the transcript is replayed after
+  // bind via sessionQuery.readSession.
+  const bootResumeId = startup.resumeId !== undefined
+    ? startup.resumeId
+    : startup.resume === true
+      ? filterSessions(listSessions(), { cwd: process.cwd() }).at(0)?.id
+      : undefined
+  if (bootResumeId !== undefined) {
+    agentHandle = await agents.resume({
+      resumeSessionId: brandString<SessionId>(bootResumeId),
+      agentOptions,
+      setup: setupAgent,
+    })
+  } else {
+    agentHandle = await agents.create({ sessionId, meta: { cwd: process.cwd() }, agentOptions, setup: setupAgent })
+  }
+  agentRef.current = agentHandle.agent
+  const agent = agentHandle.agent
+
+  /**
+   * Replay a persisted session's events into the transcript (resume). The
+   * tail is kept (300 events) — the transcript is a viewport, not an archive.
+   */
+  const seedHistory = async (id: string): Promise<number> => {
+    try {
+      const query = (ctx as unknown as { get?: <T>(key: string) => unknown }).get?.('sessionQuery') as
+        | { readSession?: (id: SessionId) => Promise<{ events: unknown[] }> }
+        | undefined
+      if (query?.readSession === undefined) return 0
+      const snapshot = await query.readSession(brandString<SessionId>(id))
+      const events = (snapshot.events ?? []) as never[]
+      controller.replayEvents(events.slice(-300))
+      return events.length
+    } catch {
+      return 0
+    }
+  }
   controller.bindAgent(ctx, agent)
   // activeModel is the bare model id (slice after the first slash, matching
   // /model's parseModel); StatusBar renders provider/model once.
@@ -203,10 +248,69 @@ async function mount(ctx: Context, startup: KiroStartup): Promise<void> {
     // default: models without a contextWindow show bare token usage.
     contextLimitTokens: bootModelWindow ?? undefined,
   })
+  // Transcript replay must run AFTER bindAgent (bind resets state).
+  if (bootResumeId !== undefined) await seedHistory(bootResumeId)
   // Expose the controller as a Cordis service so slash commands can update
   // the status bar (e.g. /model <provider>/<model> after persisting the new
   // selection) without needing a back-reference to this closure.
   ctx.provide('kiroController', controller)
+
+  // In-TUI session switching (/chat resume <id>, /chat new): swap the live
+  // agent without unmounting Ink. flush + dispose the old agent, resume (or
+  // create) through the registry with the SAME setup, rebind, replay history.
+  ctx.provide('kiroSessionSwitch', {
+    async switchTo(target: string | undefined): Promise<{ ok: boolean; message: string }> {
+      try {
+        const current = agentRef.current
+        if (current !== undefined) {
+          try {
+            await sessions.flush(current.session)
+          } catch {
+            // Best-effort: switching must not strand the user on a flush bug.
+          }
+        }
+        controller.unbind()
+        try {
+          await agentHandle?.dispose()
+        } catch {
+          // Best-effort teardown; the registry refuses double-dispose.
+        }
+        agentHandle = target === undefined
+          ? await agents.create({
+              sessionId: brandString<SessionId>(`session-${randomUUID()}`),
+              meta: { cwd: process.cwd() },
+              agentOptions,
+              setup: setupAgent,
+            })
+          : await agents.resume({
+              resumeSessionId: brandString<SessionId>(target),
+              agentOptions,
+              setup: setupAgent,
+            })
+        agentRef.current = agentHandle.agent
+        // bindAgent resets the transcript; re-apply the status-bar model facts
+        // (they live in agent state, which the reset clears).
+        controller.bindAgent(ctx, agentHandle.agent)
+        controller.patchAgent({
+          activeAgent: startup.agent,
+          activeModel: bootModelId,
+          activeProvider: selection.provider,
+          contextLimitTokens: bootModelWindow ?? undefined,
+        })
+        if (target === undefined) {
+          controller.pushSystem('◇ 已开启新会话（原会话已存盘）。')
+          return { ok: true, message: '已开启新会话。' }
+        }
+        const total = await seedHistory(target)
+        controller.pushSystem(`◇ 已恢复会话 ${target}（回放最近 ${Math.min(total, 300)}/${total} 条事件）。`)
+        return { ok: true, message: `已恢复会话 ${target}。` }
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error)
+        controller.pushSystem(`✗ 会话切换失败：${message}`)
+        return { ok: false, message: `切换失败：${message}` }
+      }
+    },
+  })
 
   // Slash command dispatch: every text submission routes through the parser.
   const submit = (text: string): void => {
@@ -289,7 +393,7 @@ async function mount(ctx: Context, startup: KiroStartup): Promise<void> {
       const hits = knowledge.query(trimmed, 2)
       const block = renderKnowledgeContext(hits)
       if (block !== '') {
-        agent.inject(createUserMessage({
+        agentRef.current?.inject(createUserMessage({
           content: [{ type: 'text', text: block }],
           source: { kind: 'plugin', plugin: 'kiro-knowledge' },
         }))
@@ -303,7 +407,8 @@ async function mount(ctx: Context, startup: KiroStartup): Promise<void> {
     // live turn's next step boundary consumes it (kiro-style interjection,
     // no cancel needed). Idle (or cancelling — platform rule: input after an
     // active cancellation queues for the next turn) opens/queues a new turn.
-    if (routeTurnInput(agent, message) === 'steer') {
+    const live = agentRef.current
+    if (live !== undefined && routeTurnInput(live, message) === 'steer') {
       const preview = trimmed.length > 40 ? `${trimmed.slice(0, 40)}…` : trimmed
       controller.noteSteered(trimmed)
       controller.pushSystem(`↪ 已插话（下一步生效）：${preview}`)
@@ -317,7 +422,7 @@ async function mount(ctx: Context, startup: KiroStartup): Promise<void> {
       process.exit(2)
     }
     submit(startup.task)
-    await agent.whenIdle()
+    await agentRef.current?.whenIdle()
     process.exit(0)
     return
   }
@@ -367,9 +472,12 @@ async function mount(ctx: Context, startup: KiroStartup): Promise<void> {
     // boots `sessions.flush` never settles, and blocking the exit on it
     // would turn every quit into a multi-second stall. The tree disposal
     // persists the session through its own lifecycle hooks.
-    void sessions.flush(agent.session).catch((error: unknown) => {
-      ctx.logger('kiro-runtime').warn('session flush failed: %s', String(error))
-    })
+    const exitSession = agentRef.current?.session
+    if (exitSession !== undefined) {
+      void sessions.flush(exitSession).catch((error: unknown) => {
+        ctx.logger('kiro-runtime').warn('session flush failed: %s', String(error))
+      })
+    }
     appExit(0)
     // Last-resort failsafe: a tiny unref'd worker thread that SIGKILLs the
     // process if it is somehow still alive after the shutdown's 5s grace.

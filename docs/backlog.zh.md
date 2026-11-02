@@ -13,7 +13,7 @@
 |---|---|---|
 | B-1 | MCP 面板 | /mcp 命令存在，overlay 占位；服务器状态/启停 UI |
 | B-2 | Checkpoint 面板 | /checkpoint 命令存在，overlay 占位；**依据使用数据你不用 checkpoint，优先级最低** |
-| B-3 | Agent picker / 会话切换器 | /agent /chat 命令存在，picker 占位 |
+| B-3 | Agent picker | /agent 仍是占位；**会话切换已落地**（/chat resume 在 TUI 内直接切换并回放历史，/chat new 存盘换新） |
 | B-4 | Knowledge / Editor 面板 | overlay 占位 |
 | B-5 | 图像生成插件修复 | settings 里 `Qwen-Image-2.0` 是无效模型名（正确为 `Qwen-Image-2512`），且插件发的 OpenAI 格式与网关要求的 `input.prompt` schema 不符——后者是 harness 侧代码，本仓库修不了 |
 | B-6 | scnet DeepSeek/V4 系思考档位声明 | 若 scnet 网关确认转发 `reasoning_effort`，给 V4 系模型加 reasoningEfforts 声明即可接入 /effort 与关键词升档（同 glm 做法） |

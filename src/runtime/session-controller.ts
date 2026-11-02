@@ -255,6 +255,32 @@ export class SessionController {
     this.publish()
   }
 
+  /**
+   * Rebuild the transcript from a persisted session log (resume). Events are
+   * applied through the normal projection with publishing suppressed — a
+   * publish per replayed event would re-render the whole tree hundreds of
+   * times — then leftovers are closed and ONE publish fires at the end.
+   */
+  replayEvents(events: readonly SessionEvent[]): void {
+    this.replaying = true
+    try {
+      for (const event of events) {
+        try {
+          this.applyEvent(event)
+        } catch {
+          // A malformed or future-shape row must not break the whole replay.
+        }
+      }
+    } finally {
+      this.replaying = false
+    }
+    this.closeStreamingAssistant()
+    this.closeStreamingReasoning()
+    this.sweepOrphanedToolCalls()
+    this.state = { ...this.state, agent: { ...this.state.agent, status: 'idle' } }
+    this.publish()
+  }
+
   /** Replace the controlled agent and rebind session events. */
   bindAgent(ctx: Context, agent: Agent): void {
     if (this.agent === agent) return
@@ -697,8 +723,12 @@ export class SessionController {
     }, 100)
   }
 
+  /** Replay mode: applyEvent must not publish per event (see replayEvents). */
+  private replaying = false
+
   /** Notify subscribers of a state change. */
   private publish(): void {
+    if (this.replaying) return
     const snapshot = this.state
     for (const listener of this.listeners) listener(snapshot)
   }
