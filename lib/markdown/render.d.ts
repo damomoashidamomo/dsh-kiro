@@ -22,7 +22,7 @@ export declare function stripAnsi(text: string): string;
 /** Tell the renderer the available pane width (display columns). */
 export declare function setMarkdownColumns(columns: number | undefined): void;
 /** Display width of visible text: CJK/fullwidth count as 2 columns. */
-/** Visible width of text with ANSI (SGR + OSC 8) stripped. */
+/** Visible width of text: CJK/fullwidth count as 2 columns, ANSI ignored. */
 export declare function displayWidth(text: string): number;
 /**
  * Wrap a single visible-text line at `width` display columns, preserving

@@ -12,7 +12,7 @@ index a9c444ff161ed4b6ea13909591844909015fe97c..9a92875bd51b98ba99dba498a2159a01
          }
          this.lastOutput = output;
 diff --git a/build/log-update.js b/build/log-update.js
-index 547421e47903fbdce8ecab87e4fbdce901663f03..bb2e8804dbb5315de9e7c24059ba0e7d56846aaf 100644
+index 547421e47903fbdce8ecab87e4fbdce901663f03..a87ca1e35f5e46562146f2c593afb0c22ae719e1 100644
 --- a/build/log-update.js
 +++ b/build/log-update.js	
 @@ -2,6 +2,11 @@ import ansiEscapes from 'ansi-escapes';
@@ -27,7 +27,7 @@ index 547421e47903fbdce8ecab87e4fbdce901663f03..bb2e8804dbb5315de9e7c24059ba0e7d
      let previousOutput = '';
      let hasHiddenCursor = false;
      const render = (str) => {
-@@ -9,16 +14,62 @@ const create = (stream, { showCursor = false } = {}) => {
+@@ -9,20 +14,72 @@ const create = (stream, { showCursor = false } = {}) => {
              cliCursor.hide();
              hasHiddenCursor = true;
          }
@@ -72,7 +72,7 @@ index 547421e47903fbdce8ecab87e4fbdce901663f03..bb2e8804dbb5315de9e7c24059ba0e7d
 +        else {
 +            stream.write('\x1b[?25h');
 +        }
-+    };
+     };
 +    // Walk the cursor back to the region's bottom line after a caret jump.
 +    // Called before erasing AND (via ink's static writes) before any raw
 +    // stdout.write that would otherwise land mid-frame.
@@ -81,7 +81,7 @@ index 547421e47903fbdce8ecab87e4fbdce901663f03..bb2e8804dbb5315de9e7c24059ba0e7d
 +            stream.write(`\x1b[${activeCaret.up}B`);
 +        }
 +        activeCaret = undefined;
-     };
++    };
 +    render.unjump = unjump;
 +    // Whether the published caret differs from the one last jumped to — ink
 +    // skips identical-output re-renders, but a caret-only move (arrow keys)
@@ -96,3 +96,13 @@ index 547421e47903fbdce8ecab87e4fbdce901663f03..bb2e8804dbb5315de9e7c24059ba0e7d
          previousOutput = '';
          previousLineCount = 0;
      };
+     render.done = () => {
++        // dsh-kiro patch: frames no longer end with '\n', so the shell
++        // prompt after exit would be glued to the last frame line. Emit the
++        // missing newline before restoring the cursor.
++        if (previousLineCount > 0) {
++            stream.write('\n');
++        }
+         previousOutput = '';
+         previousLineCount = 0;
+         if (!showCursor) {
