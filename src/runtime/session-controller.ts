@@ -15,6 +15,7 @@ import { join } from 'node:path'
 import type { Context } from '@deepseek-ai/cordis'
 import type { SessionEvent } from '@deepseek-ai/dsh-session'
 import type { Agent } from '@deepseek-ai/dsh-agent'
+import { classifyTurnFailure, type TurnFailureLike } from './turn-failure'
 import type {
   AgentStatusSnapshot,
   ApprovalChoice,
@@ -216,7 +217,12 @@ function contentToText(content: readonly unknown[]): string {
  * agent the runtime plugin creates.
  */
 export class SessionController {
-  private state: SessionRenderState = emptyState()
+  private stateValue: SessionRenderState = emptyState()
+
+  /** Current render snapshot (read-only view for services like /retry). */
+  get state(): SessionRenderState {
+    return this.stateValue
+  }
   private readonly listeners = new Set<StateListener>()
   private agent: Agent | undefined
   /** App context (for platform projections such as contextPressure). */
@@ -251,7 +257,7 @@ export class SessionController {
 
   /** Wipe the visible transcript without touching the durable session log. */
   clearTranscript(): void {
-    this.state = { ...this.state, messages: [] }
+    this.stateValue = { ...this.state, messages: [] }
     this.publish()
   }
 
@@ -277,7 +283,7 @@ export class SessionController {
     this.closeStreamingAssistant()
     this.closeStreamingReasoning()
     this.sweepOrphanedToolCalls()
-    this.state = { ...this.state, agent: { ...this.state.agent, status: 'idle' } }
+    this.stateValue = { ...this.state, agent: { ...this.state.agent, status: 'idle' } }
     this.publish()
   }
 
@@ -287,12 +293,12 @@ export class SessionController {
     this.unsubscribe?.()
     this.boundCtx = ctx
     this.agent = agent
-    this.state = { ...emptyState(), sessionId: String(agent.session.id) }
+    this.stateValue = { ...emptyState(), sessionId: String(agent.session.id) }
     // Session workspace: fixed at agent creation (tools + sandbox anchor to
     // it). The header is the platform's source of truth.
     const header = (agent.session as unknown as { header?: { cwd?: string } }).header
     const cwd = header?.cwd ?? process.cwd()
-    this.state = {
+    this.stateValue = {
       ...this.state,
       agent: { ...this.state.agent, workspace: cwd },
     }
@@ -337,14 +343,14 @@ export class SessionController {
     this.unsubscribe = undefined
     this.agent = undefined
     this.activeTools.clear()
-    this.state = emptyState()
+    this.stateValue = emptyState()
     this.publish()
   }
 
   /** Push a UI overlay state change. */
   setOverlay(overlay: OverlayKind): void {
     if (this.state.overlay === overlay) return
-    this.state = { ...this.state, overlay }
+    this.stateValue = { ...this.state, overlay }
     this.publish()
   }
 
@@ -371,7 +377,7 @@ export class SessionController {
       usage: undefined,
       streaming: false,
     }
-    this.state = { ...this.state, messages: [...this.state.messages, message] }
+    this.stateValue = { ...this.state, messages: [...this.state.messages, message] }
   }
 
   pushSystem(text: string): void {
@@ -386,7 +392,7 @@ export class SessionController {
       usage: undefined,
       streaming: false,
     }
-    this.state = { ...this.state, messages: [...this.state.messages, message] }
+    this.stateValue = { ...this.state, messages: [...this.state.messages, message] }
     this.publish()
   }
 
@@ -409,7 +415,7 @@ export class SessionController {
     // Open with the current choice highlighted, kiro-style.
     const currentIndex = request.items.findIndex((item) => item.current === true)
     this.pickerOnSelect = request.onSelect
-    this.state = {
+    this.stateValue = {
       ...this.state,
       picker: {
         title: request.title,
@@ -424,7 +430,7 @@ export class SessionController {
   closePicker(): void {
     this.pickerOnSelect = undefined
     if (this.state.picker === undefined) return
-    this.state = { ...this.state, picker: undefined }
+    this.stateValue = { ...this.state, picker: undefined }
     this.publish()
   }
 
@@ -441,7 +447,7 @@ export class SessionController {
     if (picker === undefined || picker.items.length === 0) return
     const selected = Math.max(0, Math.min(picker.items.length - 1, index))
     if (selected === picker.selected) return
-    this.state = { ...this.state, picker: { ...picker, selected } }
+    this.stateValue = { ...this.state, picker: { ...picker, selected } }
     this.publish()
   }
 
@@ -452,7 +458,7 @@ export class SessionController {
     if (picker === undefined || callback === undefined) return
     const item = picker.items[picker.selected]
     this.pickerOnSelect = undefined
-    this.state = { ...this.state, picker: undefined }
+    this.stateValue = { ...this.state, picker: undefined }
     this.publish()
     if (item !== undefined) callback(item)
   }
@@ -475,7 +481,7 @@ export class SessionController {
     if (this.turnStartedAt === undefined) return
     const ttft = Date.now() - this.turnStartedAt
     this.turnStartedAt = undefined
-    this.state = {
+    this.stateValue = {
       ...this.state,
       agent: { ...this.state.agent, lastTtftMs: ttft },
     }
@@ -530,7 +536,7 @@ export class SessionController {
         }
       }
     }
-    this.state = { ...this.state, approval: request }
+    this.stateValue = { ...this.state, approval: request }
     this.publish()
     return promise
   }
@@ -542,7 +548,7 @@ export class SessionController {
     this.approvalSignalCleanup = undefined
     this.approvalResolve = undefined
     if (this.state.approval !== undefined) {
-      this.state = { ...this.state, approval: undefined }
+      this.stateValue = { ...this.state, approval: undefined }
       this.publish()
     }
     resolve?.(choice)
@@ -555,7 +561,7 @@ export class SessionController {
     this.approvalSignalCleanup = undefined
     this.approvalResolve = undefined
     if (this.state.approval !== undefined) {
-      this.state = { ...this.state, approval: undefined }
+      this.stateValue = { ...this.state, approval: undefined }
       this.publish()
     }
     resolve?.({ kind: 'cancelled' })
@@ -669,7 +675,7 @@ export class SessionController {
         }
       }
     }
-    this.state = { ...this.state, question: request }
+    this.stateValue = { ...this.state, question: request }
     this.publish()
     return promise
   }
@@ -681,7 +687,7 @@ export class SessionController {
     this.questionSignalCleanup = undefined
     this.questionResolve = undefined
     if (this.state.question !== undefined) {
-      this.state = { ...this.state, question: undefined }
+      this.stateValue = { ...this.state, question: undefined }
       this.publish()
     }
     resolve?.(choice)
@@ -694,7 +700,7 @@ export class SessionController {
     this.questionSignalCleanup = undefined
     this.questionResolve = undefined
     if (this.state.question !== undefined) {
-      this.state = { ...this.state, question: undefined }
+      this.stateValue = { ...this.state, question: undefined }
       this.publish()
     }
     resolve?.({ kind: 'dismissed' })
@@ -702,7 +708,7 @@ export class SessionController {
 
   /** Patch the agent snapshot (used by status bar updates outside the event bus). */
   patchAgent(snapshot: Partial<AgentStatusSnapshot>): void {
-    this.state = {
+    this.stateValue = {
       ...this.state,
       agent: { ...this.state.agent, ...snapshot },
     }
@@ -753,7 +759,7 @@ export class SessionController {
       const pressure = projections?.stateOf?.(this.agent.session, 'contextPressure')
       const used = pressure?.projectedTokens ?? pressure?.pressureTokens
       if (used !== undefined && used > 0 && used !== this.state.agent.contextUsedTokens) {
-        this.state = { ...this.state, agent: { ...this.state.agent, contextUsedTokens: used } }
+        this.stateValue = { ...this.state, agent: { ...this.state.agent, contextUsedTokens: used } }
       }
     } catch {
       // projection unavailable: chunk-usage sampling remains the fallback
@@ -776,7 +782,7 @@ export class SessionController {
       const state = projections?.stateOf?.(this.agent.session, 'permissions')
       const preset = typeof state?.preset === 'string' ? state.preset : undefined
       if (preset !== undefined && preset !== this.state.agent.permissionPreset) {
-        this.state = { ...this.state, agent: { ...this.state.agent, permissionPreset: preset } }
+        this.stateValue = { ...this.state, agent: { ...this.state.agent, permissionPreset: preset } }
       }
     } catch {
       // projection unavailable: event-driven updates still apply
@@ -790,7 +796,7 @@ export class SessionController {
     switch (event.type) {
       case 'turn/start': {
         this.turnStartedAt = Date.now()
-        this.state = {
+        this.stateValue = {
           ...this.state,
           agent: { ...this.state.agent, status: 'running' },
         }
@@ -810,9 +816,12 @@ export class SessionController {
         if (reason.kind === 'error') {
           const message = typeof reason.error?.message === 'string' ? reason.error.message : 'unknown error'
           label = `error: ${truncateLabel(message)}`
-          this.pushSystem(`✗ 回合失败：${message}`)
+          // Classify (rate-limit / timeout / 5xx / auth / network / model)
+          // and name the concrete next move: wait the provider-requested
+          // backoff, /retry the same prompt, or switch with /model.
+          this.pushSystem(classifyTurnFailure(reason.error as TurnFailureLike, message).text)
         }
-        this.state = {
+        this.stateValue = {
           ...this.state,
           agent: {
             ...this.state.agent,
@@ -855,7 +864,7 @@ export class SessionController {
             usage: undefined,
             streaming: false,
           }
-          this.state = { ...this.state, messages: [...this.state.messages, message] }
+          this.stateValue = { ...this.state, messages: [...this.state.messages, message] }
         }
         this.publish()
         return
@@ -908,7 +917,7 @@ export class SessionController {
           usage: undefined,
           streaming: true,
         }
-        this.state = {
+        this.stateValue = {
           ...this.state,
           hasActiveTool: this.activeTools.size > 0,
           messages: [...this.state.messages, message],
@@ -938,13 +947,13 @@ export class SessionController {
             const updated: Message = { ...target, tool: { ...finished }, streaming: false }
             const messages = [...this.state.messages]
             messages[index] = updated
-            this.state = {
+            this.stateValue = {
               ...this.state,
               hasActiveTool: this.activeTools.size > 0,
               messages,
             }
           } else {
-            this.state = { ...this.state, hasActiveTool: this.activeTools.size > 0 }
+            this.stateValue = { ...this.state, hasActiveTool: this.activeTools.size > 0 }
           }
           this.publish()
         }
@@ -957,7 +966,7 @@ export class SessionController {
         // projection renders. Lands before the request runs, so the bar is
         // correct from the first turn and after any model switch.
         if (typeof data.contextWindow === 'number' && Number.isFinite(data.contextWindow) && data.contextWindow > 0) {
-          this.state = {
+          this.stateValue = {
             ...this.state,
             agent: {
               ...this.state.agent,
@@ -968,7 +977,7 @@ export class SessionController {
           }
           this.publish()
         } else if (data.provider !== undefined || data.model !== undefined) {
-          this.state = {
+          this.stateValue = {
             ...this.state,
             agent: {
               ...this.state.agent,
@@ -1002,7 +1011,7 @@ export class SessionController {
           usage: undefined,
           streaming: false,
         }
-        this.state = { ...this.state, messages: [...this.state.messages, message] }
+        this.stateValue = { ...this.state, messages: [...this.state.messages, message] }
         this.publish()
         return
       }
@@ -1013,7 +1022,7 @@ export class SessionController {
         const wide = event as { type?: string; data?: { active?: boolean; preset?: string } }
         if (wide.type === 'plan/mode') {
           const active = wide.data?.active === true
-          this.state = {
+          this.stateValue = {
             ...this.state,
             agent: { ...this.state.agent, planMode: active },
           }
@@ -1025,13 +1034,13 @@ export class SessionController {
           // it upstream). Pin the list and drop a compact checklist row
           // into the transcript — kiro-style visible progress.
           const todos = (wide.data as { todos?: TodoItem[] | null }).todos ?? undefined
-          this.state = { ...this.state, todos }
+          this.stateValue = { ...this.state, todos }
           if (todos !== undefined && todos.length > 0) this.pushTodoSnapshot(todos)
           this.publish()
           return
         }
         if (wide.type === 'permission/preset' && typeof wide.data?.preset === 'string') {
-          this.state = {
+          this.stateValue = {
             ...this.state,
             agent: { ...this.state.agent, permissionPreset: wide.data.preset },
           }
@@ -1063,7 +1072,7 @@ export class SessionController {
       return message
     })
     if (changed) {
-      this.state = { ...this.state, messages }
+      this.stateValue = { ...this.state, messages }
     }
   }
 
@@ -1083,7 +1092,7 @@ export class SessionController {
       return message
     })
     if (changed) {
-      this.state = { ...this.state, messages }
+      this.stateValue = { ...this.state, messages }
     }
   }
 
@@ -1143,7 +1152,7 @@ export class SessionController {
       if (piece !== undefined) messages.push(piece)
       messages.push(segment)
     }
-    this.state = { ...this.state, messages }
+    this.stateValue = { ...this.state, messages }
     this.publishStreaming()
   }
 
@@ -1174,7 +1183,7 @@ export class SessionController {
       continuation: settled > 0 || last.continuation === true,
       streaming: false,
     }
-    this.state = { ...this.state, messages: [...messages.slice(0, -1), finalized] }
+    this.stateValue = { ...this.state, messages: [...messages.slice(0, -1), finalized] }
   }
 
   /** Append a reasoning block to a dedicated message. */
@@ -1196,7 +1205,7 @@ export class SessionController {
         streaming: true,
       })
     }
-    this.state = { ...this.state, messages }
+    this.stateValue = { ...this.state, messages }
     this.publishStreaming()
   }
 
@@ -1205,7 +1214,7 @@ export class SessionController {
     const input = usage.inputTokens ?? 0
     const output = usage.outputTokens ?? 0
     const total = usage.totalTokens ?? input + output
-    this.state = {
+    this.stateValue = {
       ...this.state,
       agent: { ...this.state.agent, contextUsedTokens: total },
     }
@@ -1213,7 +1222,7 @@ export class SessionController {
     const last = messages.at(-1)
     if (last?.kind === 'assistant') {
       messages[messages.length - 1] = { ...last, usage: { input, output } }
-      this.state = { ...this.state, messages }
+      this.stateValue = { ...this.state, messages }
     }
     // Context-pressure nudges (P3): one hint per threshold per session; a
     // drop under 50% (compaction / new chat) re-arms them.

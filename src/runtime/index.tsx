@@ -263,6 +263,22 @@ async function mount(ctx: Context, startup: KiroStartup): Promise<void> {
   const sessionQueryService = (ctx as unknown as { get?: <T>(key: string) => T | undefined }).get?.('sessionQuery') as
     | { readSession?: (id: SessionId) => Promise<{ events: unknown[] }> }
     | undefined
+  // /retry: resubmit the last user prompt after a failed turn (B-9). The
+  // command reads the transcript's last user message and calls submit —
+  // the same path as a fresh keystroke, so steering/escalation all apply.
+  ctx.provide('kiroRetry', {
+    lastUserPrompt(): string | undefined {
+      for (let i = controller.state.messages.length - 1; i >= 0; i -= 1) {
+        const m = controller.state.messages[i]
+        if (m?.kind === 'user' && m.text.trim() !== '') return m.text
+      }
+      return undefined
+    },
+    submit(text: string): void {
+      submit(text)
+    },
+  })
+
   ctx.provide('kiroSessionReader', {
     readSession: (id: string) => sessionQueryService?.readSession?.(brandString<SessionId>(id)),
   })

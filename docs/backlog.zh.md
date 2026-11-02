@@ -17,7 +17,6 @@
 | B-4 | Knowledge / Editor 面板 | overlay 占位 |
 | B-5 | 图像生成插件修复 | settings 里 `Qwen-Image-2.0` 是无效模型名（正确为 `Qwen-Image-2512`），且插件发的 OpenAI 格式与网关要求的 `input.prompt` schema 不符——后者是 harness 侧代码，本仓库修不了 |
 | B-6 | scnet DeepSeek/V4 系思考档位声明 | 若 scnet 网关确认转发 `reasoning_effort`，给 V4 系模型加 reasoningEfforts 声明即可接入 /effort 与关键词升档（同 glm 做法） |
-| B-9 | 模型抖动反馈优化 | `Request timed out` 时给出重试/退避提示，而非静默失败文本 |
 | B-10 | logo 眨眼动画 | 纯装饰 |
 
 ## 工程债（评估报告遗留，见评估对话）
@@ -43,5 +42,7 @@
 - ✅ /approvals 查看器（B-8）：列出/移除 项目工具信任 + 项目/会话模式信任
 - ✅ /paste list|clean（B-7）：列出/清理 `.kiro/paste/` 落盘粘贴文件（只删
       paste-*.txt，目录空则一并删除）
+- ✅ 模型抖动反馈（B-9）：回合失败按 超时/限流/5xx/鉴权/网络/模型 分类，
+      给出 /retry 重发、等待退避、/model 切换等具体建议；新增 /retry 命令
 - ⏸ checkpoint / 子代理 UI——**数据驱动放弃**（96 会话 0/2 次使用）
 - ⏸ P1 bash 自动放开——安全降级，不做（B2 的项目级持久化已覆盖需求）

@@ -26,7 +26,9 @@ export interface ApprovalPattern {
  * agent the runtime plugin creates.
  */
 export declare class SessionController {
-    private state;
+    private stateValue;
+    /** Current render snapshot (read-only view for services like /retry). */
+    get state(): SessionRenderState;
     private readonly listeners;
     private agent;
     /** App context (for platform projections such as contextPressure). */

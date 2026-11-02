@@ -37,6 +37,7 @@ import { changelogCommand } from './changelog'
 import { experimentCommand } from './experiment'
 import { codeCommand } from './code'
 import { pasteCommand } from './paste'
+import { retryCommand } from './retry'
 
 /** Catalog of all slash commands shipped with dsh-kiro. */
 export const ALL_COMMANDS: readonly CommandDefinition[] = [
@@ -70,6 +71,7 @@ export const ALL_COMMANDS: readonly CommandDefinition[] = [
   experimentCommand,
   codeCommand,
   pasteCommand,
+  retryCommand,
 ]
 
 /** Grouping for the slash-menu rendering. */
