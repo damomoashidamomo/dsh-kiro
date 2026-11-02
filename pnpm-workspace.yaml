@@ -8,3 +8,6 @@ allowBuilds:
 
 overrides:
   '@alcalzone/ansi-tokenize': 0.3.1
+
+patchedDependencies:
+  ink@5.2.1: patches/ink@5.2.1.patch

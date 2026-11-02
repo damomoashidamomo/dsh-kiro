@@ -1,0 +1,27 @@
+diff --git a/build/log-update.js b/build/log-update.js
+index 547421e47903fbdce8ecab87e4fbdce901663f03..af468981094d6f6149bf23f72f681151223ac279 100644
+--- a/build/log-update.js
++++ b/build/log-update.js	
+@@ -9,12 +9,20 @@ const create = (stream, { showCursor = false } = {}) => {
+             cliCursor.hide();
+             hasHiddenCursor = true;
+         }
+-        const output = str + '\n';
++        // dsh-kiro patch: no trailing newline. Ink used to append '\n'
++        // after every frame, which pushed the real terminal cursor onto an
++        // empty line BELOW the frame — the cursor could never sit inside
++        // the one-line input prompt, so IME preedit/candidates anchored
++        // outside it. Without the trailing '\n' the cursor ends exactly at
++        // the last written cell (end of the input line); erasing the next
++        // frame still clears the same lines, but the cursor may sit mid-
++        // line, so reset to column 0 with '\r' before writing.
++        const output = str;
+         if (output === previousOutput) {
+             return;
+         }
+         previousOutput = output;
+-        stream.write(ansiEscapes.eraseLines(previousLineCount) + output);
++        stream.write(ansiEscapes.eraseLines(previousLineCount) + '\r' + output);
+         previousLineCount = output.split('\n').length;
+     };
+     render.clear = () => {
