@@ -254,8 +254,20 @@ export function Prompt({
   const prefix = detectPrefix(draft)
   const placeholderText = draft === '' ? (busy ? busyPlaceholder : idlePlaceholder) : ''
 
+  // Kiro-style single input line: `55% > draft` with the REAL terminal
+  // cursor shown at its end. Ink hides the cursor on every frame; this
+  // trailing show-cursor escape re-shows it and lands it right after the
+  // draft, so the terminal (and the IME preedit/candidate window) anchors
+  // inside the input line instead of at the bottom of the live region.
+  const SHOW_CURSOR = '\u001b[?25h'
+
   return (
-    <Box flexDirection="column" borderStyle="round" borderColor={palette.enabled ? 'green' : undefined} paddingX={1} marginTop={1}>
+    <Box flexDirection="column" marginTop={1}>
+      {buffer.images.length > 0 ? (
+        <Box flexDirection="row">
+          <Text dimColor>[{buffer.images.length} pending image(s)]</Text>
+        </Box>
+      ) : null}
       <Box flexDirection="row">
         <Text color={palette.enabled ? 'green' : undefined}>
           {contextPct !== undefined ? <Text dimColor>{`${contextPct}% `}</Text> : null}
@@ -265,20 +277,16 @@ export function Prompt({
           {prefix !== undefined ? (
             <Text>
               <Text color={palette.enabled ? 'green' : undefined}>{prefix}</Text>
-              <Text>{draft.slice(1) || palette.muted('_')}</Text>
+              <Text>{draft.slice(1)}</Text>
             </Text>
           ) : draft === '' && placeholderText !== '' ? (
             <Text dimColor>{placeholderText}</Text>
           ) : (
-            <Text>{draft || palette.muted('_')}</Text>
+            <Text>{draft}</Text>
           )}
+          <Text>{SHOW_CURSOR}</Text>
         </Box>
       </Box>
-      {buffer.images.length > 0 ? (
-        <Box marginTop={1} flexDirection="row">
-          <Text dimColor>[{buffer.images.length} pending image(s)]</Text>
-        </Box>
-      ) : null}
     </Box>
   )
 }
