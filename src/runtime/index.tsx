@@ -260,7 +260,7 @@ async function mount(ctx: Context, startup: KiroStartup): Promise<void> {
   // selection) without needing a back-reference to this closure.
   ctx.provide('kiroController', controller)
 
-  // kiro-loop (P1): dsh-kiro's own turn driver, selectable per session with
+  // kiro-loop: dsh-kiro's own turn driver, selectable per session with
   // /loop kiro|dsh. Text-only for now; the platform ctx.tools seam verified
   // by the P0 probe lands in P2/P3 behind the same driver.
   const loopDriver = new KiroLoopDriver({
@@ -328,7 +328,7 @@ async function mount(ctx: Context, startup: KiroStartup): Promise<void> {
         loopDriver.seed(controller.getState().messages.map((m) => ({ kind: m.kind as string, text: m.text })))
       }
       return next === 'kiro'
-        ? '已切换到 kiro-loop（dsh-kiro 自研驱动，P1：纯对话）。'
+        ? '已切换到 kiro-loop（dsh-kiro 自研驱动，完整工具循环）。'
         : '已切换回 DSH 平台 loop。'
     },
   })

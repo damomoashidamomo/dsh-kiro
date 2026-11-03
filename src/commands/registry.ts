@@ -78,7 +78,6 @@ export const ALL_COMMANDS: readonly CommandDefinition[] = [
   doctorCommand,
   skillsCommand,
   loopCommand,
-  toolsCommand,
 ]
 
 /** Grouping for the slash-menu rendering. */

@@ -1,7 +1,7 @@
 /**
  * `/loop` — choose the turn driver: `dsh` (the platform's dsh-agent-loop,
- * full tools) or `kiro` (dsh-kiro's own driver; P1 = text-only chat, tools
- * land with the Rust engine). The transcript and approvals UI are shared;
+ * full tools) or `kiro` (dsh-kiro's own driver: full tool loop,
+ * toolsSettings matrix, retry, auto-compaction, Rust engine optional). The transcript and approvals UI are shared;
  * only the turn engine differs.
  *
  * @module @damomoashidamomo/dsh-kiro/commands/loop
@@ -11,7 +11,7 @@ import type { CommandDefinition } from '@deepseek-ai/dsh-commands'
 
 export const loopCommand: CommandDefinition = {
   name: 'loop',
-  description: 'Turn driver: dsh (platform) | kiro (own, P1 text-only)',
+  description: 'Turn driver: dsh (platform loop) | kiro (own loop, full tools)',
   input: { hint: '<dsh|kiro>' },
   handler: async ({ agent, rawInput }) => {
     const ctx = (agent as { ctx?: unknown }).ctx
@@ -29,7 +29,7 @@ export const loopCommand: CommandDefinition = {
         text: [
           `当前 loop：${service.get?.() ?? '?'}`,
           '  /loop dsh  — DSH 平台 agent loop（完整工具链）',
-          '  /loop kiro — dsh-kiro 自研驱动（P1：纯对话，工具待 Rust 引擎接入）',
+          '  /loop kiro — dsh-kiro 自研驱动（完整工具循环 · /tools rust 可选 Landlock 沙箱）',
         ].join('\n'),
       }
     }
