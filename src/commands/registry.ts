@@ -86,11 +86,11 @@ export interface CommandGroup {
   readonly items: readonly CommandDefinition[]
 }
 
-const CORE_ITEMS = ['help', 'clear', 'quit']
-const CHAT_ITEMS = ['chat', 'context', 'reply', 'editor', 'paste']
-const AGENT_ITEMS = ['agent', 'model', 'effort', 'mode']
+const CORE_ITEMS = ['help', 'clear', 'quit', 'doctor', 'workspace']
+const CHAT_ITEMS = ['chat', 'context', 'reply', 'editor', 'paste', 'retry', 'compact']
+const AGENT_ITEMS = ['agent', 'model', 'effort', 'mode', 'loop']
 const WORKFLOW_ITEMS = ['plan', 'todos', 'checkpoint', 'tangent']
-const INTEGRATIONS_ITEMS = ['tools', 'mcp', 'code', 'prompts', 'hooks']
+const INTEGRATIONS_ITEMS = ['tools', 'skills', 'steering', 'approvals', 'mcp', 'code', 'prompts', 'hooks']
 const KNOWLEDGE_ITEMS = ['knowledge', 'usage']
 const META_ITEMS = ['issue', 'changelog', 'experiment']
 
