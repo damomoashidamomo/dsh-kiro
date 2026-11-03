@@ -21,7 +21,14 @@ export interface EngineReply {
     readonly result?: Record<string, unknown>;
     readonly error?: string;
 }
-/** Locate the engine binary (null caching: looked up once per process). */
+/**
+ * Locate the engine binary (looked up once per process). Two candidates:
+ * the repo layout (engine/ beside the cwd, dev + tests) and the installed
+ * package layout (engine/ beside lib/). import.meta.url must go through
+ * fileURLToPath — existsSync does not accept file:// URL STRINGS, which
+ * silently disabled the installed-package path (the Rust engine never
+ * actually ran from a deployed profile until this was fixed).
+ */
 export declare function engineBinary(): string | undefined;
 /** Map a platform tool name + args onto the engine's tool surface. */
 export declare function toEngineCall(name: string, args: unknown): EngineCall | undefined;

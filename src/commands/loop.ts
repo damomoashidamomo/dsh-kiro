@@ -24,12 +24,22 @@ export const loopCommand: CommandDefinition = {
     }
     const arg = rawInput.trim().toLowerCase()
     if (arg === '') {
+      // One-stop status: BOTH engine switches plus rust availability, so the
+      // two-layer model (loop = who drives the turn, tools = who executes
+      // bash/读写 inside the kiro loop) is visible at a glance.
+      const engine = get?.call(ctx, 'kiroToolEngine') as
+        | { get?: () => string; available?: () => boolean }
+        | undefined
       return {
         kind: 'success',
         text: [
-          `当前 loop：${service.get?.() ?? '?'}`,
-          '  /loop dsh  — DSH 平台 agent loop（完整工具链）',
-          '  /loop kiro — dsh-kiro 自研驱动（完整工具循环 · /tools rust 可选 Landlock 沙箱）',
+          `当前 loop：${service.get?.() ?? '?'}（谁来驱动回合）`,
+          '  /loop dsh  — DSH 平台 agent loop（完整工具链，/tools 不适用）',
+          '  /loop kiro — dsh-kiro 自研驱动（完整工具循环）',
+          `当前工具引擎：${engine?.get?.() ?? '?'}（仅 /loop kiro 生效；bash/读写由谁执行）`,
+          `  Rust 引擎可用：${engine?.available?.() === true ? '是（已构建）' : '否（仓库执行 pnpm build:engine）'}`,
+          '  /tools dsh  — 平台工具管线（平台沙箱 + 审批）',
+          '  /tools rust — Rust 引擎（Landlock 内核级沙箱，每次调用新进程）',
         ].join('\n'),
       }
     }

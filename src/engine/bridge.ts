@@ -14,6 +14,7 @@
 import { spawn } from 'node:child_process'
 import { existsSync } from 'node:fs'
 import { join } from 'node:path'
+import { fileURLToPath } from 'node:url'
 
 /** One engine tool call. */
 export interface EngineCall {
@@ -30,13 +31,20 @@ export interface EngineReply {
 
 let cachedBinary: string | undefined | null = null
 
-/** Locate the engine binary (null caching: looked up once per process). */
+/**
+ * Locate the engine binary (looked up once per process). Two candidates:
+ * the repo layout (engine/ beside the cwd, dev + tests) and the installed
+ * package layout (engine/ beside lib/). import.meta.url must go through
+ * fileURLToPath — existsSync does not accept file:// URL STRINGS, which
+ * silently disabled the installed-package path (the Rust engine never
+ * actually ran from a deployed profile until this was fixed).
+ */
 export function engineBinary(): string | undefined {
   if (cachedBinary !== null) return cachedBinary ?? undefined
+  const here = fileURLToPath(import.meta.url)
   const candidates = [
     join(process.cwd(), 'engine', 'target', 'release', 'kiro-toold'),
-    // When the package is installed as a dependency the engine ships beside lib/.
-    join(import.meta.url.replace(/[^/]*$/, ''), '..', '..', 'engine', 'target', 'release', 'kiro-toold'),
+    join(here.replace(/[^/]*$/, ''), '..', '..', 'engine', 'target', 'release', 'kiro-toold'),
   ]
   cachedBinary = candidates.find((path) => existsSync(path)) ?? null
   return cachedBinary ?? undefined
