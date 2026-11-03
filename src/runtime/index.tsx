@@ -25,6 +25,9 @@ import { createQuestionAnswerer } from './question-answerer'
 import type { ApprovalOutcomeLike, ApprovalRequestLike } from './approval-answerer'
 import { routeTurnInput } from './turn-input'
 import { detectEffortHint, resolveAutoEffort } from './effort-keywords'
+import { KiroLoopDriver } from './kiro-loop'
+import { composeSteeringPrompt } from '../steering/index'
+import type { SteeringFile } from '../steering/loader'
 import { contextWindowOf } from './model-catalog'
 import { formatFileMention } from '@deepseek-ai/dsh-file-reference/grammar'
 import type { LocalFileReferenceService } from '@deepseek-ai/dsh-file-reference-local'
@@ -148,7 +151,8 @@ async function mount(ctx: Context, startup: KiroStartup): Promise<void> {
   ctx.provide('kiroEffortControl', effortControl)
   ctx.provide('kiroInterrupt', {
     cancel(): void {
-      try {
+      loopDriver.cancel()
+          try {
         agentRef.current?.cancel({ kind: 'user' })
       } catch {
         // already idle or already cancelled — no-op
@@ -254,6 +258,45 @@ async function mount(ctx: Context, startup: KiroStartup): Promise<void> {
   // the status bar (e.g. /model <provider>/<model> after persisting the new
   // selection) without needing a back-reference to this closure.
   ctx.provide('kiroController', controller)
+
+  // kiro-loop (P1): dsh-kiro's own turn driver, selectable per session with
+  // /loop kiro|dsh. Text-only for now; the platform ctx.tools seam verified
+  // by the P0 probe lands in P2/P3 behind the same driver.
+  const loopDriver = new KiroLoopDriver({
+    ctx,
+    controller: { ingestEvent: (event) => controller.ingestEvent(event) },
+    systemPrompt: () => {
+      const steering = (ctx as unknown as { get?: <T>(key: string) => T | undefined }).get?.('kiroSteering') as
+        | { applicable?: readonly SteeringFile[] }
+        | undefined
+      const steeringText = composeSteeringPrompt(steering?.applicable ?? [])
+      return [
+        'You are a coding agent running inside the Kiro TUI for DeepSeek Harness.',
+        `Your working directory is ${process.cwd()}.`,
+        ...(steeringText !== '' ? ['', steeringText] : []),
+      ].join('\n')
+    },
+    selection: () => ({
+      provider: selected.current?.provider ?? 'deepseek',
+      model: selected.current?.model ?? 'deepseek-chat',
+      reasoningEffort: effortControl.current(),
+    }),
+  })
+  let loopMode: 'dsh' | 'kiro' = 'dsh'
+  ctx.provide('kiroLoopMode', {
+    get(): 'dsh' | 'kiro' { return loopMode },
+    set(next: 'dsh' | 'kiro'): string {
+      if (next === loopMode) return `当前已是 ${next} loop。`
+      loopMode = next
+      if (next === 'kiro') {
+        // Continue the conversation: seed the driver from the transcript.
+        loopDriver.seed(controller.getState().messages.map((m) => ({ kind: m.kind as string, text: m.text })))
+      }
+      return next === 'kiro'
+        ? '已切换到 kiro-loop（dsh-kiro 自研驱动，P1：纯对话）。'
+        : '已切换回 DSH 平台 loop。'
+    },
+  })
 
   // Bridge to sessionQuery.readSession for slash commands: calling the
   // engine through an agent-scoped ctx.get goes through a cordis shadow
@@ -463,6 +506,15 @@ async function mount(ctx: Context, startup: KiroStartup): Promise<void> {
           source: { kind: 'plugin', plugin: 'kiro-knowledge' },
         }))
       }
+    }
+    // kiro-loop mode: the turn runs through our own driver (P1 text-only).
+    if (loopMode === 'kiro') {
+      if (loopDriver.busy) {
+        controller.pushSystem('kiro-loop 正在回复中；Ctrl+C 取消后再发。')
+        return
+      }
+      void loopDriver.runTurn(trimmed)
+      return
     }
     const message = createUserMessage({
       content: [{ type: 'text', text: trimmed }],

@@ -1,0 +1,420 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": {
+    "title": "dsh-kiro 自研 Agent Loop · P2 架构设计",
+    "quality_profile": "showcase",
+    "viewBox": [
+      1680,
+      1000
+    ],
+    "views": [
+      {
+        "id": "turn-path",
+        "label": "一次回合的路径",
+        "focus": [
+          "tui",
+          "switch",
+          "kiroloop",
+          "assemble",
+          "llm",
+          "stream",
+          "dispatch",
+          "rust",
+          "landlock",
+          "project"
+        ],
+        "note": "提交 → 驱动器选择 → 请求组装 → 流式回答 / 工具调用 → Rust 沙箱执行 → 结果回填续跑。"
+      },
+      {
+        "id": "safety",
+        "label": "三层管控",
+        "focus": [
+          "approval",
+          "guardrail",
+          "landlock"
+        ],
+        "note": "toolsSettings 允许/拒绝矩阵 + 审批信任 + 护栏；Rust 层用 Landlock 内核级自限兜底。"
+      },
+      {
+        "id": "kiro-reference",
+        "label": "kiro-cli 参考来源",
+        "focus": [
+          "kiro_ref"
+        ],
+        "note": "参考事实来自开源文档与二进制只读调研，未触碰本机 kiro-cli 安装。"
+      }
+    ]
+  },
+  "components": [
+    {
+      "id": "kiro_ref",
+      "type": "external",
+      "label": "kiro-cli 参考事实",
+      "sublabel": "Amazon Q CLI 内核 · 开源",
+      "pos": [
+        40,
+        150
+      ],
+      "size": [
+        176,
+        72
+      ],
+      "tag": "调研"
+    },
+    {
+      "id": "guardrail",
+      "type": "security",
+      "label": "变更护栏",
+      "sublabel": "生产/仓外先确认",
+      "pos": [
+        470,
+        150
+      ],
+      "size": [
+        150,
+        60
+      ],
+      "tag": "已有"
+    },
+    {
+      "id": "approval",
+      "type": "security",
+      "label": "审批 + toolsSettings",
+      "sublabel": "三粒度信任 · allow/deny 矩阵",
+      "pos": [
+        930,
+        150
+      ],
+      "size": [
+        178,
+        64
+      ],
+      "tag": "P2 增强"
+    },
+    {
+      "id": "project",
+      "type": "database",
+      "label": "工作区",
+      "sublabel": "只许允许路径",
+      "pos": [
+        1390,
+        150
+      ],
+      "size": [
+        140,
+        60
+      ]
+    },
+    {
+      "id": "dshloop",
+      "type": "backend",
+      "label": "DSH agent-loop",
+      "sublabel": "平台循环 · 全工具",
+      "pos": [
+        40,
+        400
+      ],
+      "size": [
+        160,
+        62
+      ],
+      "tag": "保持可用"
+    },
+    {
+      "id": "kiroloop",
+      "type": "backend",
+      "label": "kiro-loop 驱动器",
+      "sublabel": "回合状态机 · P1 已跑通",
+      "pos": [
+        470,
+        400
+      ],
+      "size": [
+        168,
+        66
+      ],
+      "tag": "P2 核心"
+    },
+    {
+      "id": "assemble",
+      "type": "backend",
+      "label": "请求组装",
+      "sublabel": "历史 + steering + 技能",
+      "pos": [
+        700,
+        400
+      ],
+      "size": [
+        150,
+        60
+      ]
+    },
+    {
+      "id": "llm",
+      "type": "cloud",
+      "label": "ctx.llm.stream",
+      "sublabel": "平台 LLM 服务",
+      "pos": [
+        930,
+        400
+      ],
+      "size": [
+        150,
+        60
+      ]
+    },
+    {
+      "id": "rust",
+      "type": "security",
+      "label": "Rust 工具引擎",
+      "sublabel": "JSON-RPC · 单二进制",
+      "pos": [
+        1160,
+        400
+      ],
+      "size": [
+        160,
+        64
+      ],
+      "tag": "P2 新建"
+    },
+    {
+      "id": "landlock",
+      "type": "security",
+      "label": "Landlock 沙箱",
+      "sublabel": "内核级路径自限",
+      "pos": [
+        1390,
+        400
+      ],
+      "size": [
+        158,
+        62
+      ],
+      "tag": "探测已过"
+    },
+    {
+      "id": "tui",
+      "type": "frontend",
+      "label": "dsh-kiro TUI",
+      "sublabel": "转录 · 输入 · 光标",
+      "pos": [
+        40,
+        640
+      ],
+      "size": [
+        150,
+        64
+      ],
+      "tag": "已完成"
+    },
+    {
+      "id": "switch",
+      "type": "backend",
+      "label": "/loop 驱动器开关",
+      "sublabel": "dsh ⇄ kiro",
+      "pos": [
+        240,
+        640
+      ],
+      "size": [
+        150,
+        64
+      ]
+    },
+    {
+      "id": "stream",
+      "type": "messagebus",
+      "label": "流式解析",
+      "sublabel": "text-delta · tool-call",
+      "pos": [
+        930,
+        640
+      ],
+      "size": [
+        158,
+        60
+      ]
+    },
+    {
+      "id": "dispatch",
+      "type": "backend",
+      "label": "工具分发",
+      "sublabel": "tool-call → 执行",
+      "pos": [
+        1160,
+        640
+      ],
+      "size": [
+        160,
+        60
+      ]
+    },
+    {
+      "id": "toolsvc",
+      "type": "backend",
+      "label": "ctx.tools 服务",
+      "sublabel": "平台工具管线",
+      "pos": [
+        1390,
+        640
+      ],
+      "size": [
+        160,
+        60
+      ],
+      "tag": "P0 已验证"
+    }
+  ],
+  "boundaries": [
+    {
+      "kind": "region",
+      "label": "kiro-loop 自研域（dsh-kiro 仓库内）",
+      "wraps": [
+        "kiroloop",
+        "assemble",
+        "stream",
+        "dispatch",
+        "guardrail",
+        "approval"
+      ]
+    },
+    {
+      "kind": "security-group",
+      "label": "平台服务缝（只调用 · 不修改）",
+      "wraps": [
+        "llm",
+        "toolsvc"
+      ]
+    },
+    {
+      "kind": "security-group",
+      "label": "Rust 执行域",
+      "wraps": [
+        "rust",
+        "landlock"
+      ]
+    }
+  ],
+  "connections": [
+    {
+      "from": "tui",
+      "to": "switch",
+      "label": "提交",
+      "labelDy": 16
+    },
+    {
+      "from": "switch",
+      "to": "kiroloop",
+      "label": "/loop kiro"
+    },
+    {
+      "from": "switch",
+      "to": "dshloop",
+      "label": "/loop dsh"
+    },
+    {
+      "from": "kiroloop",
+      "to": "assemble",
+      "label": "开回合"
+    },
+    {
+      "from": "assemble",
+      "to": "llm",
+      "label": "请求"
+    },
+    {
+      "from": "llm",
+      "to": "stream",
+      "label": "流式块",
+      "fromSide": "bottom",
+      "toSide": "top"
+    },
+    {
+      "from": "stream",
+      "to": "dispatch",
+      "label": "tool-call 块",
+      "labelDy": 16
+    },
+    {
+      "from": "dispatch",
+      "to": "rust",
+      "label": "bash / 文件工具",
+      "fromSide": "top",
+      "toSide": "bottom"
+    },
+    {
+      "from": "rust",
+      "to": "landlock",
+      "label": "自限规则集"
+    },
+    {
+      "from": "landlock",
+      "to": "project",
+      "label": "只放行允许路径",
+      "fromSide": "top",
+      "toSide": "bottom"
+    },
+    {
+      "from": "dispatch",
+      "to": "toolsvc",
+      "label": "平台工具"
+    },
+    {
+      "from": "dispatch",
+      "to": "approval",
+      "label": "先过审批"
+    },
+    {
+      "from": "guardrail",
+      "to": "kiroloop",
+      "label": "回合注入",
+      "fromSide": "bottom",
+      "toSide": "top"
+    },
+    {
+      "from": "kiro_ref",
+      "to": "kiroloop",
+      "label": "循环 / 工具面 / 权限参照",
+      "variant": "dashed"
+    },
+    {
+      "from": "stream",
+      "to": "kiroloop",
+      "label": "结果回填 · 续跑",
+      "variant": "dashed"
+    }
+  ],
+  "cards": [
+    {
+      "dot": "cyan",
+      "title": "P2 交付边界",
+      "items": [
+        "kiro-loop 接入工具调用：流中 tool-call 块 → 分发 → 结果回填循环",
+        "Rust 引擎 v1：execute_bash + fs_read / fs_write，Landlock 规则按权限预设生成",
+        "toolsSettings 矩阵：allowed / denied（命令正则锚定、路径 glob、deny 优先）",
+        "/tools rust|dsh 切换；审批与护栏对两种引擎同样生效"
+      ]
+    },
+    {
+      "dot": "amber",
+      "title": "kiro-cli（Amazon Q CLI 内核）调研结论",
+      "items": [
+        "工具面：execute_bash / fs_read / fs_write / use_aws / knowledge / thinking / todo_list / introspect + MCP",
+        "权限：agent 配置 allowedTools + 每工具 toolsSettings（命令正则、路径 glob、autoAllowReadonly、denyByDefault）",
+        "信任：trusted-tools.json；fs_read 默认信任，bash / write 默认审批",
+        "循环：工具结果回填续跑、上下文溢出自动压缩、限流退避重试、停滞流保护、子代理 delegate"
+      ]
+    },
+    {
+      "dot": "emerald",
+      "title": "对你的 WSL 的安全承诺",
+      "items": [
+        "Landlock 是进程自限机制：规则只约束 Rust 引擎自身，内核层面碰不到其它进程与服务",
+        "探测 A 已实测：ABI 3 可用，越界写入被拒（Permission denied）",
+        "涉及你环境的每一步验证，保持「我贴命令 → 你执行 → 我解读」"
+      ]
+    }
+  ]
+}

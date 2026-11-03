@@ -201,6 +201,12 @@ export declare class SessionController {
      * (the preset event precedes our bind), so read the projection too.
      */
     private refreshPermissionPreset;
+    /**
+     * Ingest one synthetic session event (the kiro-loop turn driver fabricates
+     * the same durable shapes the platform loop emits, so the projection and
+     * UI render identically for both drivers).
+     */
+    ingestEvent(event: SessionEvent): void;
     private applyEvent;
     /**
      * Close any tool-call message still marked streaming (a result that never

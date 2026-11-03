@@ -61,8 +61,10 @@
       （registry + filesystem + tool-skill 模型工具）+ kiro-skills provider
       （.kiro/skills 根 + .kiro/skills.json 选择）；/skills 列表与 on|off，
       停用项对模型目录完全不可见
-- ⏸ 自建 agent loop + Rust 工具引擎——P0 探测完成：Landlock ABI 3 可用
-      （WSL 6.6.87.2，自限验证通过）、工具执行缝存在（ctx.tools 公开
-      execute API）；P1（最小 loop）待用户确认后开工
+- ✅ 自建 agent loop P1：kiro-loop 驱动器（纯对话）+ /loop dsh|kiro 切换，
+      合成平台事件形状→同一转录/审批 UI；PT 实测对话与双向切换通过
+- ⏸ 自建 agent loop P2 + Rust 工具引擎——P0 探测通过（Landlock ABI 3、
+      ctx.tools 缝）；kiro-cli（=Amazon Q CLI 开源内核）调研完成，
+      架构设计 HTML 已出（docs/design/kiro-loop-p2.html），待用户确认
 - ⏸ checkpoint / 子代理 UI——**数据驱动放弃**（96 会话 0/2 次使用）
 - ⏸ P1 bash 自动放开——安全降级，不做（B2 的项目级持久化已覆盖需求）

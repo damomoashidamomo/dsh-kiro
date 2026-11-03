@@ -679,6 +679,15 @@ export class SessionController {
     }
   }
 
+  /**
+   * Ingest one synthetic session event (the kiro-loop turn driver fabricates
+   * the same durable shapes the platform loop emits, so the projection and
+   * UI render identically for both drivers).
+   */
+  ingestEvent(event: SessionEvent): void {
+    this.applyEvent(event)
+  }
+
   private applyEvent(event: SessionEvent): void {
     this.refreshContextUsage()
     this.refreshContextUsage()
