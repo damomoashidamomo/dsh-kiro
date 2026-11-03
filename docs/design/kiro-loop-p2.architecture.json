@@ -6,7 +6,7 @@
     "quality_profile": "showcase",
     "viewBox": [
       1680,
-      1000
+      1080
     ],
     "views": [
       {
@@ -22,7 +22,9 @@
           "dispatch",
           "rust",
           "landlock",
-          "project"
+          "project",
+          "compact",
+          "retry"
         ],
         "note": "提交 → 驱动器选择 → 请求组装 → 流式回答 / 工具调用 → Rust 沙箱执行 → 结果回填续跑。"
       },
@@ -265,6 +267,81 @@
         60
       ],
       "tag": "P0 已验证"
+    },
+    {
+      "id": "compact",
+      "type": "backend",
+      "label": "自动压缩",
+      "sublabel": "溢出前摘要历史",
+      "pos": [
+        660,
+        150
+      ],
+      "size": [
+        150,
+        60
+      ],
+      "tag": "P2 新增"
+    },
+    {
+      "id": "retry",
+      "type": "cloud",
+      "label": "重试 · 停滞流保护",
+      "sublabel": "退避重发 · 无块即断",
+      "pos": [
+        930,
+        280
+      ],
+      "size": [
+        162,
+        52
+      ],
+      "tag": "P2 新增"
+    },
+    {
+      "id": "p3_subagent",
+      "type": "backend",
+      "label": "子代理委派",
+      "sublabel": "接 DSH subagent",
+      "pos": [
+        470,
+        880
+      ],
+      "size": [
+        158,
+        56
+      ],
+      "tag": "P3"
+    },
+    {
+      "id": "p3_tools",
+      "type": "backend",
+      "label": "todo · thinking 工具",
+      "sublabel": "平台投影暴露为工具",
+      "pos": [
+        700,
+        880
+      ],
+      "size": [
+        170,
+        56
+      ],
+      "tag": "P3"
+    },
+    {
+      "id": "p3_parallel",
+      "type": "backend",
+      "label": "并行工具分发",
+      "sublabel": "安全工具并发执行",
+      "pos": [
+        960,
+        880
+      ],
+      "size": [
+        162,
+        56
+      ],
+      "tag": "P3"
     }
   ],
   "boundaries": [
@@ -277,7 +354,8 @@
         "stream",
         "dispatch",
         "guardrail",
-        "approval"
+        "approval",
+        "compact"
       ]
     },
     {
@@ -285,7 +363,8 @@
       "label": "平台服务缝（只调用 · 不修改）",
       "wraps": [
         "llm",
-        "toolsvc"
+        "toolsvc",
+        "retry"
       ]
     },
     {
@@ -294,6 +373,15 @@
       "wraps": [
         "rust",
         "landlock"
+      ]
+    },
+    {
+      "kind": "region",
+      "label": "P3 扩展（P2 验收后）",
+      "wraps": [
+        "p3_subagent",
+        "p3_tools",
+        "p3_parallel"
       ]
     }
   ],
@@ -384,6 +472,47 @@
       "to": "kiroloop",
       "label": "结果回填 · 续跑",
       "variant": "dashed"
+    },
+    {
+      "from": "compact",
+      "to": "assemble",
+      "label": "压缩后历史",
+      "fromSide": "bottom",
+      "toSide": "top"
+    },
+    {
+      "from": "retry",
+      "to": "llm",
+      "label": "退避重试",
+      "fromSide": "bottom",
+      "toSide": "top"
+    },
+    {
+      "from": "p3_subagent",
+      "to": "kiroloop",
+      "label": "委派回合",
+      "variant": "dashed",
+      "fromSide": "top",
+      "toSide": "bottom"
+    },
+    {
+      "from": "p3_tools",
+      "to": "dispatch",
+      "label": "内省工具",
+      "variant": "dashed",
+      "fromSide": "top",
+      "toSide": "bottom",
+      "labelDx": -30,
+      "labelDy": 10
+    },
+    {
+      "from": "p3_parallel",
+      "to": "dispatch",
+      "label": "并发调度",
+      "variant": "dashed",
+      "fromSide": "top",
+      "toSide": "bottom",
+      "labelDx": 40
     }
   ],
   "cards": [
@@ -394,7 +523,10 @@
         "kiro-loop 接入工具调用：流中 tool-call 块 → 分发 → 结果回填循环",
         "Rust 引擎 v1：execute_bash + fs_read / fs_write，Landlock 规则按权限预设生成",
         "toolsSettings 矩阵：allowed / denied（命令正则锚定、路径 glob、deny 优先）",
-        "/tools rust|dsh 切换；审批与护栏对两种引擎同样生效"
+        "/tools rust|dsh 切换；审批与护栏对两种引擎同样生效",
+        "自动压缩：usage 逼近窗口 → 摘要压缩历史（kiro-cli/Claude 同款）",
+        "重试 + 停滞流保护：退避重发、10-30s 无块断开重试",
+        "autoAllowReadonly：只读命令（ls/cat/git status 类）免审批"
       ]
     },
     {
@@ -414,6 +546,15 @@
         "Landlock 是进程自限机制：规则只约束 Rust 引擎自身，内核层面碰不到其它进程与服务",
         "探测 A 已实测：ABI 3 可用，越界写入被拒（Permission denied）",
         "涉及你环境的每一步验证，保持「我贴命令 → 你执行 → 我解读」"
+      ]
+    },
+    {
+      "dot": "violet",
+      "title": "P3 扩展（设计已留位，P2 验收后实施）",
+      "items": [
+        "并行工具分发：安全工具并发执行，性能对齐 Claude Code / kiro-cli",
+        "todo · thinking 暴露为 kiro-loop 工具（平台投影已具备）",
+        "子代理委派：接 DSH subagent 服务，对齐 kiro-cli delegate"
       ]
     }
   ]

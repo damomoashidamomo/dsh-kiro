@@ -46,7 +46,7 @@ export const name = 'kiro-runtime'
  * signal: `ctx.inject(['loader'], …)` fires as soon as the Loader itself
  * exists — long before the bundle patches have created the dsh-base rows.
  */
-export const inject = ['kiroStartup', 'agents', 'agentDefaultModel', 'sessions', 'commands', 'llm']
+export const inject = ['kiroStartup', 'agents', 'agentDefaultModel', 'sessions', 'commands', 'llm', 'tools']
 
 /** Mount the Ink render loop once every required service is live. */
 export function apply(ctx: Context): void {
@@ -264,7 +264,7 @@ async function mount(ctx: Context, startup: KiroStartup): Promise<void> {
   // by the P0 probe lands in P2/P3 behind the same driver.
   const loopDriver = new KiroLoopDriver({
     ctx,
-    controller: { ingestEvent: (event) => controller.ingestEvent(event) },
+    controller: { ingestEvent: (event: never) => controller.ingestEvent(event) },
     systemPrompt: () => {
       const steering = (ctx as unknown as { get?: <T>(key: string) => T | undefined }).get?.('kiroSteering') as
         | { applicable?: readonly SteeringFile[] }
@@ -281,6 +281,18 @@ async function mount(ctx: Context, startup: KiroStartup): Promise<void> {
       model: selected.current?.model ?? 'deepseek-chat',
       reasoningEffort: effortControl.current(),
     }),
+    contextWindow: () => {
+      const provider = selected.current?.provider
+      const model = selected.current?.model
+      if (provider === undefined || model === undefined) return undefined
+      try {
+        const settingsCtx = (ctx as unknown as { get?: <T>(key: string) => T | undefined })
+        const piAi = settingsCtx.get?.('settings') as { get?: (ns: string) => unknown } | undefined
+        return contextWindowOf(piAi?.get?.('llm-pi-ai') as never, provider, model)
+      } catch {
+        return undefined
+      }
+    },
   })
   let loopMode: 'dsh' | 'kiro' = 'dsh'
   ctx.provide('kiroLoopMode', {

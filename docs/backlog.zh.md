@@ -63,8 +63,11 @@
       停用项对模型目录完全不可见
 - ✅ 自建 agent loop P1：kiro-loop 驱动器（纯对话）+ /loop dsh|kiro 切换，
       合成平台事件形状→同一转录/审批 UI；PT 实测对话与双向切换通过
-- ⏸ 自建 agent loop P2 + Rust 工具引擎——P0 探测通过（Landlock ABI 3、
-      ctx.tools 缝）；kiro-cli（=Amazon Q CLI 开源内核）调研完成，
-      架构设计 HTML 已出（docs/design/kiro-loop-p2.html），待用户确认
+- ✅ 自建 agent loop P2（Node 侧）：完整工具循环（tool-call 解析 →
+      toolsSettings 预检 → ctx.tools 执行 → 结果回填续跑）、退避重试 +
+      停滞流保护、上下文自动压缩；实测模型调 read 工具并原样返回文件内容
+- ⏸ Rust 工具引擎（P2 后半）：架构已定（docs/design/kiro-loop-p2.html
+      v2 含 P3 扩展区）；本机无 Rust 工具链，待用户批准安装 rustup
+- ⏸ P3 扩展：并行工具分发 / todo·thinking 工具 / 子代理委派（设计留位）
 - ⏸ checkpoint / 子代理 UI——**数据驱动放弃**（96 会话 0/2 次使用）
 - ⏸ P1 bash 自动放开——安全降级，不做（B2 的项目级持久化已覆盖需求）
