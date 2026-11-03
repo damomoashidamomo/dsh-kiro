@@ -57,9 +57,14 @@ export declare class KiroLoopDriver {
     private history;
     private abort;
     private settings;
+    /** Tool engine preference (/tools rust|dsh); rust needs engineBinary(). */
+    engine: 'dsh' | 'rust';
+    workspaceRoot: string;
     constructor(deps: LoopDriverDeps);
     /** Reload `.kiro/tools.json` (after the user edits the matrix). */
     reloadSettings(): void;
+    /** Whether the Rust engine binary is available right now. */
+    engineAvailable(): boolean;
     /** Seed the chat history from already-rendered transcript messages. */
     seed(messages: readonly {
         kind: string;

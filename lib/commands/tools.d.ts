@@ -1,10 +1,11 @@
 /**
- * `/tools` — list every built-in tool, show current trust status, and mutate
- * the trust store (trust / untrust / reset).
+ * `/tools` — choose the tool EXECUTION engine for the kiro-loop:
+ *   dsh  — the platform pipeline (default; sandbox + approvals inside ctx.tools)
+ *   rust — the kiro-toold Rust engine: one freshly Landlock-sandboxed
+ *          process per call (bash / fs_read / fs_write; everything else
+ *          still goes through the platform pipeline).
  *
- * Implementation note: phase 3 only mutates the TrustStore; the agent's
- * `agent/pre-step` interception that enforces trust lands in phase 4. Until
- * then the store records the user's intent and surfaces it back to them.
+ * @module @damomoashidamomo/dsh-kiro/commands/tools
  */
 import type { CommandDefinition } from '@deepseek-ai/dsh-commands';
 export declare const toolsCommand: CommandDefinition;

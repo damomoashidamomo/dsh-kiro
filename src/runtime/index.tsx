@@ -295,6 +295,21 @@ async function mount(ctx: Context, startup: KiroStartup): Promise<void> {
     },
   })
   let loopMode: 'dsh' | 'kiro' = 'dsh'
+  ctx.provide('kiroToolEngine', {
+    get(): 'dsh' | 'rust' { return loopDriver.engine },
+    set(next: 'dsh' | 'rust'): string {
+      if (next === 'rust' && !loopDriver.engineAvailable()) {
+        return 'Rust 引擎未构建：先在仓库执行 pnpm build:engine（engine/target/release/kiro-toold）。'
+      }
+      loopDriver.engine = next
+      loopDriver.workspaceRoot = process.cwd()
+      return next === 'rust'
+        ? '工具引擎已切到 Rust（Landlock 沙箱，bash/read/write 走引擎，其余走平台）。'
+        : '工具引擎已切回 DSH 平台管线。'
+    },
+    available(): boolean { return loopDriver.engineAvailable() },
+  })
+
   ctx.provide('kiroLoopMode', {
     get(): 'dsh' | 'kiro' { return loopMode },
     set(next: 'dsh' | 'kiro'): string {

@@ -66,8 +66,10 @@
 - ✅ 自建 agent loop P2（Node 侧）：完整工具循环（tool-call 解析 →
       toolsSettings 预检 → ctx.tools 执行 → 结果回填续跑）、退避重试 +
       停滞流保护、上下文自动压缩；实测模型调 read 工具并原样返回文件内容
-- ⏸ Rust 工具引擎（P2 后半）：架构已定（docs/design/kiro-loop-p2.html
-      v2 含 P3 扩展区）；本机无 Rust 工具链，待用户批准安装 rustup
+- ✅ Rust 工具引擎（P2 完成）：engine/kiro-toold（execute_bash + fs_read +
+      fs_write），进程启动即 Landlock 自限（只许写工作区+/tmp，全盘只读），
+      每次调用新进程；/tools rust|dsh 切换；实测内核级拒绝越界写入、
+      模型经引擎完成 bash 工具往返
 - ⏸ P3 扩展：并行工具分发 / todo·thinking 工具 / 子代理委派（设计留位）
 - ⏸ checkpoint / 子代理 UI——**数据驱动放弃**（96 会话 0/2 次使用）
 - ⏸ P1 bash 自动放开——安全降级，不做（B2 的项目级持久化已覆盖需求）

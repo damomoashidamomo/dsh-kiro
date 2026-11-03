@@ -1,6 +1,6 @@
 {
   "name": "@damomoashidamomo/dsh-kiro",
-  "version": "0.5.24",
+  "version": "0.5.25",
   "description": "Kiro-CLI equivalent TUI bundle for DeepSeek Harness — rich terminal UI with markdown rendering, slash commands, custom agents, MCP, LSP, checkpointing and knowledge base. Dark-green themed.",
   "type": "module",
   "main": "lib/index.js",
@@ -55,7 +55,8 @@
     "lib/**/*.d.ts",
     "cordis.patch.yml",
     "README.md",
-    "README.zh.md"
+    "README.zh.md",
+    "engine/target/release/kiro-toold"
   ],
   "engines": {
     "node": ">=22"
@@ -71,7 +72,8 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "clean": "rm -rf lib *.tsbuildinfo",
-    "e2e": "python3 -m unittest discover -s scripts/e2e -v"
+    "e2e": "python3 -m unittest discover -s scripts/e2e -v",
+    "build:engine": "cargo build --release --manifest-path engine/Cargo.toml"
   },
   "dependencies": {
     "@damomoashidamomo/dsh-kiro": "file:/home/gary/deepseek harness work zone/dsh-kiro",

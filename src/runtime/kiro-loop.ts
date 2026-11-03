@@ -25,6 +25,7 @@
 import type { Context } from '@deepseek-ai/cordis'
 import { classifyTurnFailure } from './turn-failure'
 import { loadToolsSettings, verdictFor } from './tool-settings'
+import { toEngineCall, runEngineCall, engineBinary } from '../engine/bridge'
 
 /** Minimal chat message the driver keeps. */
 export interface LoopMessage {
@@ -76,12 +77,20 @@ export class KiroLoopDriver {
   private history: LoopMessage[] = []
   private abort: AbortController | undefined
   private settings = loadToolsSettings()
+  /** Tool engine preference (/tools rust|dsh); rust needs engineBinary(). */
+  engine: 'dsh' | 'rust' = 'dsh'
+  workspaceRoot = process.cwd()
 
   constructor(private readonly deps: LoopDriverDeps) {}
 
   /** Reload `.kiro/tools.json` (after the user edits the matrix). */
   reloadSettings(): void {
     this.settings = loadToolsSettings()
+  }
+
+  /** Whether the Rust engine binary is available right now. */
+  engineAvailable(): boolean {
+    return engineBinary() !== undefined
   }
 
   /** Seed the chat history from already-rendered transcript messages. */
@@ -262,6 +271,21 @@ export class KiroLoopDriver {
     const verdict = verdictFor(this.settings, call.name, args)
     if (verdict === 'deny') {
       return { toolCallId: call.id, content: 'denied by workspace toolsSettings (.kiro/tools.json)', isError: true }
+    }
+    // Rust engine path (/tools rust): a freshly Landlock-sandboxed process
+    // per call; anything the engine cannot serve falls through to the
+    // platform pipeline below.
+    if (this.engine === 'rust') {
+      const engineCall = toEngineCall(call.name, args)
+      if (engineCall !== undefined) {
+        const reply = await runEngineCall(engineCall, this.workspaceRoot)
+        if (reply.ok) {
+          return { toolCallId: call.id, content: JSON.stringify(reply.result ?? {}), isError: false }
+        }
+        if (!String(reply.error ?? '').includes('engine binary not built')) {
+          return { toolCallId: call.id, content: `rust engine: ${String(reply.error ?? 'failed')}`, isError: true }
+        }
+      }
     }
     const tools = this.tools
     if (tools === undefined) {
