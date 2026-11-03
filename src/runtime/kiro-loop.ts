@@ -71,6 +71,9 @@ const MAX_STEPS = 24
 const MAX_RETRIES = 2
 const STALL_MS = 25000
 const COMPACT_AT = 0.8
+const PARALLEL_LIMIT = 4
+/** Read-only tools that may overlap within one round (P3 parallel dispatch). */
+const PARALLEL_SAFE = new Set(['read', 'fs_read', 'read_file', 'grep', 'glob', 'ls', 'web_search', 'kiro_think'])
 
 /** One turn driver instance per mode switch. */
 export class KiroLoopDriver {
@@ -136,24 +139,7 @@ export class KiroLoopDriver {
         emit({ type: 'assistant/message', seq: 2, data: { message: { content: [{ type: 'text', text }] } } })
         if (finish !== 'tool-calls' || toolCalls.length === 0) break
 
-        const results: Array<{ toolCallId: string; content: string; isError: boolean }> = []
-        for (const call of toolCalls) {
-          emit({ type: 'tool/call', seq: 4, data: { turn: 1, step, callId: call.id, name: call.name, arguments: call.arguments } })
-          const result = await this.executeTool(call)
-          results.push(result)
-          emit({
-            type: 'tool/result',
-            seq: 5,
-            data: {
-              turn: 1,
-              step,
-              message: {
-                role: 'user',
-                content: [{ type: 'tool-result', toolCallId: call.id, content: [{ type: 'text', text: result.content }] }],
-              },
-            },
-          })
-        }
+        const results = await this.executeCalls(toolCalls, step, emit)
         this.history.push({ role: 'user', text: '', toolResults: results })
       }
       emit({ type: 'turn/end', seq: 9, data: { reason: { kind: 'completed' } } })
@@ -306,6 +292,60 @@ export class KiroLoopDriver {
       const message = error instanceof Error ? error.message : String(error)
       return { toolCallId: call.id, content: `tool error: ${message}`, isError: true }
     }
+  }
+
+  /**
+   * Execute one round's tool calls. When every call is read-only-safe
+   * (P3 parallel dispatch, capped at 4 in flight) the round overlaps —
+   * matches how Claude Code / kiro-cli fan out independent reads. Any
+   * mutating call (bash / write / edit...) forces the whole round sequential.
+   */
+  private async executeCalls(
+    calls: readonly { id: string; name: string; arguments: string }[],
+    step: number,
+    emit: (event: unknown) => void,
+  ): Promise<Array<{ toolCallId: string; content: string; isError: boolean }>> {
+    const emitCall = (call: { id: string; name: string; arguments: string }): void => {
+      emit({ type: 'tool/call', seq: 4, data: { turn: 1, step, callId: call.id, name: call.name, arguments: call.arguments } })
+    }
+    const emitResult = (callId: string, result: { content: string }): void => {
+      emit({
+        type: 'tool/result',
+        seq: 5,
+        data: {
+          turn: 1,
+          step,
+          message: {
+            role: 'user',
+            content: [{ type: 'tool-result', toolCallId: callId, content: [{ type: 'text', text: result.content }] }],
+          },
+        },
+      })
+    }
+    const runOne = async (call: { id: string; name: string; arguments: string }): Promise<{ toolCallId: string; content: string; isError: boolean }> => {
+      emitCall(call)
+      const result = await this.executeTool(call)
+      emitResult(call.id, result)
+      return result
+    }
+
+    const parallelizable = calls.length > 1
+      && calls.every((call) => PARALLEL_SAFE.has(call.name))
+      && this.engine !== 'rust' // one sandboxed engine process at a time
+    if (!parallelizable) {
+      const results: Array<{ toolCallId: string; content: string; isError: boolean }> = []
+      for (const call of calls) results.push(await runOne(call))
+      return results
+    }
+    const batches: typeof calls[] = []
+    for (let i = 0; i < calls.length; i += PARALLEL_LIMIT) {
+      batches.push(calls.slice(i, i + PARALLEL_LIMIT))
+    }
+    const results: Array<{ toolCallId: string; content: string; isError: boolean }> = []
+    for (const batch of batches) {
+      results.push(...await Promise.all(batch.map((call) => runOne(call))))
+    }
+    return results
   }
 
   /** Compact history when usage exceeds COMPACT_AT of the declared window. */

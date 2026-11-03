@@ -26,6 +26,7 @@ import type { ApprovalOutcomeLike, ApprovalRequestLike } from './approval-answer
 import { routeTurnInput } from './turn-input'
 import { detectEffortHint, resolveAutoEffort } from './effort-keywords'
 import { KiroLoopDriver } from './kiro-loop'
+import { registerLoopTools } from './loop-tools'
 import { composeSteeringPrompt } from '../steering/index'
 import type { SteeringFile } from '../steering/loader'
 import { contextWindowOf } from './model-catalog'
@@ -295,6 +296,13 @@ async function mount(ctx: Context, startup: KiroStartup): Promise<void> {
     },
   })
   let loopMode: 'dsh' | 'kiro' = 'dsh'
+  // P3: kiro-loop owned tools (todo checklist + thinking scratchpad), wired
+  // straight into the controller so BOTH loops get the kiro-cli tool surface.
+  const disposeLoopTools = registerLoopTools(ctx, {
+    controller: { ingestEvent: (event: never) => controller.ingestEvent(event) },
+  })
+  ctx.on('dispose' as never, (() => disposeLoopTools()) as never)
+
   ctx.provide('kiroToolEngine', {
     get(): 'dsh' | 'rust' { return loopDriver.engine },
     set(next: 'dsh' | 'rust'): string {

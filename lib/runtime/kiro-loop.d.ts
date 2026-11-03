@@ -82,6 +82,13 @@ export declare class KiroLoopDriver {
     private streamOnce;
     /** toolsSettings verdict -> platform execute (or a synthesized refusal). */
     private executeTool;
+    /**
+     * Execute one round's tool calls. When every call is read-only-safe
+     * (P3 parallel dispatch, capped at 4 in flight) the round overlaps —
+     * matches how Claude Code / kiro-cli fan out independent reads. Any
+     * mutating call (bash / write / edit...) forces the whole round sequential.
+     */
+    private executeCalls;
     /** Compact history when usage exceeds COMPACT_AT of the declared window. */
     private maybeCompact;
     /** One extra LLM call that summarizes the head of the history. */
