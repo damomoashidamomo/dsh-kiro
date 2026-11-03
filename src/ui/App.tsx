@@ -58,6 +58,16 @@ function approvalDiff(state: SessionRenderState, toolName: string): readonly Dif
   return undefined
 }
 
+/** Fuzzy-filter command candidates with the same Fuse config the popup uses. */
+function fuseSearch<T extends { label: string; hint?: string }>(items: readonly T[], query: string): T[] {
+  const q = query.toLowerCase()
+  const scored = items
+    .map((item) => ({ item, score: item.label.toLowerCase().includes(q) ? 0 : (item.hint ?? '').toLowerCase().includes(q) ? 1 : 2 }))
+    .filter((row) => row.score < 2)
+  scored.sort((a, b) => a.score - b.score)
+  return scored.map((row) => row.item)
+}
+
 export interface AppProps {
   /**
    * Workspace `@`-mention lookup (platform fileReferences service):
@@ -82,7 +92,7 @@ export function App({ controller, seedTask, activeAgentName, onSubmit, fileSearc
   /** Submitted drafts, ↑/↓ recall (oldest first). */
   const [submitHistory, setSubmitHistory] = useState<readonly string[]>([])
   const [atItems, setAtItems] = useState<readonly AutocompleteItem[]>([])
-  const [atInsert, setAtInsert] = useState<{ token: string; insert: string; seq: number } | undefined>(undefined)
+  const [atInsert, setAtInsert] = useState<{ token: string; insert: string; seq: number; clearAll?: boolean } | undefined>(undefined)
   const insertSeq = useRef(0)
 
   // @-mention candidates: debounced workspace lookup while the @ popup is up.
@@ -321,17 +331,34 @@ export function App({ controller, seedTask, activeAgentName, onSubmit, fileSearc
             if (prefix === '/' && prefixQuery.includes(' ')) {
               onSubmit(`/${prefixQuery.trim()}`)
             } else {
+              // '/' picker: submit the HIGHLIGHTED command (arrow keys move
+              // autocompleteSelected via onAutocompleteMove).
               const items = slashCandidates(ALL_COMMANDS.map((c) => ({ name: c.name, description: c.description })))
-              const visible = items.slice(autocompleteSelected, autocompleteSelected + 1)
-              if (visible[0] !== undefined) {
-                onSubmit(visible[0].insert)
+              const filtered = prefixQuery === ''
+                ? items
+                : fuseSearch(items, prefixQuery)
+              const pick = filtered[autocompleteSelected] ?? filtered[0]
+              if (pick !== undefined) {
+                // insert is the BARE name; commands submit with the '/' prefix.
+                onSubmit(`/${pick.insert}`)
+                // The popup owned the Enter key (not the prompt's submit path),
+                // so clear the draft through the insert channel.
+                insertSeq.current += 1
+                setAtInsert({ token: '', insert: '', seq: insertSeq.current, clearAll: true })
               }
             }
             setPrefix(undefined)
             setPrefixQuery('')
           }}
           pendingInsert={atInsert}
-          autocompleteActive={prefix === '@' && !slashMenuOpen && !prefixQuery.includes(' ') && atItems.length > 0}
+          autocompleteActive={
+            !slashMenuOpen
+            && (
+              (prefix === '/')
+              || (prefix === '@' && !prefixQuery.includes(' ') && atItems.length > 0)
+            )
+          }
+          popupOpen={prefix !== undefined && !slashMenuOpen}
         />
       )}
       {prefix === '/' && !slashMenuOpen ? (

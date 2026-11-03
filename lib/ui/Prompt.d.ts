@@ -37,12 +37,19 @@ export interface PromptProps {
         readonly token: string;
         readonly insert: string;
         readonly seq: number;
+        readonly clearAll?: boolean;
     } | undefined;
     /**
      * An autocomplete popup is open: Enter commits the highlighted entry
      * instead of submitting the draft (kiro-style).
      */
     readonly autocompleteActive?: boolean;
+    /**
+     * True while an autocomplete popup renders BELOW the prompt: the real
+     * caret must not be positioned then (the jump targets the frame's last
+     * line, which is the popup's border, and the cursor would sit there).
+     */
+    readonly popupOpen?: boolean;
 }
 /** Render the prompt input row. */
-export declare function Prompt({ busy, contextPct, contextApprox, placeholder, onSubmit, onPrefix, history, onAutocompleteMove, onAutocompleteCommit, pendingInsert, autocompleteActive, }: PromptProps): JSX.Element;
+export declare function Prompt({ busy, contextPct, contextApprox, popupOpen, placeholder, onSubmit, onPrefix, history, onAutocompleteMove, onAutocompleteCommit, pendingInsert, autocompleteActive, }: PromptProps): JSX.Element;

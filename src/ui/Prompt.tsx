@@ -51,12 +51,18 @@ export interface PromptProps {
    * trailing query token is replaced by `insert` plus a space. Bumping the
    * seq applies it once; the same seq is ignored.
    */
-  readonly pendingInsert?: { readonly token: string; readonly insert: string; readonly seq: number } | undefined
+  readonly pendingInsert?: { readonly token: string; readonly insert: string; readonly seq: number; readonly clearAll?: boolean } | undefined
   /**
    * An autocomplete popup is open: Enter commits the highlighted entry
    * instead of submitting the draft (kiro-style).
    */
   readonly autocompleteActive?: boolean
+  /**
+   * True while an autocomplete popup renders BELOW the prompt: the real
+   * caret must not be positioned then (the jump targets the frame's last
+   * line, which is the popup's border, and the cursor would sit there).
+   */
+  readonly popupOpen?: boolean
 }
 
 /** Render the prompt input row. */
@@ -64,6 +70,7 @@ export function Prompt({
   busy,
   contextPct,
   contextApprox,
+  popupOpen,
   placeholder,
   onSubmit,
   onPrefix,
@@ -82,6 +89,10 @@ export function Prompt({
   useEffect(() => {
     if (pendingInsert === undefined || pendingInsert.seq === lastInsertSeq.current) return
     lastInsertSeq.current = pendingInsert.seq
+    if (pendingInsert.clearAll === true) {
+      setBuffer(prev => ({ ...prev, text: '', cursor: 0 }))
+      return
+    }
     setBuffer(prev => {
       const text = applyMentionInsert(prev.text, pendingInsert.token, pendingInsert.insert)
       return { ...prev, text, cursor: text.length }
@@ -279,7 +290,9 @@ export function Prompt({
     }
     acc += w
   }
-  ;(globalThis as { __kiroCaret?: { up: number; col: number } }).__kiroCaret = { up: caretUp, col: caretCol }
+  ;(globalThis as { __kiroCaret?: { up: number; col: number } }).__kiroCaret = popupOpen === true
+    ? undefined
+    : { up: caretUp, col: caretCol }
   useEffect(() => () => {
     // When an overlay replaces the Prompt, its stale caret must not keep
     // pulling the terminal cursor to a line that no longer exists.
