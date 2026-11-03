@@ -1,6 +1,6 @@
 {
   "name": "@damomoashidamomo/dsh-kiro",
-  "version": "0.5.11",
+  "version": "0.5.15",
   "description": "Kiro-CLI equivalent TUI bundle for DeepSeek Harness — rich terminal UI with markdown rendering, slash commands, custom agents, MCP, LSP, checkpointing and knowledge base. Dark-green themed.",
   "type": "module",
   "main": "lib/index.js",
@@ -46,7 +46,8 @@
     "./ui/ProgressOverlay": "./lib/ui/ProgressOverlay.js",
     "./cordis.patch.yml": "./cordis.patch.yml",
     "./package.json": "./package.json",
-    "./guardrail": "./lib/guardrail/index.js"
+    "./guardrail": "./lib/guardrail/index.js",
+    "./skills": "./lib/skills/index.js"
   },
   "files": [
     "lib/**/*.js",
@@ -77,6 +78,7 @@
     "@deepseek-ai/dsh-file-reference": "file:/home/gary/.npm-global/lib/node_modules/@deepseek-ai/dsh/node_modules/@deepseek-ai/dsh-file-reference",
     "@deepseek-ai/dsh-file-reference-local": "file:/home/gary/.npm-global/lib/node_modules/@deepseek-ai/dsh/node_modules/@deepseek-ai/dsh-file-reference-local",
     "@deepseek-ai/dsh-hook-protocol": "0.1.2-rc.1",
+    "@deepseek-ai/dsh-tool-skill": "0.1.5-rc.2",
     "@deepseek-ai/dsh-user-questions": "0.1.2-rc.1",
     "chalk": "^5.3.0",
     "cli-highlight": "^2.1.11",
@@ -101,7 +103,7 @@
     "@deepseek-ai/dsh-commands": "0.1.2-rc.1",
     "@deepseek-ai/dsh-llm": "0.1.2-rc.1",
     "@deepseek-ai/dsh-session": "0.1.2-rc.1",
-    "@deepseek-ai/dsh-skill": "0.1.2-rc.1",
+    "@deepseek-ai/dsh-skill": "0.1.5-rc.2",
     "@types/node": "^22.7.0",
     "@types/react": "^18.3.5",
     "ink-testing-library": "^4.0.0",

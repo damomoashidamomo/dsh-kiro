@@ -103,20 +103,10 @@ export function loadSteeringFiles(): SteeringFile[] {
       // unreadable README: skip
     }
   }
-  for (const skillsDir of [join(process.cwd(), '.kiro', 'skills'), join(homedir(), '.kiro', 'skills')]) {
-    const source: SteeringSource = skillsDir.includes(homedir()) ? 'user' : 'project'
-    if (!existsSync(skillsDir)) continue
-    for (const entry of readdirSync(skillsDir).sort()) {
-      const skill = join(skillsDir, entry, 'SKILL.md')
-      if (!existsSync(skill) || !statSync(skill).isFile()) continue
-      try {
-        const parsed = parseOne(skill, source)
-        out.push({ ...parsed, name: `skill:${parsed.name}`, description: parsed.description !== '' ? parsed.description : '技能清单条目' })
-      } catch {
-        continue
-      }
-    }
-  }
+  // NOTE: .kiro/skills/*/SKILL.md moved OFF the static steering injection —
+  // skills now flow through the platform ctx.skills registry (dsh-skill +
+  // kiro-skills provider + dsh-tool-skill's on-demand `skill` tool), with
+  // /skills selection. Static heads here would double every skill.
   const sources: ReadonlyArray<readonly [SteeringSource, string]> = [
     ['project', join(process.cwd(), '.kiro', 'steering')],
     ['user', join(homedir(), '.kiro', 'steering')],

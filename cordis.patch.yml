@@ -104,3 +104,15 @@
     # Tangent (side-conversation) mode. Owns tangent lifecycle.
     - id: kiro-tangent
       name: '@damomoashidamomo/dsh-kiro/tangent'
+
+# ── kiro skills provider ─────────────────────────────────────────────────────
+# dsh-base already mounts the whole skill subsystem (dsh-skill registry,
+# filesystem provider scanning .dsh/.agents, tool-skill's model tool).
+# kiro-skills ADDS the .kiro/skills roots and the /skills selection file
+# (.kiro/skills.json) — disabled skills are filtered at provider-list time,
+# so neither the model catalog nor user commands ever see them.
+    # kiro skills provider: adds the .kiro/skills roots and the /skills
+    # selection file on top of dsh-base's skill subsystem (registry +
+    # filesystem provider + tool-skill already mounted there).
+    - id: kiro-skills
+      name: '@damomoashidamomo/dsh-kiro/skills'

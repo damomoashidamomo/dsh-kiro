@@ -55,7 +55,14 @@
 - ✅ logo 眨眼（B-10）：启动时 tagline 分隔符在 live 区闪 4 次后冻结 Static
 - ✅ Prompt 输入归并（T-8）：多字节折叠 foldInputChunk 抽入 runtime/input
 - ✅ UI 文案目录（T-4 最小集）：ui/strings.ts 收口常驻界面文案
-- ⏸ Editor 面板化（B-4b）——外部 $EDITOR 已可用，TUI 内置多行编辑器
-      体量大，待确认是否值得
+- ⏸ Editor 面板化（B-4b）——**用户确认不做**：外部 $EDITOR + 8KB 粘贴
+      落盘已覆盖长提示场景
+- ✅ Skill 平台联动 + 选择性加载（用户需求）：dsh-base 的 skill 子系统
+      （registry + filesystem + tool-skill 模型工具）+ kiro-skills provider
+      （.kiro/skills 根 + .kiro/skills.json 选择）；/skills 列表与 on|off，
+      停用项对模型目录完全不可见
+- ⏸ 自建 agent loop + Rust 工具引擎——P0 探测完成：Landlock ABI 3 可用
+      （WSL 6.6.87.2，自限验证通过）、工具执行缝存在（ctx.tools 公开
+      execute API）；P1（最小 loop）待用户确认后开工
 - ⏸ checkpoint / 子代理 UI——**数据驱动放弃**（96 会话 0/2 次使用）
 - ⏸ P1 bash 自动放开——安全降级，不做（B2 的项目级持久化已覆盖需求）

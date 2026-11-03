@@ -39,6 +39,7 @@ import { codeCommand } from './code'
 import { pasteCommand } from './paste'
 import { retryCommand } from './retry'
 import { doctorCommand } from './doctor'
+import { skillsCommand } from './skills'
 
 /** Catalog of all slash commands shipped with dsh-kiro. */
 export const ALL_COMMANDS: readonly CommandDefinition[] = [
@@ -74,6 +75,7 @@ export const ALL_COMMANDS: readonly CommandDefinition[] = [
   pasteCommand,
   retryCommand,
   doctorCommand,
+  skillsCommand,
 ]
 
 /** Grouping for the slash-menu rendering. */
