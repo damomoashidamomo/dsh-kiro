@@ -138,7 +138,11 @@ export function Prompt({
     const prefix = detectPrefix(buffer.text)
     const query = prefix !== undefined ? buffer.text.slice(1) : ''
     onPrefix?.(prefix, query)
-  }, [buffer.text, onPrefix])
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- onPrefix is an
+    // inline arrow from App (new identity EVERY render); depending on it
+    // re-ran this effect after every state change and reset the autocomplete
+    // selection — the '/' popup highlight "flashed but never moved".
+  }, [buffer.text])
 
   useInput((input, key) => {
     // Backspace / delete handling must run BEFORE the modifier shortcuts
