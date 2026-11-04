@@ -185,6 +185,8 @@ export declare class SessionController {
     private publishStreaming;
     /** Replay mode: applyEvent must not publish per event (see replayEvents). */
     private replaying;
+    /** C1: called after every turn/end (auto-checkpoint, set by the runtime). */
+    turnEndHook: (() => void) | undefined;
     /** Notify subscribers of a state change. */
     private publish;
     /** Apply one session event. */

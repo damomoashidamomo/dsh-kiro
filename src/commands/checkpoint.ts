@@ -49,6 +49,11 @@ function resolveService(agentCtx: unknown): CheckpointService | { error: string 
   if (typeof get !== 'function') {
     return { error: 'agent context does not expose a get() method' }
   }
+  // Prefer the in-process instance stashed by the plugin: ctx.get through
+  // agent scopes returns a shadow proxy whose detached methods lose `this`
+  // (the sessionQuery/llm trap) — snapshots silently misbehaved.
+  const direct = (globalThis as { __kiroCheckpointManager?: CheckpointManager }).__kiroCheckpointManager
+  if (direct !== undefined) return direct as CheckpointManager as CheckpointService
   const svc = get.call(agentCtx, 'kiroCheckpoint')
   if (svc === undefined) {
     return { error: 'kiroCheckpoint service is not mounted; run /checkpoint init first' }

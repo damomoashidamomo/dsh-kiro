@@ -19,6 +19,10 @@ export const name = 'kiro-checkpoint'
 export function apply(ctx: Context): void {
   const manager = new CheckpointManager(process.cwd())
   ctx.provide(KIRO_CHECKPOINT, manager)
+  // Direct instance stash: ctx.get through other scopes hands out a shadow
+  // proxy whose detached methods lose `this` (the sessionQuery/llm trap) —
+  // the runtime's auto-snapshot hook reads this instead.
+  ;(globalThis as { __kiroCheckpointManager?: CheckpointManager }).__kiroCheckpointManager = manager
   ctx.logger.info?.(`dsh-kiro: kiro-checkpoint mounted (shadow=${manager.shadowDir})`)
 }
 

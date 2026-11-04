@@ -22,6 +22,9 @@ import { planCommand } from './plan'
 import { compactCommand } from './compact'
 import { todoCommand } from './todos'
 import { toolsCommand } from './tools'
+import { engineCommand } from './engine'
+import { specCommand } from './spec'
+import { undoCommand } from './undo'
 import { mcpCommand } from './mcp'
 import { checkpointCommand } from './checkpoint'
 import { knowledgeCommand } from './knowledge'
@@ -59,6 +62,9 @@ export const ALL_COMMANDS: readonly CommandDefinition[] = [
   compactCommand,
   todoCommand,
   toolsCommand,
+  engineCommand,
+  specCommand,
+  undoCommand,
   mcpCommand,
   checkpointCommand,
   knowledgeCommand,
@@ -86,10 +92,10 @@ export interface CommandGroup {
   readonly items: readonly CommandDefinition[]
 }
 
-const CORE_ITEMS = ['help', 'clear', 'quit', 'doctor', 'workspace']
+const CORE_ITEMS = ['help', 'clear', 'quit', 'doctor', 'workspace', 'undo']
 const CHAT_ITEMS = ['chat', 'context', 'reply', 'editor', 'paste', 'retry', 'compact']
-const AGENT_ITEMS = ['agent', 'model', 'effort', 'mode', 'loop']
-const WORKFLOW_ITEMS = ['plan', 'todos', 'checkpoint', 'tangent']
+const AGENT_ITEMS = ['agent', 'model', 'effort', 'mode', 'engine', 'loop']
+const WORKFLOW_ITEMS = ['spec', 'plan', 'todos', 'checkpoint', 'tangent']
 const INTEGRATIONS_ITEMS = ['tools', 'skills', 'steering', 'approvals', 'mcp', 'code', 'prompts', 'hooks']
 const KNOWLEDGE_ITEMS = ['knowledge', 'usage']
 const META_ITEMS = ['issue', 'changelog', 'experiment']

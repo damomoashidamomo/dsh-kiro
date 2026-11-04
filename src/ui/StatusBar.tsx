@@ -59,6 +59,12 @@ export function StatusBar({ agent, prefix, activeAgentName }: StatusBarProps): J
         <Text>{palette.accent(modelLabel)}</Text>
         <Text> {palette.muted('·')} </Text>
         <Text>{statusColor(STATUS_LABEL[agent.status])}</Text>
+        {agent.loopDriver === 'kiro' ? (
+          <Text>
+            {' '}
+            {palette.accent(`[kiro${agent.toolEngine === 'rust' ? '/rust' : ''}]`)}
+          </Text>
+        ) : null}
         {agent.planMode ? (
           <>
             <Text> {palette.muted('·')} </Text>

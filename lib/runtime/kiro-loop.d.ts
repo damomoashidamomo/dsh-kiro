@@ -50,6 +50,29 @@ export interface LoopDriverDeps {
     };
     /** Declared context window of the current model (tokens), when known. */
     readonly contextWindow?: () => number | undefined;
+    /** The platform agent on whose behalf tools run (A1: approvals are
+     *  agent-scoped; without this the platform approval waterfall never fires
+     *  and tools execute unapproved). */
+    readonly agent?: () => unknown;
+    /**
+     * The agent-scoped context (A1): the platform loop dispatches tools from
+     * the agent scope, and the SCOPED tools view is what routes the approval
+     * waterfall to agent-scoped listeners — our answerer. Taking ctx.tools
+     * from the runtime scope left approval requests undeliverable.
+     */
+    readonly agentCtx?: () => unknown;
+    /**
+     * A1/A2: kiro-loop's OWN approval gate — the same panel, trust store, and
+     * scope semantics the platform loop reaches through its waterfall, called
+     * directly so BOTH tool engines (platform pipeline and Rust) are gated
+     * identically. Returns 'allowed-once' | 'rejected' | 'cancelled'.
+     */
+    readonly approvalGate?: (req: {
+        toolName: string;
+        signal: AbortSignal;
+    }) => Promise<string>;
+    /** Permission preset: 'danger-full-access' auto-allows the gate. */
+    readonly permissionPreset?: () => string | undefined;
 }
 /** One turn driver instance per mode switch. */
 export declare class KiroLoopDriver {
@@ -70,7 +93,17 @@ export declare class KiroLoopDriver {
         kind: string;
         text: string;
     }[]): void;
+    private steering;
+    private traceLog;
+    /** T1: recent loop trace entries (newest last), for /loop trace. */
+    trace(limit?: number): readonly {
+        at: number;
+        text: string;
+    }[];
+    private traced;
     get busy(): boolean;
+    /** A4: queue a mid-turn interjection; consumed at the next step boundary. */
+    steer(text: string): void;
     cancel(): void;
     private get llm();
     private get tools();
@@ -96,3 +129,5 @@ export declare class KiroLoopDriver {
     /** Project the local history into wire messages (text + tool calls/results). */
     private wireMessages;
 }
+/** Read the sidecar log's events (oldest first); missing file -> empty. */
+export declare function readSidecarEvents(workspaceRoot: string): unknown[];

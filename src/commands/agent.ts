@@ -95,7 +95,7 @@ export const agentCommand: CommandDefinition = {
         if (target === undefined) return { kind: 'success', text: 'usage: /agent swap <name>' }
         const match = listAgents().find((a) => a.name === target)
         if (match === undefined) return { kind: 'error', text: `no agent named "${target}"` }
-        let preset: { model?: string; provider?: string; effort?: string; prompt?: string } = {}
+        let preset: { model?: string; provider?: string; effort?: string; prompt?: string; engine?: string; toolEngine?: string } = {}
         try {
           preset = JSON.parse(readFileSync(match.path, 'utf8')) as typeof preset
         } catch {
@@ -117,6 +117,14 @@ export const agentCommand: CommandDefinition = {
         if (preset.effort !== undefined && effort?.setManual !== undefined) {
           effort.setManual(preset.effort)
           applied.push(`档位 → ${preset.effort}`)
+        }
+        // Preset-declared engines ride the whole-unit switch.
+        if (preset.engine === 'kiro' || preset.engine === 'dsh') {
+          const engineSvc = get?.call(ctx, 'kiroEngineSwitch') as { set?: (u: 'kiro' | 'dsh', o?: { rust?: boolean }) => Promise<string> } | undefined
+          if (engineSvc?.set !== undefined) {
+            await engineSvc.set(preset.engine, { rust: preset.toolEngine === 'rust' })
+            applied.push(`引擎 → ${preset.engine}${preset.toolEngine === 'rust' ? '+rust' : ''}`)
+          }
         }
         const lines = [`已切换到 agent「${target}」（${match.source} 级）：`]
         lines.push(applied.length > 0 ? `  ${applied.join(' · ')}` : '  未声明模型/档位，保持现状。')

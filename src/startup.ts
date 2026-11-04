@@ -54,6 +54,8 @@ export interface KiroStartup {
   readonly resumeId: string | undefined
   /** Open the resume picker instead of starting a session. */
   readonly resumePicker: boolean
+  /** Whole-unit engine preset at boot: 'kiro' | 'dsh' (P2). */
+  readonly engine: 'kiro' | 'dsh' | undefined
   /** List all stored sessions and exit without booting the TUI. */
   readonly listSessions: boolean
   /** Delete a stored session by id and exit. */
@@ -103,7 +105,8 @@ function kiroCommand(): Command {
     .argument('[task...]', 'optional first prompt to seed the TUI with; multiple words are joined by spaces')
     .option('-r, --resume', 'resume the most recent session from the current working directory')
     .option('--resume-id <id>', 'resume a specific session by id')
-    .option('--resume-picker, --list', 'open an interactive resume picker before booting the TUI')
+.option('--resume-picker, --list', 'open an interactive resume picker before booting the TUI')
+    .option('--engine <kiro|dsh>', 'whole-unit engine at boot: kiro loop (+rust tools) or the platform stack')
     .option('-l, --list-sessions', 'list stored sessions for the current directory and exit')
     .option('-d, --delete-session <id>', 'delete a stored session by id and exit')
     .option('--session-source <v1|v2>', 'restrict --delete-session lookup to one storage source')
@@ -146,6 +149,7 @@ function readStartup(program: Command): KiroStartup {
     resume?: boolean
     resumeId?: string
     resumePicker?: boolean
+    engine?: 'kiro' | 'dsh'
     listSessions?: boolean
     deleteSession?: string
     sessionSource?: 'v1' | 'v2'
@@ -177,6 +181,7 @@ function readStartup(program: Command): KiroStartup {
     resume: opts.resume === true,
     resumeId: opts.resumeId,
     resumePicker: opts.resumePicker === true,
+    engine: opts.engine === 'kiro' || opts.engine === 'dsh' ? opts.engine : undefined,
     listSessions: opts.listSessions === true,
     deleteSessionId: opts.deleteSession,
     sessionSource: opts.sessionSource,

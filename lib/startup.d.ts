@@ -38,6 +38,8 @@ export interface KiroStartup {
     readonly resumeId: string | undefined;
     /** Open the resume picker instead of starting a session. */
     readonly resumePicker: boolean;
+    /** Whole-unit engine preset at boot: 'kiro' | 'dsh' (P2). */
+    readonly engine: 'kiro' | 'dsh' | undefined;
     /** List all stored sessions and exit without booting the TUI. */
     readonly listSessions: boolean;
     /** Delete a stored session by id and exit. */

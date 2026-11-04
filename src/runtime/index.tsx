@@ -22,10 +22,11 @@ import { SessionController } from './session-controller'
 import type { KiroStartup } from '../startup'
 import { createApprovalAnswerer } from './approval-answerer'
 import { createQuestionAnswerer } from './question-answerer'
+import { GUARDRAIL_TEXT } from '../guardrail'
 import type { ApprovalOutcomeLike, ApprovalRequestLike } from './approval-answerer'
 import { routeTurnInput } from './turn-input'
 import { detectEffortHint, resolveAutoEffort } from './effort-keywords'
-import { KiroLoopDriver } from './kiro-loop'
+import { KiroLoopDriver, readSidecarEvents } from './kiro-loop'
 import { registerLoopTools } from './loop-tools'
 import { composeSteeringPrompt } from '../steering/index'
 import type { SteeringFile } from '../steering/loader'
@@ -178,14 +179,22 @@ async function mount(ctx: Context, startup: KiroStartup): Promise<void> {
         event: 'approval/request',
         listener: (req: ApprovalRequestLike) => Promise<ApprovalOutcomeLike>,
       ) => void
-      onApprovalRequest('approval/request', createApprovalAnswerer(controller, {
-        inject: (text) => {
-          agentRef.current?.inject(createUserMessage({
-            content: [{ type: 'text', text }],
-            source: { kind: 'user' },
-          }))
-        },
-      }))
+      onApprovalRequest('approval/request', async (req) => {
+        if (process.env.KIRO_A1_DEBUG === '1') {
+          try {
+            const fs = await import('node:fs')
+            fs.appendFileSync('/tmp/kiro-a1.log', `approval request: ${String((req as { tool?: { name?: string } }).tool?.name ?? '?')}\n`)
+          } catch { }
+        }
+        return createApprovalAnswerer(controller, {
+          inject: (text) => {
+            agentRef.current?.inject(createUserMessage({
+              content: [{ type: 'text', text }],
+              source: { kind: 'user' },
+            }))
+          },
+        })(req)
+      })
       // kiro-style plan review: answer the platform's `user-questions/request`
       // waterfall (dsh-user-questions) so `exit_plan_mode` (dsh-plan-mode) can
       // put its review to the human instead of failing with NO_PROVIDER.
@@ -227,8 +236,13 @@ async function mount(ctx: Context, startup: KiroStartup): Promise<void> {
       if (query?.readSession === undefined) return 0
       const snapshot = await query.readSession(brandString<SessionId>(id))
       const events = (snapshot.events ?? []) as never[]
-      controller.replayEvents(events.slice(-300))
-      return events.length
+      // A3: kiro-loop turns live in the workspace sidecar (the platform log
+      // only carries the platform loop's events) — merge them in so resume
+      // replays BOTH drivers' turns.
+      const sidecar = readSidecarEvents(process.cwd()) as never[]
+      const merged = [...events, ...sidecar]
+      controller.replayEvents(merged.slice(-300))
+      return merged.length
     } catch {
       return 0
     }
@@ -263,6 +277,12 @@ async function mount(ctx: Context, startup: KiroStartup): Promise<void> {
   // kiro-loop: dsh-kiro's own turn driver, selectable per session with
   // /loop kiro|dsh. Text-only for now; the platform ctx.tools seam verified
   // by the P0 probe lands in P2/P3 behind the same driver.
+  // A1/A2: the kiro-loop approval gate — the same answerer the platform
+  // waterfall reaches, called directly so both tool engines are gated.
+  const loopApprovalGate = createApprovalAnswerer(controller, {
+    inject: (text) => { controller.pushSystem(text) },
+  })
+
   const loopDriver = new KiroLoopDriver({
     ctx,
     controller: { ingestEvent: (event: never) => controller.ingestEvent(event) },
@@ -274,6 +294,7 @@ async function mount(ctx: Context, startup: KiroStartup): Promise<void> {
       return [
         'You are a coding agent running inside the Kiro TUI for DeepSeek Harness.',
         `Your working directory is ${process.cwd()}.`,
+        '', GUARDRAIL_TEXT,
         ...(steeringText !== '' ? ['', steeringText] : []),
       ].join('\n')
     },
@@ -282,6 +303,10 @@ async function mount(ctx: Context, startup: KiroStartup): Promise<void> {
       model: selected.current?.model ?? 'deepseek-chat',
       reasoningEffort: effortControl.current(),
     }),
+    agent: () => agentRef.current,
+    agentCtx: () => agentCtxRef,
+    approvalGate: (req) => loopApprovalGate({ toolName: req.toolName, reason: 'kiro-loop 工具执行确认', signal: req.signal }),
+    permissionPreset: () => controller.getState().agent.permissionPreset,
     contextWindow: () => {
       const provider = selected.current?.provider
       const model = selected.current?.model
@@ -296,12 +321,69 @@ async function mount(ctx: Context, startup: KiroStartup): Promise<void> {
     },
   })
   let loopMode: 'dsh' | 'kiro' = 'dsh'
+  if (startup.engine === 'kiro') {
+    // Boot-time whole-unit switch (--engine kiro): applied after the driver
+    // and services exist — see the post-mount block below.
+  }
   // P3: kiro-loop owned tools (todo checklist + thinking scratchpad), wired
   // straight into the controller so BOTH loops get the kiro-cli tool surface.
   const disposeLoopTools = registerLoopTools(ctx, {
     controller: { ingestEvent: (event: never) => controller.ingestEvent(event) },
   })
   ctx.on('dispose' as never, (() => disposeLoopTools()) as never)
+
+  // C1: auto-checkpoint after each turn end (both drivers — the kiro-loop
+  // emits the same synthetic turn/end). Only when the shadow repo is inited.
+  controller.turnEndHook = () => {
+    try {
+      const cp = (globalThis as { __kiroCheckpointManager?: { isInitialized?: () => boolean; snapshot?: (label?: string) => { id: number } } }).__kiroCheckpointManager
+      if (cp?.isInitialized?.() === true) {
+        cp.snapshot?.('auto: turn end')
+      }
+    } catch {
+      // checkpoint optional — never break the turn
+    }
+  }
+
+  ctx.provide('kiroLoopTrace', {
+    recent: () => loopDriver.trace(),
+  })
+
+  ctx.provide('kiroEngineSwitch', {
+    /** One-shot whole-unit switch: loop + tool engine together. */
+    async set(unit: 'kiro' | 'dsh', opts?: { rust?: boolean }): Promise<string> {
+      const rust = opts?.rust ?? unit === 'kiro'
+      if (unit === 'kiro') {
+        const modeMsg = (ctx as unknown as { get?: <T>(k: string) => T }).get?.('kiroLoopMode') as { set?: (n: string) => string } | undefined
+        const switchMsg = modeMsg?.set?.('kiro') ?? ''
+        loopDriver.seed(controller.getState().messages.map((m) => ({ kind: m.kind as string, text: m.text })))
+        let engineNote = ''
+        if (rust && loopDriver.engineAvailable()) {
+          loopDriver.engine = 'rust'
+          loopDriver.workspaceRoot = process.cwd()
+          engineNote = ' + Rust 工具引擎（Landlock）'
+        } else {
+          loopDriver.engine = 'dsh'
+          engineNote = ' + 平台工具管线'
+        }
+        controller.patchAgent({ loopDriver: 'kiro', toolEngine: loopDriver.engine } as never)
+        return `${switchMsg}${engineNote}`
+      }
+      const modeSvc = (ctx as unknown as { get?: <T>(k: string) => T }).get?.('kiroLoopMode') as { set?: (n: string) => string } | undefined
+      const back = modeSvc?.set?.('dsh') ?? '已切换回 DSH 平台 loop。'
+      loopDriver.engine = 'dsh'
+      controller.patchAgent({ loopDriver: 'dsh', toolEngine: 'dsh' } as never)
+      return back
+    },
+  })
+
+  if (startup.engine !== undefined) {
+    const svc = { set: async (unit: 'kiro' | 'dsh', opts?: { rust?: boolean }) => {
+      const engineSvc = (ctx as unknown as { get?: <T>(k: string) => T }).get?.('kiroEngineSwitch') as { set?: (u: 'kiro' | 'dsh', o?: { rust?: boolean }) => Promise<string> } | undefined
+      return engineSvc?.set?.(unit, opts) ?? ''
+    } }
+    void svc.set(startup.engine, { rust: startup.engine === 'kiro' }).then((msg) => { if (msg !== '') controller.pushSystem(`◇ ${msg}`) })
+  }
 
   ctx.provide('kiroToolEngine', {
     get(): 'dsh' | 'rust' { return loopDriver.engine },
@@ -545,7 +627,10 @@ async function mount(ctx: Context, startup: KiroStartup): Promise<void> {
     // kiro-loop mode: the turn runs through our own driver (P1 text-only).
     if (loopMode === 'kiro') {
       if (loopDriver.busy) {
-        controller.pushSystem('kiro-loop 正在回复中；Ctrl+C 取消后再发。')
+        const preview = trimmed.length > 40 ? `${trimmed.slice(0, 40)}…` : trimmed
+        controller.noteSteered(trimmed)
+        controller.pushSystem(`↪ 已插话（下一步生效）：${preview}`)
+        loopDriver.steer(trimmed)
         return
       }
       void loopDriver.runTurn(trimmed)

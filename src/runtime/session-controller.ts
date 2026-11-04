@@ -622,6 +622,9 @@ export class SessionController {
   /** Replay mode: applyEvent must not publish per event (see replayEvents). */
   private replaying = false
 
+  /** C1: called after every turn/end (auto-checkpoint, set by the runtime). */
+  turnEndHook: (() => void) | undefined
+
   /** Notify subscribers of a state change. */
   private publish(): void {
     if (this.replaying) return
@@ -703,6 +706,8 @@ export class SessionController {
         return
       }
       case 'turn/end': {
+        // C1: runtime hook — auto-checkpoint after every completed turn.
+        try { this.turnEndHook?.() } catch { /* never break the turn */ }
         const reason = event.data.reason
         // A closed turn withdraws any pending approval question or structured
         // question (both are turn-enclosed by design); late answers are

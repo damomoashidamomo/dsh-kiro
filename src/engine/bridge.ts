@@ -18,7 +18,7 @@ import { fileURLToPath } from 'node:url'
 
 /** One engine tool call. */
 export interface EngineCall {
-  readonly tool: 'execute_bash' | 'fs_read' | 'fs_write'
+  readonly tool: 'execute_bash' | 'fs_read' | 'fs_write' | 'fs_edit' | 'grep' | 'glob_tree'
   readonly args: Record<string, unknown>
 }
 
@@ -61,6 +61,27 @@ export function toEngineCall(name: string, args: unknown): EngineCall | undefine
   }
   if (name === 'write' || name === 'write_file' || name === 'fs_write') {
     return { tool: 'fs_write', args: record }
+  }
+  if (name === 'edit' || name === 'str_replace' || name === 'str_replace_editor' || name === 'fs_edit') {
+    return { tool: 'fs_edit', args: {
+      path: record['file_path'] ?? record['path'],
+      old_text: record['old_string'] ?? record['old_text'] ?? record['old_str'],
+      new_text: record['new_string'] ?? record['new_text'] ?? record['new_str'],
+      ...(record['replace_all'] !== undefined ? { replace_all: record['replace_all'] } : {}),
+    } }
+  }
+  if (name === 'grep' || name === 'search_file_content' || name === 'content_search') {
+    return { tool: 'grep', args: {
+      pattern: record['pattern'] ?? record['query'] ?? record['regex'],
+      ...(record['path'] !== undefined ? { path: record['path'] } : {}),
+      ...(record['max_results'] !== undefined ? { max_results: record['max_results'] } : {}),
+    } }
+  }
+  if (name === 'glob' || name === 'list_files' || name === 'glob_tree') {
+    return { tool: 'glob_tree', args: {
+      pattern: record['pattern'] ?? record['glob'] ?? '*',
+      ...(record['path'] !== undefined ? { path: record['path'] } : {}),
+    } }
   }
   return undefined
 }

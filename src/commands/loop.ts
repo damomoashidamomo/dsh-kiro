@@ -43,8 +43,20 @@ export const loopCommand: CommandDefinition = {
         ].join('\n'),
       }
     }
+    if (arg === 'trace') {
+      const traceSvc = get?.call(ctx, 'kiroLoopTrace') as { recent?: () => readonly { at: number; text: string }[] } | undefined
+      const rows = traceSvc?.recent?.() ?? []
+      if (rows.length === 0) {
+        return { kind: 'success', text: 'kiro-loop 尚无 trace（切到 /loop kiro 跑一轮后可见每步记录）。' }
+      }
+      const lines = rows.map((row) => {
+        const time = new Date(row.at).toTimeString().slice(0, 8)
+        return `  ${time}  ${row.text}`
+      })
+      return { kind: 'success', text: [`kiro-loop trace（最近 ${rows.length} 条）：`, ...lines].join('\n') }
+    }
     if (arg !== 'dsh' && arg !== 'kiro') {
-      return { kind: 'error', text: 'usage: /loop <dsh|kiro>' }
+      return { kind: 'error', text: 'usage: /loop <dsh|kiro|trace>' }
     }
     return { kind: 'success', text: service.set(arg) }
   },

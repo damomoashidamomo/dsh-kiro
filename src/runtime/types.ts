@@ -93,6 +93,10 @@ export interface AgentStatusSnapshot {
   readonly contextUsedTokens: number
   /** True while contextUsedTokens is a replay-based ESTIMATE (resume), until a real projection lands. */
   readonly contextApprox?: boolean
+  /** Turn driver in use (E2 status badge): 'dsh' | 'kiro'. */
+  readonly loopDriver?: string
+  /** Tool engine in use under the kiro loop (E2 status badge). */
+  readonly toolEngine?: string
   readonly contextLimitTokens: number | undefined
   /** Whether plan mode is active for this session (pinned in the status bar). */
   readonly planMode: boolean

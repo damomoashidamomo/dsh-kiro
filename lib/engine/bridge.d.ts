@@ -12,7 +12,7 @@
  */
 /** One engine tool call. */
 export interface EngineCall {
-    readonly tool: 'execute_bash' | 'fs_read' | 'fs_write';
+    readonly tool: 'execute_bash' | 'fs_read' | 'fs_write' | 'fs_edit' | 'grep' | 'glob_tree';
     readonly args: Record<string, unknown>;
 }
 /** Engine reply: ok carries the tool's own result object. */

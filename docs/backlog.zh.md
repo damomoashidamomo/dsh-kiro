@@ -70,6 +70,16 @@
       fs_write），进程启动即 Landlock 自限（只许写工作区+/tmp，全盘只读），
       每次调用新进程；/tools rust|dsh 切换；实测内核级拒绝越界写入、
       模型经引擎完成 bash 工具往返
+- ✅ 大清单批次（用户全批）：
+      P0 A1/A2 审批门修复——kiloop 双引擎过同一审批面板+护栏进系统提示
+      P1 A3 sidecar 落盘+resume 合并回放 / A4 中途插话 / A5 @文件注入 / A6 子代理实测
+      P2 E1 /engine 一键整体切换+预设引擎字段+--engine 参数 / E2 状态栏 [kiro/rust] 徽章
+      P3 S1 Spec 模式（requirements→design→tasks 逐相人工门）/ S2 确认优先预设模板
+      P4 C1 checkpoint 补全（自动每回合快照+确认式 /undo，全局实例桥修 shadow 代理坑）
+      P5 T1 /loop trace 透明视图 / T2 web-search-recency skill 安装（~/.kiro/skills）
+      P6 R-1 fs_edit+diff语义 / R-2 grep / R-3 glob_tree / R-4 seccomp --strict
+         / R-5 子进程 RLIMIT / R-6 Landlock 网络限制（--allow-net/--net-deny-all，
+         ABI4 结构体布局坑已修）/ R-7 engine-audit.jsonl / R-9 多请求单进程
 - ✅ P3 扩展（kiro-loop 内）：并行工具分发（只读工具重叠执行，上限 4，
       写操作强制串行）；kiro_todo_write / kiro_think 工具注册进平台工具表
       （两种 loop 均可用，转录实时渲染清单与思考摘要）；子代理委派经

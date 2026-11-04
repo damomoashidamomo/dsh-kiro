@@ -24,6 +24,8 @@
 
 import type { Context } from '@deepseek-ai/cordis'
 import { classifyTurnFailure } from './turn-failure'
+import { appendFileSync, mkdirSync, readFileSync, renameSync, statSync } from 'node:fs'
+import { join } from 'node:path'
 import { loadToolsSettings, verdictFor } from './tool-settings'
 import { toEngineCall, runEngineCall, engineBinary } from '../engine/bridge'
 
@@ -50,7 +52,7 @@ type LoopChunk =
 
 interface ToolsLike {
   schemas(): { name: string }[]
-  execute(exec: { callId: string; name: string; arguments: unknown; signal: AbortSignal }): Promise<{
+  execute(exec: { callId: string; name: string; arguments: unknown; agent?: unknown; signal: AbortSignal }): Promise<{
     isError: boolean
     content: { type: string; text?: string }[]
     value?: unknown
@@ -65,9 +67,30 @@ export interface LoopDriverDeps {
   readonly selection: () => { provider: string; model: string; reasoningEffort?: string }
   /** Declared context window of the current model (tokens), when known. */
   readonly contextWindow?: () => number | undefined
+  /** The platform agent on whose behalf tools run (A1: approvals are
+   *  agent-scoped; without this the platform approval waterfall never fires
+   *  and tools execute unapproved). */
+  readonly agent?: () => unknown
+  /**
+   * The agent-scoped context (A1): the platform loop dispatches tools from
+   * the agent scope, and the SCOPED tools view is what routes the approval
+   * waterfall to agent-scoped listeners — our answerer. Taking ctx.tools
+   * from the runtime scope left approval requests undeliverable.
+   */
+  readonly agentCtx?: () => unknown
+  /**
+   * A1/A2: kiro-loop's OWN approval gate — the same panel, trust store, and
+   * scope semantics the platform loop reaches through its waterfall, called
+   * directly so BOTH tool engines (platform pipeline and Rust) are gated
+   * identically. Returns 'allowed-once' | 'rejected' | 'cancelled'.
+   */
+  readonly approvalGate?: (req: { toolName: string; signal: AbortSignal }) => Promise<string>
+  /** Permission preset: 'danger-full-access' auto-allows the gate. */
+  readonly permissionPreset?: () => string | undefined
 }
 
 const MAX_STEPS = 24
+const SIDECAR_ROTATE_BYTES = 5 * 1024 * 1024
 const MAX_RETRIES = 2
 const STALL_MS = 25000
 const COMPACT_AT = 0.8
@@ -103,8 +126,26 @@ export class KiroLoopDriver {
       .map((m) => ({ role: m.kind === 'user' ? 'user' as const : 'assistant' as const, text: m.text }))
   }
 
+  private steering: string[] = []
+  private traceLog: Array<{ at: number; text: string }> = []
+
+  /** T1: recent loop trace entries (newest last), for /loop trace. */
+  trace(limit = 40): readonly { at: number; text: string }[] {
+    return this.traceLog.slice(-limit)
+  }
+
+  private traced(text: string): void {
+    this.traceLog.push({ at: Date.now(), text })
+    if (this.traceLog.length > 400) this.traceLog.splice(0, this.traceLog.length - 400)
+  }
+
   get busy(): boolean {
     return this.abort !== undefined
+  }
+
+  /** A4: queue a mid-turn interjection; consumed at the next step boundary. */
+  steer(text: string): void {
+    if (text.trim() !== '') this.steering.push(text.trim())
   }
 
   cancel(): void {
@@ -116,7 +157,10 @@ export class KiroLoopDriver {
   }
 
   private get tools(): ToolsLike | undefined {
-    return (this.deps.ctx as unknown as { tools?: ToolsLike }).tools
+    // Prefer the agent-scoped view (approval waterfall routing); fall back
+    // to the runtime scope for the no-agent edge cases.
+    const agentCtx = this.deps.agentCtx?.() as { tools?: ToolsLike } | undefined
+    return agentCtx?.tools ?? (this.deps.ctx as unknown as { tools?: ToolsLike }).tools
   }
 
   /** Run one full turn (inner tool loop until the model stops calling tools). */
@@ -125,16 +169,38 @@ export class KiroLoopDriver {
     const llm = this.llm
     if (llm === undefined) throw new Error('kiro-loop: llm 服务不可用')
     this.abort = new AbortController()
-    const emit = (event: unknown): void => { this.deps.controller.ingestEvent(event) }
+    const persisted = new Set(['user/message', 'assistant/message', 'tool/call', 'tool/result', 'turn/start', 'turn/end', 'todo/write', 'system/message'])
+    const emit = (event: unknown): void => {
+      this.deps.controller.ingestEvent(event)
+      const type = (event as { type?: string }).type
+      if (type !== undefined && persisted.has(type)) {
+        appendSidecar(this.workspaceRoot, { at: Date.now(), event })
+      }
+    }
 
-    this.history.push({ role: 'user', text: userText })
+    // A5: expand @file mentions into model-visible content (the platform
+    // loop does this in request assembly; the own loop owns it here). The
+    // transcript keeps the original text.
+    const expanded = expandMentions(userText, this.workspaceRoot)
+    this.history.push({ role: 'user', text: expanded })
     emit({ type: 'turn/start', seq: 0, data: { turn: 1 } })
     emit({ type: 'user/message', seq: 1, data: { content: [{ type: 'text', text: userText }], source: { kind: 'user' } } })
 
     try {
       for (let step = 0; step < MAX_STEPS; step += 1) {
+        if (step > 0 && this.steering.length > 0) {
+          // A4: mid-turn interjections ride as user messages between steps
+          // (kiro-style steering; no cancel needed).
+          for (const note of this.steering.splice(0)) {
+            this.traced(`插话：${note.slice(0, 40)}`)
+            this.history.push({ role: 'user', text: note })
+            emit({ type: 'user/message', seq: 1, data: { content: [{ type: 'text', text: note }], source: { kind: 'user' } } })
+          }
+        }
+        this.traced(`step ${step + 1}: 请求模型（历史 ${this.history.length} 条）`)
         await this.maybeCompact(llm, emit)
         const { text, toolCalls, finish } = await this.streamWithRetry(llm, emit)
+        this.traced(`step ${step + 1}: 完成（finish=${finish}，工具 ${toolCalls.length} 个）`)
         this.history.push({ role: 'assistant', text, ...(toolCalls.length > 0 ? { toolCalls } : {}) })
         emit({ type: 'assistant/message', seq: 2, data: { message: { content: [{ type: 'text', text }] } } })
         if (finish !== 'tool-calls' || toolCalls.length === 0) break
@@ -167,6 +233,9 @@ export class KiroLoopDriver {
   }> {
     const { provider, model, reasoningEffort } = this.deps.selection()
     const schemas = this.tools?.schemas() ?? []
+    if (process.env.KIRO_SCHEMAS_DEBUG === '1') {
+      try { appendFileSync('/tmp/kiro-schemas.log', schemas.map((x) => x.name).join(',') + '\n') } catch { }
+    }
     let lastError: unknown
     for (let attempt = 0; attempt <= MAX_RETRIES; attempt += 1) {
       const turnAbort = this.abort!
@@ -188,6 +257,7 @@ export class KiroLoopDriver {
           error instanceof Error ? error.message : String(error),
         ).transient
         if (!transient || attempt === MAX_RETRIES) throw error
+        this.traced(`重试 ${attempt + 1}/${MAX_RETRIES}（${error instanceof Error ? error.message.slice(0, 80) : String(error)}）`)
         emit({ type: 'system/message', seq: 8, data: { text: `↻ 网络抖动，${attempt + 1}s 后自动重试（${attempt + 1}/${MAX_RETRIES}）…` } })
         await new Promise((resolve) => setTimeout(resolve, (attempt + 1) * 1000))
       }
@@ -258,6 +328,19 @@ export class KiroLoopDriver {
     if (verdict === 'deny') {
       return { toolCallId: call.id, content: 'denied by workspace toolsSettings (.kiro/tools.json)', isError: true }
     }
+    // A1/A2: the confirmation habit, applied to BOTH engines. toolsSettings
+    // 'allow' already carries the workspace's consent; everything else goes
+    // through the approval panel (trust patterns auto-allow inside the gate)
+    // unless the session preset is danger-full-access.
+    if (verdict === 'prompt' && this.deps.approvalGate !== undefined) {
+      const preset = this.deps.permissionPreset?.()
+      if (preset !== 'danger-full-access') {
+        const outcome = await this.deps.approvalGate({ toolName: call.name, signal: this.abort!.signal })
+        if (outcome !== 'allowed-once') {
+          return { toolCallId: call.id, content: `用户拒绝执行 ${call.name}（${outcome}）。请调整方案，不要原样重试。`, isError: true }
+        }
+      }
+    }
     // Rust engine path (/tools rust): a freshly Landlock-sandboxed process
     // per call; anything the engine cannot serve falls through to the
     // platform pipeline below.
@@ -278,10 +361,12 @@ export class KiroLoopDriver {
       return { toolCallId: call.id, content: 'tool runtime unavailable', isError: true }
     }
     try {
+      const agent = this.deps.agent?.()
       const result = await tools.execute({
         callId: call.id,
         name: call.name,
         arguments: args,
+        ...(agent !== undefined ? { agent } : {}),
         signal: this.abort!.signal,
       })
       const text = (result.content ?? [])
@@ -363,6 +448,7 @@ export class KiroLoopDriver {
         { role: 'user', text: `（前文自动压缩）${summary}` },
         ...tail,
       ]
+      this.traced(`自动压缩：${head.length} 条 → 摘要（保留末 ${tail.length} 条）`)
       emit({ type: 'system/message', seq: 7, data: { text: `◇ 上下文接近窗口，已自动压缩历史（保留最近 ${tail.length} 条原文）。` } })
     } catch {
       // Summarization failed: keep going with the full history.
@@ -413,5 +499,88 @@ export class KiroLoopDriver {
       }
       return { role: 'assistant', source: { kind: 'assistant' }, content: blocks }
     })
+  }
+}
+
+
+const MENTION_CAP_BYTES = 16 * 1024
+
+/** Replace @path / @"path" mentions with the file's head content (A5). */
+function expandMentions(text: string, workspaceRoot: string): string {
+  const pattern = /@"([^"]+)"|@(\S+)/gu
+  let out: string | undefined
+  let match: RegExpExecArray | null
+  while ((match = pattern.exec(text)) !== null) {
+    const raw = match[1] ?? match[2]
+    if (raw === undefined || raw === '') continue
+    const resolved = resolveWithinRoot(raw, workspaceRoot)
+    if (resolved === undefined) continue
+    try {
+      const stat = statSync(resolved)
+      if (!stat.isFile() || stat.size > 512 * 1024) continue
+      const body = readFileSync(resolved, 'utf8').slice(0, MENTION_CAP_BYTES)
+      const block = `\n\n<file path="${raw}">\n${body}\n</file>`
+      out = (out ?? text).replace(match[0], match[0])
+      if (out === text) out = text
+      text = text + block
+      out = text
+    } catch {
+      // unreadable: leave the mention as-is
+    }
+  }
+  return out ?? text
+}
+
+function resolveWithinRoot(raw: string, root: string): string | undefined {
+  const cleaned = raw.replace(/^\.\//u, '')
+  const candidate = cleaned.startsWith('/')
+    ? cleaned
+    : join(root, cleaned)
+  if (!candidate.startsWith(root)) return undefined
+  return candidate
+}
+
+/** Durable sidecar: kiro-loop turns also land in .kiro/loop-log.jsonl so
+ *  /chat resume can replay them (A3 — the platform log only records the
+ *  platform loop's events). Rotates at SIDECAR_ROTATE_BYTES. */
+function sidecarPath(workspaceRoot: string): string {
+  return join(workspaceRoot, '.kiro', 'loop-log.jsonl')
+}
+
+function appendSidecar(workspaceRoot: string, record: { at: number; event: unknown }): void {
+  try {
+    mkdirSync(join(workspaceRoot, '.kiro'), { recursive: true })
+    const path = sidecarPath(workspaceRoot)
+    try {
+      const stat = statSync(path)
+      if (stat.size > SIDECAR_ROTATE_BYTES) {
+        renameSync(path, `${path}.1`)
+      }
+    } catch {
+      // not present yet
+    }
+    appendFileSync(path, `${JSON.stringify(record)}\n`, 'utf8')
+  } catch {
+    // Unwritable workspace: the turn still renders; resume loses it (honest).
+  }
+}
+
+/** Read the sidecar log's events (oldest first); missing file -> empty. */
+export function readSidecarEvents(workspaceRoot: string): unknown[] {
+  try {
+    const lines = readFileSync(sidecarPath(workspaceRoot), 'utf8').split('\n')
+    const out: unknown[] = []
+    for (const line of lines) {
+      const trimmed = line.trim()
+      if (trimmed === '') continue
+      try {
+        out.push((JSON.parse(trimmed) as { event: unknown }).event)
+      } catch {
+        // torn tail line — skip
+      }
+    }
+    return out
+  } catch {
+    return []
   }
 }
