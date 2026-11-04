@@ -15,5 +15,4 @@ export interface SlashMenuProps {
     /** Dispatch the chosen command (write the chosen `/name …` to the prompt). */
     readonly onSelect: (text: string) => void;
 }
-/** Render the slash-command palette. */
 export declare function SlashMenu({ initialQuery, active, onClose, onSelect }: SlashMenuProps): JSX.Element | null;

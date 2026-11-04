@@ -6,7 +6,8 @@
  * @module @damomoashidamomo/dsh-kiro/ui/Autocomplete
  */
 
-import { Box, Text } from 'ink'
+import { Box, Text, useStdout } from 'ink'
+import { displayWidth } from '../markdown/render'
 import Fuse from 'fuse.js'
 import { palette } from '../theme/palette'
 
@@ -35,7 +36,25 @@ export interface AutocompleteProps {
 }
 
 /** Render the autocomplete popover. */
+/** Clip a string to `width` display columns (CJK-aware), appending an
+ *  ellipsis when cut. Long hints otherwise WRAP inside the box and break
+ *  the one-row-per-item alignment — the "messy menu" report. */
+function clipColumns(text: string, width: number): string {
+  if (width <= 1) return text.length > 0 ? '…' : ''
+  let used = 0
+  let out = ''
+  for (const ch of text) {
+    const w = displayWidth(ch)
+    if (used + w > width - 1) return `${out}…`
+    used += w
+    out += ch
+  }
+  return out
+}
+
 export function Autocomplete({ trigger, query, candidates, selected, maxVisible = 6 }: AutocompleteProps): JSX.Element {
+  const { stdout } = useStdout()
+  const columns = stdout?.columns ?? 100
   const fuse = new Fuse(candidates, {
     keys: ['label', 'hint', 'keywords'],
     threshold: 0.35,
@@ -68,7 +87,10 @@ export function Autocomplete({ trigger, query, candidates, selected, maxVisible 
           const isSelected = idx === selected
           const cursor = isSelected ? palette.accent('▸ ') : '  '
           const label = isSelected ? palette.accent(item.label) : item.label
-          const hint = item.hint !== undefined ? palette.muted(`  ${item.hint}`) : ''
+          // One row per item: clip the hint so it can never wrap. Budget:
+          // border(2) + outer/inner padding(4) + marker(2) + label + gap(2).
+          const hintBudget = Math.max(8, columns - displayWidth(item.label) - 12)
+          const hint = item.hint !== undefined ? palette.muted(`  ${clipColumns(item.hint, hintBudget)}`) : ''
           return (
             <Text key={`${trigger}-${item.insert}`}>
               <Text>{cursor}</Text>

@@ -9,7 +9,8 @@
  * @module @damomoashidamomo/dsh-kiro/ui/OptionMenu
  */
 
-import { Box, Text, useInput } from 'ink'
+import { Box, Text, useInput, useStdout } from 'ink'
+import { displayWidth } from '../markdown/render'
 import { useEffect, useState } from 'react'
 import { palette } from '../theme/palette'
 
@@ -30,8 +31,23 @@ export interface OptionMenuProps {
   readonly onCancel: () => void
 }
 
+function clipColumns(text: string, width: number): string {
+  if (width <= 1) return text.length > 0 ? '…' : ''
+  let used = 0
+  let out = ''
+  for (const ch of text) {
+    const w = displayWidth(ch)
+    if (used + w > width - 1) return `${out}…`
+    used += w
+    out += ch
+  }
+  return out
+}
+
 export function OptionMenu({ title, options, onPick, onCancel }: OptionMenuProps): JSX.Element {
   const [cursor, setCursor] = useState(0)
+  const { stdout } = useStdout()
+  const columns = stdout?.columns ?? 100
 
   useEffect(() => {
     setCursor(0)
@@ -77,13 +93,15 @@ export function OptionMenu({ title, options, onPick, onCancel }: OptionMenuProps
           const marker = selected ? palette.accent('▸ ') : '  '
           const num = palette.muted(`${idx + 1} `)
           const label = selected ? palette.accent(opt.label) : palette.bold(opt.label)
-          const hint = selected ? opt.hint : palette.dim(opt.hint)
+          const hintBudget = Math.max(8, columns - displayWidth(opt.label) - 14)
+          const hint = clipColumns(opt.hint, hintBudget)
+          const hintStyled = selected ? hint : palette.dim(hint)
           return (
             <Text key={opt.value}>
               <Text>{marker}</Text>
               <Text>{num}</Text>
               <Text>{label} — </Text>
-              <Text>{hint}</Text>
+              <Text>{hintStyled}</Text>
             </Text>
           )
         })}

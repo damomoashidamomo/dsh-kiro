@@ -27,7 +27,6 @@ export interface AutocompleteProps {
     /** Maximum number of candidates to render. */
     readonly maxVisible?: number;
 }
-/** Render the autocomplete popover. */
 export declare function Autocomplete({ trigger, query, candidates, selected, maxVisible }: AutocompleteProps): JSX.Element;
 /** Built-in slash-command candidate list (all 25 shipped commands). */
 export declare function slashCandidates(items: ReadonlyArray<{

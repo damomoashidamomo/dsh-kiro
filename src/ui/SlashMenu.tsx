@@ -6,7 +6,8 @@
  * @module @damomoashidamomo/dsh-kiro/ui/SlashMenu
  */
 
-import { Box, Text, useInput } from 'ink'
+import { Box, Text, useInput, useStdout } from 'ink'
+import { displayWidth } from '../markdown/render'
 import { useMemo, useState } from 'react'
 import Fuse from 'fuse.js'
 import { palette } from '../theme/palette'
@@ -24,8 +25,23 @@ export interface SlashMenuProps {
 }
 
 /** Render the slash-command palette. */
+function clipColumns(text: string, width: number): string {
+  if (width <= 1) return text.length > 0 ? '…' : ''
+  let used = 0
+  let out = ''
+  for (const ch of text) {
+    const w = displayWidth(ch)
+    if (used + w > width - 1) return `${out}…`
+    used += w
+    out += ch
+  }
+  return out
+}
+
 export function SlashMenu({ initialQuery, active, onClose, onSelect }: SlashMenuProps): JSX.Element | null {
   const groups = useMemo(() => groupCommands(), [])
+  const { stdout } = useStdout()
+  const columns = stdout?.columns ?? 100
   const flat = useMemo(() => groups.flatMap((g) => g.items.map((c) => ({ ...c, group: g.title }))), [groups])
   const fuse = useMemo(() => new Fuse(flat, {
     keys: ['name', 'description'],
@@ -91,7 +107,8 @@ export function SlashMenu({ initialQuery, active, onClose, onSelect }: SlashMenu
           const marker = isSelected ? palette.accent('▸ ') : '  '
           const label = isSelected ? palette.accent(`/${cmd.name}`) : `/${cmd.name}`
           const group = palette.muted(` [${cmd.group}]`)
-          const desc = palette.dim(`  ${cmd.description}`)
+          const descBudget = Math.max(8, columns - displayWidth(`/${cmd.name}`) - 26)
+          const desc = palette.dim(`  ${clipColumns(cmd.description, descBudget)}`)
           return (
             <Text key={cmd.name}>
               <Text>{marker}</Text>
