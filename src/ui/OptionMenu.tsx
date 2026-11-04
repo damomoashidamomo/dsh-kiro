@@ -82,7 +82,7 @@ export function OptionMenu({ title, options, onPick, onCancel }: OptionMenuProps
             <Text key={opt.value}>
               <Text>{marker}</Text>
               <Text>{num}</Text>
-              <Text>{label.padEnd(10)}</Text>
+              <Text>{label} — </Text>
               <Text>{hint}</Text>
             </Text>
           )

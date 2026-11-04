@@ -339,7 +339,7 @@ export function App({ controller, seedTask, activeAgentName, onSubmit, fileSearc
           onSelect={() => controller.selectPickerItem()}
           onClose={() => controller.closePicker()}
         />
-      ) : slashMenuOpen ? (
+      ) : slashMenuOpen || optionMenu !== undefined ? (
         <SlashMenu
           initialQuery={prefix === '/' ? prefixQuery : ''}
           active={slashMenuOpen}
@@ -414,7 +414,20 @@ export function App({ controller, seedTask, activeAgentName, onSubmit, fileSearc
               const pick = filtered[autocompleteSelected] ?? filtered[0]
               if (pick !== undefined) {
                 // insert is the BARE name; commands submit with the '/' prefix.
-                onSubmit(`/${pick.insert}`)
+                // Popup commits bypass the wrapper below, so re-run the
+                // option-picker interception here.
+                const committed = `/${pick.insert}`
+                const bareName = pick.insert.toLowerCase()
+                if (!bareName.includes(' ')) {
+                  const viaPopup = optionMenuFor(bareName)
+                  if (viaPopup !== undefined) {
+                    setOptionMenu(viaPopup)
+                    insertSeq.current += 1
+                    setAtInsert({ token: '', insert: '', seq: insertSeq.current, clearAll: true })
+                    return
+                  }
+                }
+                onSubmit(committed)
                 // The popup owned the Enter key (not the prompt's submit path),
                 // so clear the draft through the insert channel.
                 insertSeq.current += 1
