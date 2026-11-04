@@ -42,7 +42,17 @@ export function Autocomplete({ trigger, query, candidates, selected, maxVisible 
     ignoreLocation: true,
     minMatchCharLength: 1,
   })
-  const filtered = query === '' ? candidates.slice(0, maxVisible) : fuse.search(query).map((r) => r.item).slice(0, maxVisible)
+  // Name-first matching (menu review fix): command-NAME hits always rank
+  // before description hits — typing "engine" must not bury /engine under
+  // /tools ("Tool engine…") whose DESCRIPTION contains the word.
+  const q = query.toLowerCase()
+  const byName = candidates.filter((c) => c.label.toLowerCase().includes(q))
+  const filtered = query === ''
+    ? candidates.slice(0, maxVisible)
+    : [...new Set([
+        ...byName,
+        ...fuse.search(query).map((r) => r.item),
+      ])].slice(0, maxVisible)
   if (filtered.length === 0) {
     return (
       <Box flexDirection="column" paddingX={1} marginTop={0}>

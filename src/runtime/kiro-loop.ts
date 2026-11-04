@@ -87,6 +87,9 @@ export interface LoopDriverDeps {
   readonly approvalGate?: (req: { toolName: string; signal: AbortSignal }) => Promise<string>
   /** Permission preset: 'danger-full-access' auto-allows the gate. */
   readonly permissionPreset?: () => string | undefined
+  /** Active agent persona (agent-parity): prompt rides the system prompt,
+   *  tools filters the model-visible schema list. */
+  readonly persona?: () => { prompt?: string; tools?: readonly string[]; name?: string } | undefined
 }
 
 const MAX_STEPS = 24
@@ -163,6 +166,13 @@ export class KiroLoopDriver {
     return agentCtx?.tools ?? (this.deps.ctx as unknown as { tools?: ToolsLike }).tools
   }
 
+  /** Schemas read from the RUNTIME scope: the agent-scoped view's schemas()
+   *  rides the shadow proxy and glm rejects its tool shapes with an EMPTY
+   *  response (usage+finish, no content) — A1's regression, isolated here. */
+  private get schemaSource(): ToolsLike | undefined {
+    return (this.deps.ctx as unknown as { tools?: ToolsLike }).tools
+  }
+
   /** Run one full turn (inner tool loop until the model stops calling tools). */
   async runTurn(userText: string): Promise<void> {
     if (this.abort !== undefined) return
@@ -232,10 +242,13 @@ export class KiroLoopDriver {
     finish: string
   }> {
     const { provider, model, reasoningEffort } = this.deps.selection()
-    const schemas = this.tools?.schemas() ?? []
-    if (process.env.KIRO_SCHEMAS_DEBUG === '1') {
-      try { appendFileSync('/tmp/kiro-schemas.log', schemas.map((x) => x.name).join(',') + '\n') } catch { }
-    }
+    const allSchemas = this.schemaSource?.schemas() ?? this.tools?.schemas() ?? []
+    // Agent-parity: a preset-declared tools list filters what the MODEL sees
+    // ('*' or absent = everything).
+    const personaTools = this.deps.persona?.()?.tools
+    const schemas = personaTools === undefined || personaTools.includes('*')
+      ? allSchemas
+      : allSchemas.filter((schema) => personaTools.includes(schema.name))
     let lastError: unknown
     for (let attempt = 0; attempt <= MAX_RETRIES; attempt += 1) {
       const turnAbort = this.abort!
@@ -274,6 +287,7 @@ export class KiroLoopDriver {
     let text = ''
     const toolCalls: { id: string; name: string; arguments: string }[] = []
     let finish = 'stop'
+    let finishErrorMessage: string | undefined
     const iterator = llm.stream(options)[Symbol.asyncIterator]()
     try {
       while (true) {
@@ -300,15 +314,26 @@ export class KiroLoopDriver {
         } else if (chunk.type === 'usage') {
           emit({ type: 'assistant/chunk', seq: 0, data: { chunk: { type: 'usage', usage: (chunk as { usage?: unknown }).usage } } })
         } else if (chunk.type === 'finish') {
-          const kind = (chunk as { reason?: { kind?: string } }).reason?.kind ?? 'stop'
+          const reasonChunk = chunk as { reason?: { kind?: string; failure?: { message?: string } } }
+          const kind = reasonChunk.reason?.kind ?? 'stop'
+          if (kind === 'error' || kind === 'aborted') {
+            finishErrorMessage = reasonChunk.reason?.failure?.message ?? kind
+          }
           // Some adapters emit a trailing second finish after the real one;
           // the first reason wins (a later 'stop' must not clobber
-          // 'tool-calls' and silently end the loop).
+          // 'tool-calls' or an 'error').
           if (finish === 'stop') finish = kind
         }
       }
     } finally {
       void iterator.return?.().catch(() => undefined)
+    }
+    // A finish:error/aborted MUST throw, not return: the retry wrapper keys
+    // off transient failures (timeouts/5xx), and silently returning an empty
+    // reply made every request look "completed" — the kiro-loop went mute
+    // whenever the gateway exceeded its request timeout.
+    if (finish === 'error' || finish === 'aborted') {
+      throw new Error(finishErrorMessage ?? `model request ${finish}`)
     }
     // Blocks speak for themselves: collected tool-call blocks always mean
     // the model wants tools, whatever the (possibly clobbered) finish said.

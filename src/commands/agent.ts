@@ -95,7 +95,7 @@ export const agentCommand: CommandDefinition = {
         if (target === undefined) return { kind: 'success', text: 'usage: /agent swap <name>' }
         const match = listAgents().find((a) => a.name === target)
         if (match === undefined) return { kind: 'error', text: `no agent named "${target}"` }
-        let preset: { model?: string; provider?: string; effort?: string; prompt?: string; engine?: string; toolEngine?: string } = {}
+        let preset: { model?: string; provider?: string; effort?: string; prompt?: string; engine?: string; toolEngine?: string; tools?: readonly string[]; allowedTools?: readonly string[] } = {}
         try {
           preset = JSON.parse(readFileSync(match.path, 'utf8')) as typeof preset
         } catch {
@@ -118,6 +118,31 @@ export const agentCommand: CommandDefinition = {
           effort.setManual(preset.effort)
           applied.push(`档位 → ${preset.effort}`)
         }
+        // Agent-parity: prompt + tools ride the persona service (kiro-loop
+        // system prompt + schema filter); allowedTools become session trust.
+        const directSet = (globalThis as { __kiroPersonaSet?: (n: { prompt?: string; tools?: readonly string[]; name?: string }) => void }).__kiroPersonaSet
+        const personaSvc = directSet !== undefined
+          ? { set: directSet }
+          : get?.call(ctx, 'kiroPersona') as { set?: (next: { prompt?: string; tools?: readonly string[]; name?: string }) => void } | undefined
+        personaSvc?.set?.({
+          name: target,
+          ...(typeof preset.prompt === 'string' && preset.prompt !== '' ? { prompt: preset.prompt } : {}),
+          ...(Array.isArray((preset as { tools?: unknown }).tools)
+            ? { tools: (preset as { tools: readonly string[] }).tools.filter((t) => typeof t === 'string') }
+            : {}),
+        })
+        applied.push(preset.prompt !== undefined && String(preset.prompt).trim() !== '' ? '人格提示 → 已注入' : '')
+        applied.push(Array.isArray((preset as { tools?: unknown }).tools) ? `工具面 → 按预设过滤` : '')
+        const allowed = (preset as { allowedTools?: unknown }).allowedTools
+        if (Array.isArray(allowed)) {
+          const controllerSvc = get?.call(ctx, 'kiroController') as
+            | { allowToolForSession?: (tool: string) => void }
+            | undefined
+          for (const tool of allowed) {
+            if (typeof tool === 'string' && tool !== '') controllerSvc?.allowToolForSession?.(tool)
+          }
+          if (allowed.length > 0) applied.push(`免审批 → ${String(allowed.length)} 个工具（本会话）`)
+        }
         // Preset-declared engines ride the whole-unit switch.
         if (preset.engine === 'kiro' || preset.engine === 'dsh') {
           const engineSvc = get?.call(ctx, 'kiroEngineSwitch') as { set?: (u: 'kiro' | 'dsh', o?: { rust?: boolean }) => Promise<string> } | undefined
@@ -125,6 +150,14 @@ export const agentCommand: CommandDefinition = {
             await engineSvc.set(preset.engine, { rust: preset.toolEngine === 'rust' })
             applied.push(`引擎 → ${preset.engine}${preset.toolEngine === 'rust' ? '+rust' : ''}`)
           }
+        }
+        // DSH-loop parity: the persona prompt rides a system-semantic user
+        // message (the platform persona override is not per-session).
+        if (typeof preset.prompt === 'string' && preset.prompt.trim() !== '') {
+          const injectSvc = get?.call(ctx, 'kiroRetry') as { submit?: (text: string) => void } | undefined
+          void injectSvc // prompt already in system prompt for kiro-loop; for dsh loop inject once
+          const controllerSvc = get?.call(ctx, 'kiroController') as { pushSystem?: (t: string) => void } | undefined
+          controllerSvc?.pushSystem?.(`◇ 人格提示已装载（kiro-loop 生效于系统提示）`)
         }
         const lines = [`已切换到 agent「${target}」（${match.source} 级）：`]
         lines.push(applied.length > 0 ? `  ${applied.join(' · ')}` : '  未声明模型/档位，保持现状。')

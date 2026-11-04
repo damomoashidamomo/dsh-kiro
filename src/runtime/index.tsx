@@ -180,12 +180,6 @@ async function mount(ctx: Context, startup: KiroStartup): Promise<void> {
         listener: (req: ApprovalRequestLike) => Promise<ApprovalOutcomeLike>,
       ) => void
       onApprovalRequest('approval/request', async (req) => {
-        if (process.env.KIRO_A1_DEBUG === '1') {
-          try {
-            const fs = await import('node:fs')
-            fs.appendFileSync('/tmp/kiro-a1.log', `approval request: ${String((req as { tool?: { name?: string } }).tool?.name ?? '?')}\n`)
-          } catch { }
-        }
         return createApprovalAnswerer(controller, {
           inject: (text) => {
             agentRef.current?.inject(createUserMessage({
@@ -291,9 +285,14 @@ async function mount(ctx: Context, startup: KiroStartup): Promise<void> {
         | { applicable?: readonly SteeringFile[] }
         | undefined
       const steeringText = composeSteeringPrompt(steering?.applicable ?? [])
+      const persona = personaRef.current
+      const personaPrompt = persona?.prompt !== undefined && persona.prompt.trim() !== ''
+        ? ['', `## 当前智能体预设：${persona.name ?? 'custom'}`, persona.prompt.trim()]
+        : []
       return [
         'You are a coding agent running inside the Kiro TUI for DeepSeek Harness.',
         `Your working directory is ${process.cwd()}.`,
+        ...personaPrompt,
         '', GUARDRAIL_TEXT,
         ...(steeringText !== '' ? ['', steeringText] : []),
       ].join('\n')
@@ -305,6 +304,7 @@ async function mount(ctx: Context, startup: KiroStartup): Promise<void> {
     }),
     agent: () => agentRef.current,
     agentCtx: () => agentCtxRef,
+    persona: () => personaRef.current,
     approvalGate: (req) => loopApprovalGate({ toolName: req.toolName, reason: 'kiro-loop 工具执行确认', signal: req.signal }),
     permissionPreset: () => controller.getState().agent.permissionPreset,
     contextWindow: () => {
@@ -344,6 +344,21 @@ async function mount(ctx: Context, startup: KiroStartup): Promise<void> {
       // checkpoint optional — never break the turn
     }
   }
+
+  // Agent-parity persona state: /agent swap writes prompt/tools/allowedTools;
+  // the kiro-loop reads it per request (system prompt + schema filter).
+  const personaRef: { current: { prompt?: string; tools?: readonly string[]; name?: string } | undefined } = { current: undefined }
+  ctx.provide('kiroPersona', {
+    get: () => personaRef.current,
+    set(next: { prompt?: string; tools?: readonly string[]; name?: string }): void {
+      personaRef.current = next
+    },
+  })
+  // Direct stash (shadow-proxy receiver trap — the 4th appearance): /agent
+  // calls set() through an agent-scope ctx.get; a detached set still writes
+  // THIS ref only if it reaches this closure, which the proxy breaks.
+  ;(globalThis as { __kiroPersonaSet?: (n: { prompt?: string; tools?: readonly string[]; name?: string }) => void }).__kiroPersonaSet =
+    (next) => { personaRef.current = next }
 
   ctx.provide('kiroLoopTrace', {
     recent: () => loopDriver.trace(),

@@ -84,5 +84,11 @@
       写操作强制串行）；kiro_todo_write / kiro_think 工具注册进平台工具表
       （两种 loop 均可用，转录实时渲染清单与思考摘要）；子代理委派经
       P2 工具缝直接可用（平台 subagent 工具已在注册表）
+- ✅ Agent 预设对齐（kiro-cli schema 三差距）：prompt 注入系统提示（swap 即
+      生效，实测「审计模式已激活」人格短语）；tools 过滤模型可见工具面；
+      allowedTools 并入会话级免审批；MCP 相关三项暂缓（未使用）
+- ✅ 修复 kiro-loop 静默哑火回归：finish:error 被吞、重试从未触发——模型
+      首字超时（今日 TTFT 10.5s）时空回复照常"完成"；现在错误必抛出，
+      退避重试接管
 - ⏸ checkpoint / 子代理 UI——**数据驱动放弃**（96 会话 0/2 次使用）
 - ⏸ P1 bash 自动放开——安全降级，不做（B2 的项目级持久化已覆盖需求）

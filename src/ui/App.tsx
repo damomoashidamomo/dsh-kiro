@@ -12,6 +12,7 @@ import { Prompt } from './Prompt'
 import { StatusBar } from './StatusBar'
 import { ProgressOverlay } from './ProgressOverlay'
 import { SlashMenu } from './SlashMenu'
+import { OptionMenu, type OptionItem } from './OptionMenu'
 import { PickerOverlay } from './PickerOverlay'
 import { ApprovalOverlay } from './ApprovalOverlay'
 import { PlanReviewOverlay } from './PlanReviewOverlay'
@@ -87,6 +88,10 @@ export function App({ controller, seedTask, activeAgentName, onSubmit, fileSearc
   const [prefix, setPrefix] = useState<'/' | '@' | '!' | undefined>(undefined)
   const [seeded, setSeeded] = useState<boolean>(seedTask === undefined)
   const [slashMenuOpen, setSlashMenuOpen] = useState<boolean>(false)
+  const [optionMenu, setOptionMenu] = useState<
+    | { title: string; options: readonly OptionItem[]; apply: (value: string) => void }
+    | undefined
+  >(undefined)
   const [prefixQuery, setPrefixQuery] = useState<string>('')
   const [autocompleteSelected, setAutocompleteSelected] = useState<number>(0)
   /** Submitted drafts, ↑/↓ recall (oldest first). */
@@ -228,6 +233,57 @@ export function App({ controller, seedTask, activeAgentName, onSubmit, fileSearc
   // space is arguments (`/chat resume`) and must not empty the match list.
   const slashQuery = (prefixQuery.split(/\s+/u)[0] ?? '').trim()
 
+  // Build the option picker for a bare enumerated command.
+  const optionMenuFor = (name: string): { title: string; options: readonly OptionItem[]; apply: (value: string) => void } | undefined => {
+    switch (name) {
+      case 'engine':
+        return {
+          title: '选择引擎组合（loop + 工具引擎）',
+          options: [
+            { value: 'kiro', label: 'kiro', hint: '自研循环 + Rust 工具引擎（Landlock）· 状态栏 [kiro/rust]' },
+            { value: 'kiro -p', label: 'kiro -p', hint: '自研循环 + 平台工具管线' },
+            { value: 'dsh', label: 'dsh', hint: 'DSH 平台全套（默认）' },
+          ],
+          apply: (value: string) => { setOptionMenu(undefined); onSubmit(`/engine ${value}`) },
+        }
+      case 'loop':
+        return {
+          title: '选择回合驱动器（谁来驱动回合）',
+          options: [
+            { value: 'dsh', label: 'dsh', hint: 'DSH 平台 agent loop（完整工具链）' },
+            { value: 'kiro', label: 'kiro', hint: 'dsh-kiro 自研驱动（完整工具循环）' },
+          ],
+          apply: (value: string) => { setOptionMenu(undefined); onSubmit(`/loop ${value}`) },
+        }
+      case 'tools':
+        return {
+          title: '选择工具引擎（仅 /loop kiro 生效）',
+          options: [
+            { value: 'dsh', label: 'dsh', hint: '平台工具管线（平台沙箱 + 审批）' },
+            { value: 'rust', label: 'rust', hint: 'Rust 引擎（Landlock 内核级沙箱，每调用新进程）' },
+          ],
+          apply: (value: string) => { setOptionMenu(undefined); onSubmit(`/tools ${value}`) },
+        }
+      case 'spec':
+        return {
+          title: 'Spec 流程（先确认后开发）',
+          options: [
+            { value: 'start', label: 'start', hint: '开始新 spec（起草 requirements.md）' },
+            { value: 'approve', label: 'approve', hint: '确认当前阶段，进入下一阶段' },
+            { value: 'show', label: 'show', hint: '查看当前阶段与文件' },
+            { value: 'revise', label: 'revise', hint: '打回当前阶段并附修改意见' },
+            { value: 'abort', label: 'abort', hint: '放弃当前 spec' },
+          ],
+          apply: (value: string) => {
+            setOptionMenu(undefined)
+            onSubmit(value === 'start' ? '/spec start 新功能' : `/spec ${value}`)
+          },
+        }
+      default:
+        return undefined
+    }
+  }
+
   const contextApprox = state.agent.contextApprox === true
 
   const contextPct = (() => {
@@ -256,6 +312,14 @@ export function App({ controller, seedTask, activeAgentName, onSubmit, fileSearc
         subtext={state.hasActiveTool ? 'executing…' : undefined}
       />
       <StatusBar agent={state.agent} prefix={prefix} activeAgentName={activeAgentName} />
+      {optionMenu !== undefined ? (
+        <OptionMenu
+          title={optionMenu.title}
+          options={optionMenu.options}
+          onPick={(value) => { optionMenu.apply(value) }}
+          onCancel={() => { setOptionMenu(undefined) }}
+        />
+      ) : null}
       {state.question !== undefined ? (
         <PlanReviewOverlay
           request={state.question}
@@ -289,6 +353,16 @@ export function App({ controller, seedTask, activeAgentName, onSubmit, fileSearc
           contextApprox={contextApprox}
           history={submitHistory}
           onSubmit={(text) => {
+            // Option picker: a BARE enumerated command opens the picker
+            // instead of running bare (which only printed usage text).
+            const bare = text.trim().replace(/^\//u, '').toLowerCase()
+            if (optionMenu === undefined && bare !== '' && !bare.includes(' ')) {
+              const picker = optionMenuFor(bare)
+              if (picker !== undefined) {
+                setOptionMenu(picker)
+                return
+              }
+            }
             if (text.trim() !== '') {
               setSubmitHistory((prev) => (prev[prev.length - 1] === text ? prev : [...prev, text]))
             }

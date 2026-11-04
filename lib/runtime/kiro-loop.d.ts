@@ -73,6 +73,13 @@ export interface LoopDriverDeps {
     }) => Promise<string>;
     /** Permission preset: 'danger-full-access' auto-allows the gate. */
     readonly permissionPreset?: () => string | undefined;
+    /** Active agent persona (agent-parity): prompt rides the system prompt,
+     *  tools filters the model-visible schema list. */
+    readonly persona?: () => {
+        prompt?: string;
+        tools?: readonly string[];
+        name?: string;
+    } | undefined;
 }
 /** One turn driver instance per mode switch. */
 export declare class KiroLoopDriver {
@@ -107,6 +114,10 @@ export declare class KiroLoopDriver {
     cancel(): void;
     private get llm();
     private get tools();
+    /** Schemas read from the RUNTIME scope: the agent-scoped view's schemas()
+     *  rides the shadow proxy and glm rejects its tool shapes with an EMPTY
+     *  response (usage+finish, no content) — A1's regression, isolated here. */
+    private get schemaSource();
     /** Run one full turn (inner tool loop until the model stops calling tools). */
     runTurn(userText: string): Promise<void>;
     /** One model request with backoff retry and stalled-stream protection. */

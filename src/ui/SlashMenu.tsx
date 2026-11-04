@@ -35,9 +35,15 @@ export function SlashMenu({ initialQuery, active, onClose, onSelect }: SlashMenu
   const [query, setQuery] = useState<string>(initialQuery.replace(/^\//, ''))
   const [cursor, setCursor] = useState<number>(0)
 
+  // Name-first ranking (same fix as the inline popup).
+  const q = query.toLowerCase()
+  const byName = query === '' ? [] : flat.filter((c) => c.name.toLowerCase().includes(q))
   const visible = query === ''
     ? flat.slice(0, 30)
-    : fuse.search(query).map((r) => r.item).slice(0, 30)
+    : [...new Set([
+        ...byName,
+        ...fuse.search(query).map((r) => r.item),
+      ])].slice(0, 30)
 
   useInput((input, key) => {
     if (!active) return
