@@ -4,4 +4,9 @@
  * delete writers land in phase 4.
  */
 import type { CommandDefinition } from '@deepseek-ai/dsh-commands';
+/** Bridge for the /agent option menu (shadow-proxy-free list access). */
+export declare function agentListBridge(): readonly {
+    name: string;
+    description: string;
+}[];
 export declare const agentCommand: CommandDefinition;

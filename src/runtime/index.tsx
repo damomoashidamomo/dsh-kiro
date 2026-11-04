@@ -360,6 +360,16 @@ async function mount(ctx: Context, startup: KiroStartup): Promise<void> {
   ;(globalThis as { __kiroPersonaSet?: (n: { prompt?: string; tools?: readonly string[]; name?: string }) => void }).__kiroPersonaSet =
     (next) => { personaRef.current = next }
 
+  // Option-menu data bridges (agent presets + recent sessions).
+  {
+    const agentMod = await import('../commands/agent')
+    ;(globalThis as { __kiroAgentList?: () => readonly { name: string; description: string }[] }).__kiroAgentList =
+      () => agentMod.agentListBridge()
+    const chatMod = await import('../commands/chat')
+    ;(globalThis as { __kiroChatList?: () => readonly { id: string; title: string }[] }).__kiroChatList =
+      () => chatMod.chatListBridge()
+  }
+
   ctx.provide('kiroLoopTrace', {
     recent: () => loopDriver.trace(),
   })

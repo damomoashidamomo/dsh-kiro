@@ -23,5 +23,10 @@ declare function listText(rows: ReadonlyArray<{
     all: boolean;
     titles?: ReadonlyMap<string, string>;
 }): string;
+/** Bridge for the /chat option menu: recent sessions for this cwd. */
+export declare function chatListBridge(): readonly {
+    id: string;
+    title: string;
+}[];
 export declare const chatCommand: CommandDefinition;
 export { listText };

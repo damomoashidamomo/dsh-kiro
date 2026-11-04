@@ -147,6 +147,14 @@ async function resumeHint(agent: unknown): Promise<string> {
   return lines.join('\n')
 }
 
+/** Bridge for the /chat option menu: recent sessions for this cwd. */
+export function chatListBridge(): readonly { id: string; title: string }[] {
+  return filterSessions(listSessions()).slice(0, 4).map((row) => ({
+    id: row.id,
+    title: '',
+  }))
+}
+
 export const chatCommand: CommandDefinition = {
   name: 'chat',
   description: 'Manage sessions: list, resume, switch, delete',

@@ -52,6 +52,11 @@ function parseSubcommand(input: string): { name: string; args: string[] } {
   return { name: tokens[0] ?? 'list', args: tokens.slice(1) }
 }
 
+/** Bridge for the /agent option menu (shadow-proxy-free list access). */
+export function agentListBridge(): readonly { name: string; description: string }[] {
+  return listAgents().map((a) => ({ name: a.name, description: a.description }))
+}
+
 export const agentCommand: CommandDefinition = {
   name: 'agent',
   description: 'Manage custom agents: list, swap, create, edit, delete, show',

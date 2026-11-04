@@ -233,6 +233,19 @@ export function App({ controller, seedTask, activeAgentName, onSubmit, fileSearc
   // space is arguments (`/chat resume`) and must not empty the match list.
   const slashQuery = (prefixQuery.split(/\s+/u)[0] ?? '').trim()
 
+  function clipColumnsForMenu(text: string, width: number): string {
+    if (width <= 1) return text.length > 0 ? '…' : ''
+    let used = 0
+    let out = ''
+    for (const ch of text) {
+      const w = ch.codePointAt(0) !== undefined && (ch.codePointAt(0) ?? 0) > 0x2e80 ? 2 : 1
+      if (used + w > width - 1) return `${out}…`
+      used += w
+      out += ch
+    }
+    return out
+  }
+
   // Build the option picker for a bare enumerated command.
   const optionMenuFor = (name: string): { title: string; options: readonly OptionItem[]; apply: (value: string) => void } | undefined => {
     switch (name) {
@@ -264,6 +277,42 @@ export function App({ controller, seedTask, activeAgentName, onSubmit, fileSearc
           ],
           apply: (value: string) => { setOptionMenu(undefined); onSubmit(`/tools ${value}`) },
         }
+      case 'agent': {
+        // Dynamic options: discovered presets; 'list' for the static entry.
+        const agentSvc = (globalThis as { __kiroAgentList?: () => readonly { name: string; description: string }[] }).__kiroAgentList
+        const presets = agentSvc?.() ?? []
+        const options: OptionItem[] = [
+          { value: 'list', label: 'list', hint: '列出全部自定义 agent' },
+          ...presets.map((preset) => ({
+            value: `swap ${preset.name}`,
+            label: clipColumnsForMenu(preset.name, 12),
+            hint: clipColumnsForMenu(preset.description !== '' ? preset.description : '无描述', 60),
+          })),
+        ]
+        return {
+          title: '切换 / 管理自定义 agent',
+          options,
+          apply: (value: string) => { setOptionMenu(undefined); onSubmit(`/agent ${value}`) },
+        }
+      }
+      case 'chat': {
+        const chatSvc = (globalThis as { __kiroChatList?: () => readonly { id: string; title: string }[] }).__kiroChatList
+        const sessions = (chatSvc?.() ?? []).slice(0, 4)
+        const options: OptionItem[] = [
+          { value: 'list', label: 'list', hint: '列出会话（含时间与简介）' },
+          ...sessions.map((session) => ({
+            value: `resume ${session.id}`,
+            label: clipColumnsForMenu(session.id.slice(8, 20), 14),
+            hint: clipColumnsForMenu(session.title !== '' ? session.title : '（无简介）', 60),
+          })),
+          { value: 'new', label: 'new', hint: '存盘当前会话并开启新会话' },
+        ]
+        return {
+          title: '会话管理（列出 / 恢复 / 新开）',
+          options,
+          apply: (value: string) => { setOptionMenu(undefined); onSubmit(`/chat ${value}`) },
+        }
+      }
       case 'spec':
         return {
           title: 'Spec 流程（先确认后开发）',
