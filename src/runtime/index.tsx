@@ -370,6 +370,10 @@ async function mount(ctx: Context, startup: KiroStartup): Promise<void> {
       () => chatMod.chatListBridge()
   }
 
+  // Controller-state bridge for menu titles (current agent/engine).
+  ;(globalThis as { __kiroControllerState?: () => unknown }).__kiroControllerState =
+    () => controller.getState()
+
   ctx.provide('kiroLoopTrace', {
     recent: () => loopDriver.trace(),
   })

@@ -251,7 +251,7 @@ export function App({ controller, seedTask, activeAgentName, onSubmit, fileSearc
     switch (name) {
       case 'engine':
         return {
-          title: '选择引擎组合（loop + 工具引擎）',
+          title: `选择引擎组合（当前：loop=${controller.getState().agent.loopDriver ?? 'dsh'} · tools=${controller.getState().agent.toolEngine ?? 'dsh'}）`,
           options: [
             { value: 'kiro', label: 'kiro', hint: '自研循环 + Rust 工具引擎（Landlock）· 状态栏 [kiro/rust]' },
             { value: 'kiro -p', label: 'kiro -p', hint: '自研循环 + 平台工具管线' },
@@ -261,7 +261,7 @@ export function App({ controller, seedTask, activeAgentName, onSubmit, fileSearc
         }
       case 'loop':
         return {
-          title: '选择回合驱动器（谁来驱动回合）',
+          title: `选择回合驱动器（当前：${controller.getState().agent.loopDriver ?? 'dsh'}）`,
           options: [
             { value: 'dsh', label: 'dsh', hint: 'DSH 平台 agent loop（完整工具链）' },
             { value: 'kiro', label: 'kiro', hint: 'dsh-kiro 自研驱动（完整工具循环）' },
@@ -270,7 +270,7 @@ export function App({ controller, seedTask, activeAgentName, onSubmit, fileSearc
         }
       case 'tools':
         return {
-          title: '选择工具引擎（仅 /loop kiro 生效）',
+          title: `选择工具引擎（当前：${controller.getState().agent.toolEngine ?? 'dsh'}；仅 /loop kiro 生效）`,
           options: [
             { value: 'dsh', label: 'dsh', hint: '平台工具管线（平台沙箱 + 审批）' },
             { value: 'rust', label: 'rust', hint: 'Rust 引擎（Landlock 内核级沙箱，每调用新进程）' },
@@ -278,6 +278,9 @@ export function App({ controller, seedTask, activeAgentName, onSubmit, fileSearc
           apply: (value: string) => { setOptionMenu(undefined); onSubmit(`/tools ${value}`) },
         }
       case 'agent': {
+        // Title shows the CURRENT agent so the user knows where they are.
+        const controllerSvc = (globalThis as { __kiroControllerState?: () => { agent?: { activeAgent?: string } } }).__kiroControllerState?.()
+        const currentAgent = controllerSvc?.agent?.activeAgent ?? 'default'
         // Dynamic options: discovered presets; 'list' for the static entry.
         const agentSvc = (globalThis as { __kiroAgentList?: () => readonly { name: string; description: string }[] }).__kiroAgentList
         const presets = agentSvc?.() ?? []
@@ -290,7 +293,7 @@ export function App({ controller, seedTask, activeAgentName, onSubmit, fileSearc
           })),
         ]
         return {
-          title: '切换 / 管理自定义 agent',
+          title: `切换 / 管理自定义 agent（当前：${currentAgent}）`,
           options,
           apply: (value: string) => { setOptionMenu(undefined); onSubmit(`/agent ${value}`) },
         }
@@ -497,7 +500,7 @@ export function App({ controller, seedTask, activeAgentName, onSubmit, fileSearc
           popupOpen={prefix !== undefined && !slashMenuOpen}
         />
       )}
-      {prefix === '/' && !slashMenuOpen ? (
+      {prefix === '/' && !slashMenuOpen && optionMenu === undefined ? (
         <Autocomplete
           trigger="/"
           query={slashQuery}
