@@ -12,11 +12,12 @@ import { Prompt } from './Prompt'
 import { StatusBar } from './StatusBar'
 import { ProgressOverlay } from './ProgressOverlay'
 import { SlashMenu } from './SlashMenu'
-import { OptionMenu, type OptionItem } from './OptionMenu'
+import { OptionMenu, withSessionTitles, type OptionItem } from './OptionMenu'
 import { PickerOverlay } from './PickerOverlay'
 import { ApprovalOverlay } from './ApprovalOverlay'
 import { PlanReviewOverlay } from './PlanReviewOverlay'
-import { Autocomplete, slashCandidates, type AutocompleteItem } from './Autocomplete'
+import { Autocomplete, rankCandidates, slashCandidates, type AutocompleteItem } from './Autocomplete'
+import { pickerFor } from '../commands/subcommands'
 import { STRINGS } from './strings'
 import { banner, palette } from '../theme/palette'
 import { splashMark } from '../theme/banner'
@@ -60,16 +61,6 @@ function approvalDiff(state: SessionRenderState, toolName: string): readonly Dif
   return undefined
 }
 
-/** Fuzzy-filter command candidates with the same Fuse config the popup uses. */
-function fuseSearch<T extends { label: string; hint?: string }>(items: readonly T[], query: string): T[] {
-  const q = query.toLowerCase()
-  const scored = items
-    .map((item) => ({ item, score: item.label.toLowerCase().includes(q) ? 0 : (item.hint ?? '').toLowerCase().includes(q) ? 1 : 2 }))
-    .filter((row) => row.score < 2)
-  scored.sort((a, b) => a.score - b.score)
-  return scored.map((row) => row.item)
-}
-
 export interface AppProps {
   /**
    * Workspace `@`-mention lookup (platform fileReferences service):
@@ -98,7 +89,13 @@ export function App({ controller, seedTask, activeAgentName, onSubmit, fileSearc
   /** Submitted drafts, ↑/↓ recall (oldest first). */
   const [submitHistory, setSubmitHistory] = useState<readonly string[]>([])
   const [atItems, setAtItems] = useState<readonly AutocompleteItem[]>([])
-  const [atInsert, setAtInsert] = useState<{ token: string; insert: string; seq: number; clearAll?: boolean } | undefined>(undefined)
+  const [atInsert, setAtInsert] = useState<{
+    token: string
+    insert: string
+    seq: number
+    clearAll?: boolean
+    replace?: string
+  } | undefined>(undefined)
   const insertSeq = useRef(0)
 
   // @-mention candidates: debounced workspace lookup while the @ popup is up.
@@ -247,93 +244,108 @@ export function App({ controller, seedTask, activeAgentName, onSubmit, fileSearc
     return out
   }
 
-  // Build the option picker for a bare enumerated command.
+  /**
+   * Build the option picker for a bare enumerated command.
+   *
+   * Rows come from the subcommand catalog (`commands/subcommands.ts`), so the
+   * menu lists EVERY subcommand the handler accepts — the old hand-written
+   * menus dropped some (`/chat` never showed `delete` or `help`) and most
+   * multi-subcommand commands had no menu at all. Rows that need further
+   * arguments PRE-FILL the prompt instead of submitting.
+   */
+  /**
+   * `/cmd sub ` for a row that still needs arguments. Placeholder segments
+   * (`<id>`, `<on|off>`) are dropped: the prompt must not contain them.
+   */
+  const prefillText = (name: string, value: string): string => {
+    const bare = value.replace(/\s*<[^>]*>/gu, '').trim()
+    return `/${name} ${bare} `
+  }
+
+  /** Write text into the prompt (no submit) — used by picker rows that need args. */
+  const insertIntoPrompt = (text: string): void => {
+    insertSeq.current += 1
+    setAtInsert({ token: '', insert: '', seq: insertSeq.current, replace: text })
+  }
+
   const optionMenuFor = (name: string): { title: string; options: readonly OptionItem[]; apply: (value: string) => void } | undefined => {
-    switch (name) {
-      case 'engine':
-        return {
-          title: `选择引擎组合（当前：loop=${controller.getState().agent.loopDriver ?? 'dsh'} · tools=${controller.getState().agent.toolEngine ?? 'dsh'}）`,
-          options: [
-            { value: 'kiro', label: 'kiro', hint: '自研循环 + Rust 工具引擎（Landlock）· 状态栏 [kiro/rust]' },
-            { value: 'kiro -p', label: 'kiro -p', hint: '自研循环 + 平台工具管线' },
-            { value: 'dsh', label: 'dsh', hint: 'DSH 平台全套（默认）' },
-          ],
-          apply: (value: string) => { setOptionMenu(undefined); onSubmit(`/engine ${value}`) },
-        }
-      case 'loop':
-        return {
-          title: `选择回合驱动器（当前：${controller.getState().agent.loopDriver ?? 'dsh'}）`,
-          options: [
-            { value: 'dsh', label: 'dsh', hint: 'DSH 平台 agent loop（完整工具链）' },
-            { value: 'kiro', label: 'kiro', hint: 'dsh-kiro 自研驱动（完整工具循环）' },
-          ],
-          apply: (value: string) => { setOptionMenu(undefined); onSubmit(`/loop ${value}`) },
-        }
-      case 'tools':
-        return {
-          title: `选择工具引擎（当前：${controller.getState().agent.toolEngine ?? 'dsh'}；仅 /loop kiro 生效）`,
-          options: [
-            { value: 'dsh', label: 'dsh', hint: '平台工具管线（平台沙箱 + 审批）' },
-            { value: 'rust', label: 'rust', hint: 'Rust 引擎（Landlock 内核级沙箱，每调用新进程）' },
-          ],
-          apply: (value: string) => { setOptionMenu(undefined); onSubmit(`/tools ${value}`) },
-        }
-      case 'agent': {
-        // Title shows the CURRENT agent so the user knows where they are.
-        const controllerSvc = (globalThis as { __kiroControllerState?: () => { agent?: { activeAgent?: string } } }).__kiroControllerState?.()
-        const currentAgent = controllerSvc?.agent?.activeAgent ?? 'default'
-        // Dynamic options: discovered presets; 'list' for the static entry.
-        const agentSvc = (globalThis as { __kiroAgentList?: () => readonly { name: string; description: string }[] }).__kiroAgentList
-        const presets = agentSvc?.() ?? []
-        const options: OptionItem[] = [
-          { value: 'list', label: 'list', hint: '列出全部自定义 agent' },
-          ...presets.map((preset) => ({
-            value: `swap ${preset.name}`,
-            label: clipColumnsForMenu(preset.name, 12),
-            hint: clipColumnsForMenu(preset.description !== '' ? preset.description : '无描述', 60),
-          })),
-        ]
-        return {
-          title: `切换 / 管理自定义 agent（当前：${currentAgent}）`,
-          options,
-          apply: (value: string) => { setOptionMenu(undefined); onSubmit(`/agent ${value}`) },
-        }
+    const picker = pickerFor(name)
+    if (picker === undefined) return undefined
+    const rows: OptionItem[] = []
+    const prefill = new Set<string>()
+    for (const row of picker.rows) {
+      rows.push({ value: row.value, label: clipColumnsForMenu(row.value, 26), hint: row.hint })
+      if (row.needsArg === true) prefill.add(row.value)
+    }
+    // Dynamic rows: the concrete sessions / presets, right after the static
+    // subcommands they belong to.
+    if (name === 'chat') {
+      const chatSvc = (globalThis as {
+        __kiroChatList?: () => readonly { id: string; title: string; when: string }[]
+      }).__kiroChatList
+      for (const session of chatSvc?.() ?? []) {
+        // Timestamp first, title once it resolves — a session without a title
+        // still gets a useful row instead of a placeholder.
+        const hint = session.title !== '' ? session.title : session.when
+        rows.splice(rows.length - 1, 0, {
+          value: `resume ${session.id}`,
+          label: clipColumnsForMenu(session.id.slice(8, 20), 14),
+          hint: clipColumnsForMenu(hint, 60),
+        })
       }
-      case 'chat': {
-        const chatSvc = (globalThis as { __kiroChatList?: () => readonly { id: string; title: string }[] }).__kiroChatList
-        const sessions = (chatSvc?.() ?? []).slice(0, 4)
-        const options: OptionItem[] = [
-          { value: 'list', label: 'list', hint: '列出会话（含时间与简介）' },
-          ...sessions.map((session) => ({
-            value: `resume ${session.id}`,
-            label: clipColumnsForMenu(session.id.slice(8, 20), 14),
-            hint: clipColumnsForMenu(session.title !== '' ? session.title : '（无简介）', 60),
-          })),
-          { value: 'new', label: 'new', hint: '存盘当前会话并开启新会话' },
-        ]
-        return {
-          title: '会话管理（列出 / 恢复 / 新开）',
-          options,
-          apply: (value: string) => { setOptionMenu(undefined); onSubmit(`/chat ${value}`) },
-        }
+    }
+    if (name === 'agent') {
+      const currentAgent = (globalThis as { __kiroControllerState?: () => { agent?: { activeAgent?: string } } })
+        .__kiroControllerState?.()?.agent?.activeAgent ?? 'default'
+      const agentSvc = (globalThis as { __kiroAgentList?: () => readonly { name: string; description: string }[] }).__kiroAgentList
+      for (const preset of agentSvc?.() ?? []) {
+        rows.splice(rows.length - 1, 0, {
+          value: `swap ${preset.name}`,
+          label: clipColumnsForMenu(preset.name, 12),
+          hint: clipColumnsForMenu(preset.description !== '' ? preset.description : '无描述', 60),
+        })
       }
-      case 'spec':
-        return {
-          title: 'Spec 流程（先确认后开发）',
-          options: [
-            { value: 'start', label: 'start', hint: '开始新 spec（起草 requirements.md）' },
-            { value: 'approve', label: 'approve', hint: '确认当前阶段，进入下一阶段' },
-            { value: 'show', label: 'show', hint: '查看当前阶段与文件' },
-            { value: 'revise', label: 'revise', hint: '打回当前阶段并附修改意见' },
-            { value: 'abort', label: 'abort', hint: '放弃当前 spec' },
-          ],
-          apply: (value: string) => {
-            setOptionMenu(undefined)
-            onSubmit(value === 'start' ? '/spec start 新功能' : `/spec ${value}`)
-          },
+      return {
+        title: `切换 / 管理自定义 agent（当前：${currentAgent}）`,
+        options: rows,
+        apply: (value) => {
+          setOptionMenu(undefined)
+          if (prefill.has(value)) {
+            insertIntoPrompt(prefillText('agent', value))
+            return
+          }
+          onSubmit(`/agent ${value}`)
+        },
+      }
+    }
+    // Patch the session titles in once they resolve (they read each log).
+    if (name === 'chat') {
+      const titlesSvc = (globalThis as { __kiroChatTitles?: (ids: readonly string[]) => Promise<Map<string, string>> }).__kiroChatTitles
+      const ids = rows
+        .map((row) => /^resume (.+)$/u.exec(row.value)?.[1])
+        .filter((id): id is string => id !== undefined)
+      if (titlesSvc !== undefined && ids.length > 0) {
+        void titlesSvc(ids).then((titles) => {
+          if (titles.size === 0) return
+          setOptionMenu((current) => current === undefined
+            ? current
+            : { ...current, options: withSessionTitles(current.options, titles) })
+        }).catch(() => {
+          // titles are cosmetic; the id and timestamp still identify a session
+        })
+      }
+    }
+    return {
+      title: picker.title,
+      options: rows,
+      apply: (value) => {
+        setOptionMenu(undefined)
+        if (prefill.has(value)) {
+          insertIntoPrompt(prefillText(name, value))
+          return
         }
-      default:
-        return undefined
+        onSubmit(`/${name} ${value}`)
+      },
     }
   }
 
@@ -476,9 +488,8 @@ export function App({ controller, seedTask, activeAgentName, onSubmit, fileSearc
               // '/' picker: submit the HIGHLIGHTED command (arrow keys move
               // autocompleteSelected via onAutocompleteMove).
               const items = slashCandidates(ALL_COMMANDS.map((c) => ({ name: c.name, description: c.description })))
-              const filtered = prefixQuery === ''
-                ? items
-                : fuseSearch(items, prefixQuery)
+              // Same ranker the popup used: Enter runs the highlighted row.
+              const filtered = rankCandidates(items, prefixQuery)
               const pick = filtered[autocompleteSelected] ?? filtered[0]
               if (pick !== undefined) {
                 // insert is the BARE name; commands submit with the '/' prefix.

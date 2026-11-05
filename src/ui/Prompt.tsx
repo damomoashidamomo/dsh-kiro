@@ -56,7 +56,14 @@ export interface PromptProps {
    * trailing query token is replaced by `insert` plus a space. Bumping the
    * seq applies it once; the same seq is ignored.
    */
-  readonly pendingInsert?: { readonly token: string; readonly insert: string; readonly seq: number; readonly clearAll?: boolean } | undefined
+  readonly pendingInsert?: {
+    readonly token: string
+    readonly insert: string
+    readonly seq: number
+    readonly clearAll?: boolean
+    /** Replace the whole draft with this text (picker pre-fill). */
+    readonly replace?: string
+  } | undefined
   /**
    * An autocomplete popup is open: Enter commits the highlighted entry
    * instead of submitting the draft (kiro-style).
@@ -95,6 +102,12 @@ export function Prompt({
   useEffect(() => {
     if (pendingInsert === undefined || pendingInsert.seq === lastInsertSeq.current) return
     lastInsertSeq.current = pendingInsert.seq
+    if (pendingInsert.replace !== undefined) {
+      // Pre-fill: show `/chat resume ` so the user types the rest.
+      const text = pendingInsert.replace
+      setBuffer(prev => ({ ...prev, text, cursor: text.length }))
+      return
+    }
     if (pendingInsert.clearAll === true) {
       setBuffer(prev => ({ ...prev, text: '', cursor: 0 }))
       return

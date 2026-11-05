@@ -23,10 +23,24 @@ declare function listText(rows: ReadonlyArray<{
     all: boolean;
     titles?: ReadonlyMap<string, string>;
 }): string;
-/** Bridge for the /chat option menu: recent sessions for this cwd. */
+/**
+ * Bridge for the /chat option menu: recent sessions for this cwd.
+ *
+ * Titles are NOT loaded here (that is async); the picker shows the id and
+ * patch-in titles arrive through {@link chatTitlesBridge}. It used to hand
+ * back `title: ''` for every row, which is why the menu always said
+ * 「（无简介）」.
+ */
 export declare function chatListBridge(): readonly {
     id: string;
     title: string;
+    when: string;
 }[];
+/**
+ * Load the one-line titles for the sessions the option menu shows, keyed by
+ * id (`session/title`, falling back to the first user message). An empty map
+ * means the reader is unavailable — the rows then show the timestamp only.
+ */
+export declare function chatTitlesBridge(runtimeCtx: unknown, ids: readonly string[]): Promise<Map<string, string>>;
 export declare const chatCommand: CommandDefinition;
 export { listText };

@@ -398,6 +398,11 @@ async function mount(ctx: Context, startup: KiroStartup): Promise<void> {
     const chatMod = await import('../commands/chat')
     ;(globalThis as { __kiroChatList?: () => readonly { id: string; title: string }[] }).__kiroChatList =
       () => chatMod.chatListBridge()
+    // Session titles for the picker are async (they read each session log), so
+    // they arrive after the menu is drawn and patch the rows in place.
+    ;(globalThis as {
+      __kiroChatTitles?: (ids: readonly string[]) => Promise<Map<string, string>>
+    }).__kiroChatTitles = (ids) => chatMod.chatTitlesBridge(ctx, ids)
   }
 
   // Controller-state bridge for menu titles (current agent/engine).

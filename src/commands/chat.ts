@@ -147,12 +147,32 @@ async function resumeHint(agent: unknown): Promise<string> {
   return lines.join('\n')
 }
 
-/** Bridge for the /chat option menu: recent sessions for this cwd. */
-export function chatListBridge(): readonly { id: string; title: string }[] {
-  return filterSessions(listSessions()).slice(0, 4).map((row) => ({
-    id: row.id,
-    title: '',
-  }))
+/** How many recent sessions the option menu offers. */
+const PICKER_SESSIONS = 8
+
+/**
+ * Bridge for the /chat option menu: recent sessions for this cwd.
+ *
+ * Titles are NOT loaded here (that is async); the picker shows the id and
+ * patch-in titles arrive through {@link chatTitlesBridge}. It used to hand
+ * back `title: ''` for every row, which is why the menu always said
+ * 「（无简介）」.
+ */
+export function chatListBridge(): readonly { id: string; title: string; when: string }[] {
+  return filterSessions(listSessions())
+    .slice(0, PICKER_SESSIONS)
+    // `when` is the fallback the row shows until the title resolves (and
+    // forever for a session that never got one).
+    .map((row) => ({ id: row.id, title: '', when: formatTimestamp(row.createdAt) }))
+}
+
+/**
+ * Load the one-line titles for the sessions the option menu shows, keyed by
+ * id (`session/title`, falling back to the first user message). An empty map
+ * means the reader is unavailable — the rows then show the timestamp only.
+ */
+export async function chatTitlesBridge(runtimeCtx: unknown, ids: readonly string[]): Promise<Map<string, string>> {
+  return loadTitles({ ctx: runtimeCtx }, ids, PICKER_SESSIONS)
 }
 
 export const chatCommand: CommandDefinition = {

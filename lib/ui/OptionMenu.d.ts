@@ -24,3 +24,9 @@ export interface OptionMenuProps {
     readonly onCancel: () => void;
 }
 export declare function OptionMenu({ title, options, onPick, onCancel }: OptionMenuProps): JSX.Element;
+/**
+ * Patch session titles into a picker's rows: `resume <id>` rows get the loaded
+ * title, every other row is left alone. Titles load after the menu is drawn
+ * (they read each session log), so this runs as a second pass.
+ */
+export declare function withSessionTitles(options: readonly OptionItem[], titles: ReadonlyMap<string, string>): readonly OptionItem[];

@@ -52,6 +52,47 @@ function clipColumns(text: string, width: number): string {
   return out
 }
 
+/**
+ * Rank candidates for the popup AND for the Enter key.
+ *
+ * Enter used to commit through a DIFFERENT filter than the one on screen, and
+ * neither ranked an exact name first — typing `/mode` + Enter ran `/model`
+ * ("mode" is a prefix of "model" and /model ships first in the registry), so
+ * the highlighted row and the executed command could disagree.
+ *
+ * Tiers: exact name, name prefix, name substring, hint substring, then fuzzy.
+ */
+export function rankCandidates<T extends { label: string; hint?: string }>(
+  items: readonly T[],
+  query: string,
+  limit?: number,
+  fuzzy?: { search: (q: string) => Array<{ item: T }> },
+): T[] {
+  const q = query.trim().toLowerCase()
+  const order = new Map(items.map((item, index) => [item, index]))
+  const tie = (a: T, b: T): number => (order.get(a) ?? 0) - (order.get(b) ?? 0)
+  if (q === '') return limit === undefined ? [...items] : items.slice(0, limit)
+  const tier = (item: T): number => {
+    const label = item.label.toLowerCase().replace(/^[/@]/u, '')
+    if (label === q) return 0
+    if (label.startsWith(q)) return 1
+    if (label.includes(q)) return 2
+    if ((item.hint ?? '').toLowerCase().includes(q)) return 3
+    return 9
+  }
+  const ranked = items
+    .map((item) => ({ item, score: tier(item) }))
+    .filter((row) => row.score < 9)
+    .sort((a, b) => a.score - b.score || tie(a.item, b.item))
+    .map((row) => row.item)
+  if (fuzzy !== undefined) {
+    for (const hit of fuzzy.search(query)) {
+      if (!ranked.includes(hit.item)) ranked.push(hit.item)
+    }
+  }
+  return limit === undefined ? ranked : ranked.slice(0, limit)
+}
+
 export function Autocomplete({ trigger, query, candidates, selected, maxVisible = 6 }: AutocompleteProps): JSX.Element {
   const { stdout } = useStdout()
   const columns = stdout?.columns ?? 100
@@ -61,17 +102,7 @@ export function Autocomplete({ trigger, query, candidates, selected, maxVisible 
     ignoreLocation: true,
     minMatchCharLength: 1,
   })
-  // Name-first matching (menu review fix): command-NAME hits always rank
-  // before description hits — typing "engine" must not bury /engine under
-  // /tools ("Tool engine…") whose DESCRIPTION contains the word.
-  const q = query.toLowerCase()
-  const byName = candidates.filter((c) => c.label.toLowerCase().includes(q))
-  const filtered = query === ''
-    ? candidates.slice(0, maxVisible)
-    : [...new Set([
-        ...byName,
-        ...fuse.search(query).map((r) => r.item),
-      ])].slice(0, maxVisible)
+  const filtered = rankCandidates(candidates, query, maxVisible, fuse)
   if (filtered.length === 0) {
     return (
       <Box flexDirection="column" paddingX={1} marginTop={0}>

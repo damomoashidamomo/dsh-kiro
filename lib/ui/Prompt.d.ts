@@ -43,6 +43,8 @@ export interface PromptProps {
         readonly insert: string;
         readonly seq: number;
         readonly clearAll?: boolean;
+        /** Replace the whole draft with this text (picker pre-fill). */
+        readonly replace?: string;
     } | undefined;
     /**
      * An autocomplete popup is open: Enter commits the highlighted entry

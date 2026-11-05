@@ -27,6 +27,24 @@ export interface AutocompleteProps {
     /** Maximum number of candidates to render. */
     readonly maxVisible?: number;
 }
+/**
+ * Rank candidates for the popup AND for the Enter key.
+ *
+ * Enter used to commit through a DIFFERENT filter than the one on screen, and
+ * neither ranked an exact name first — typing `/mode` + Enter ran `/model`
+ * ("mode" is a prefix of "model" and /model ships first in the registry), so
+ * the highlighted row and the executed command could disagree.
+ *
+ * Tiers: exact name, name prefix, name substring, hint substring, then fuzzy.
+ */
+export declare function rankCandidates<T extends {
+    label: string;
+    hint?: string;
+}>(items: readonly T[], query: string, limit?: number, fuzzy?: {
+    search: (q: string) => Array<{
+        item: T;
+    }>;
+}): T[];
 export declare function Autocomplete({ trigger, query, candidates, selected, maxVisible }: AutocompleteProps): JSX.Element;
 /** Built-in slash-command candidate list (all 25 shipped commands). */
 export declare function slashCandidates(items: ReadonlyArray<{

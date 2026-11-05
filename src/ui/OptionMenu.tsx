@@ -112,3 +112,19 @@ export function OptionMenu({ title, options, onPick, onCancel }: OptionMenuProps
     </Box>
   )
 }
+
+/**
+ * Patch session titles into a picker's rows: `resume <id>` rows get the loaded
+ * title, every other row is left alone. Titles load after the menu is drawn
+ * (they read each session log), so this runs as a second pass.
+ */
+export function withSessionTitles(
+  options: readonly OptionItem[],
+  titles: ReadonlyMap<string, string>,
+): readonly OptionItem[] {
+  return options.map((option) => {
+    const id = /^resume (\S+)$/u.exec(option.value)?.[1]
+    const title = id !== undefined ? titles.get(id) : undefined
+    return title === undefined || title === '' ? option : { ...option, hint: title }
+  })
+}
