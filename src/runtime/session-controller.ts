@@ -658,12 +658,24 @@ export class SessionController {
       const projections = (this.boundCtx as unknown as {
         get?: (name: string) => unknown
       }).get?.('sessionProjections') as
-        | { stateOf?: (session: unknown, key: string) => { projectedTokens?: number; pressureTokens?: number } | undefined }
+        | {
+            stateOf?: (session: unknown, key: string) =>
+              | { projectedTokens?: number; pressureTokens?: number; contextWindow?: number }
+              | undefined
+          }
         | undefined
       const pressure = projections?.stateOf?.(this.agent.session, 'contextPressure')
       const used = pressure?.projectedTokens ?? pressure?.pressureTokens
       if (used !== undefined && used > 0 && used !== this.state.agent.contextUsedTokens) {
         this.stateValue = { ...this.state, agent: { ...this.state.agent, contextUsedTokens: used, contextApprox: false } }
+      }
+      // The window the request DECLARED (pi-ai resolves it from its own
+      // catalog, including a provider default) — authoritative and available
+      // for models our settings catalog does not list, which is what made the
+      // prompt's `0% >` usage gutter vanish for them.
+      const window = pressure?.contextWindow
+      if (window !== undefined && window > 0 && window !== this.state.agent.contextLimitTokens) {
+        this.stateValue = { ...this.state, agent: { ...this.state.agent, contextLimitTokens: window } }
       }
     } catch {
       // projection unavailable: chunk-usage sampling remains the fallback
@@ -703,7 +715,6 @@ export class SessionController {
   }
 
   private applyEvent(event: SessionEvent): void {
-    this.refreshContextUsage()
     this.refreshContextUsage()
     this.refreshPermissionPreset()
     switch (event.type) {

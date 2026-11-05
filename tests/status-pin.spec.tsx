@@ -200,6 +200,30 @@ describe('context usage from the token-meter projection', () => {
     emit({ type: 'assistant/chunk', seq: 1, data: { chunk: { type: 'text-delta', text: 'x' } } })
     expect(ctrl.state.agent.contextUsedTokens).toBe(800)
   })
+
+  it('takes the context window from the projection (models the settings catalog does not list)', () => {
+    // pi-ai resolves a window from the installed catalog / route default even
+    // when the user's llm-pi-ai entry omits `contextWindow:`. That resolved
+    // value rides `request/context` into the projection, and it is what the
+    // prompt's `0% >` usage gutter needs — without it the gutter renders bare.
+    let projection: { projectedTokens?: number; contextWindow?: number } = { projectedTokens: 1000, contextWindow: 262144 }
+    const { ctrl, emit } = projectionDriver(projection)
+    expect(ctrl.state.agent.contextLimitTokens).toBeUndefined()
+    emit({ type: 'assistant/chunk', seq: 1, data: { chunk: { type: 'text-delta', text: 'x' } } })
+    expect(ctrl.state.agent.contextLimitTokens).toBe(262144)
+    // A later request with a re-resolved window (e.g. after /model) wins —
+    // the projection object is live, so mutate it in place.
+    projection.contextWindow = 1000000
+    emit({ type: 'assistant/chunk', seq: 2, data: { chunk: { type: 'text-delta', text: 'y' } } })
+    expect(ctrl.state.agent.contextLimitTokens).toBe(1000000)
+  })
+
+  it('keeps the catalog window when the projection has none', () => {
+    const { ctrl, emit } = projectionDriver({ projectedTokens: 1000 })
+    ctrl.patchAgent({ contextLimitTokens: 128000 })
+    emit({ type: 'assistant/chunk', seq: 1, data: { chunk: { type: 'text-delta', text: 'x' } } })
+    expect(ctrl.state.agent.contextLimitTokens).toBe(128000)
+  })
 })
 
 describe('project-level approval persistence', () => {

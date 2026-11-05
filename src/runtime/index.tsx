@@ -261,6 +261,36 @@ async function mount(ctx: Context, startup: KiroStartup): Promise<void> {
     // default: models without a contextWindow show bare token usage.
     contextLimitTokens: bootModelWindow ?? undefined,
   })
+  // The settings catalog only lists a window when the user annotated the
+  // model (`contextWindow:` in llm-pi-ai). Pi-ai can still resolve one from a
+  // provider/request default, and the request declares it — ask the adapter
+  // so the prompt's usage gutter (`0% >`) is there from the first frame
+  // instead of only after the first turn.
+  const llmSvc = (ctx as unknown as { get?: (name: string) => unknown }).get?.('llm') as
+    | {
+        resolveModelInfo?: (
+          provider: string,
+          model: string,
+          signal?: AbortSignal,
+        ) => Promise<{ context?: { contextWindow?: number } }>
+      }
+    | undefined
+  const resolveModelInfo = llmSvc?.resolveModelInfo
+  if (llmSvc !== undefined && typeof resolveModelInfo === 'function') {
+    // `call(llmSvc, …)`: the service reached through the context proxy would
+    // otherwise run detached from its receiver.
+    void resolveModelInfo
+      .call(llmSvc, selection.provider, bootModelId)
+      .then((info) => {
+        const window = info?.context?.contextWindow
+        if (window !== undefined && window > 0) controller.patchAgent({ contextLimitTokens: window })
+      })
+      .catch(() => {
+        // Adapter without model metadata (or an unregistered provider): the
+        // contextPressure projection still delivers the window on the first
+        // request, and without either the gutter falls back to `> `.
+      })
+  }
   // Transcript replay must run AFTER bindAgent (bind resets state).
   if (bootResumeId !== undefined) await seedHistory(bootResumeId)
   // Expose the controller as a Cordis service so slash commands can update
