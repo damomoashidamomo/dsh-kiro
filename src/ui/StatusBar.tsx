@@ -26,6 +26,46 @@ const STATUS_LABEL: Record<AgentStatusSnapshot['status'], string> = {
   error: 'error',
 }
 
+/**
+ * Stable identity of the session, as plain text: agent, workspace, model and
+ * the kiro engine combo. The boot line prints this ONCE into the transcript
+ * (kiro-cli prints `Model: auto (/model to change)` the same way), and the
+ * live bar is compared against it — an unchanged identity needs no bar.
+ */
+export function identityText(agent: AgentStatusSnapshot, activeAgentName?: string | undefined): string {
+  const parts = [`[${activeAgentName ?? 'default'}]`]
+  if (agent.workspace !== undefined) parts.push(`工作区: ${abbreviateHome(agent.workspace)}`)
+  parts.push(agent.activeProvider !== undefined && agent.activeModel !== undefined
+    ? `${agent.activeProvider}/${agent.activeModel}`
+    : 'model: pending')
+  if (agent.loopDriver === 'kiro') parts.push(`[kiro${agent.toolEngine === 'rust' ? '/rust' : ''}]`)
+  if (agent.planMode === true) parts.push('[plan]')
+  return parts.join(' · ')
+}
+
+/**
+ * Whether the live status bar is worth a row.
+ *
+ * kiro-cli has NO persistent bar: its context usage rides the prompt gutter
+ * and the model is announced once at boot, so an echoed prompt line sits
+ * directly above the prompt. The bar here is therefore transient — it appears
+ * only when it has news: the identity changed since boot, a prefix is active,
+ * or a decision (approval / question) is waiting.
+ */
+export function shouldShowStatusBar(input: {
+  readonly agent: AgentStatusSnapshot
+  readonly activeAgentName?: string | undefined
+  readonly prefix?: '/' | '@' | '!' | undefined
+  readonly bootIdentity?: string | undefined
+  readonly awaitingDecision?: boolean
+}): boolean {
+  if (input.prefix !== undefined) return true
+  if (input.awaitingDecision === true) return true
+  const identity = identityText(input.agent, input.activeAgentName)
+  if (input.bootIdentity === undefined) return true
+  return identity !== input.bootIdentity
+}
+
 /** Render the StatusBar. */
 export function StatusBar({ agent, prefix, activeAgentName }: StatusBarProps): JSX.Element {
   const statusColor = agent.status === 'running'

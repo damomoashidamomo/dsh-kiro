@@ -633,6 +633,32 @@ export class SessionController {
     this.publish()
   }
 
+  /**
+   * Print the session identity (`[default] · 工作区: … · provider/model`) ONCE
+   * into the transcript at boot — the kiro-cli `Model: auto (/model to
+   * change)` line. The live status bar can then stay hidden while nothing
+   * changes, which is what puts an echoed prompt line directly above the
+   * prompt instead of behind a permanent bar.
+   */
+  appendBootInfo(text: string): void {
+    if (text.trim() === '') return
+    // Printed once per process: a resumed session already carries the line.
+    if (this.state.messages.some((message) => message.id === 'boot-info')) return
+    const messages = [...this.state.messages]
+    messages.push({
+      id: 'boot-info',
+      kind: 'echo',
+      text,
+      tool: undefined,
+      createdAt: Date.now(),
+      seq: messages.length,
+      usage: undefined,
+      streaming: false,
+    })
+    this.stateValue = { ...this.state, messages }
+    this.publish()
+  }
+
   /** Patch the agent snapshot (used by status bar updates outside the event bus). */
   patchAgent(snapshot: Partial<AgentStatusSnapshot>): void {
     this.stateValue = {

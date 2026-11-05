@@ -8,6 +8,13 @@ export const changelogCommand: CommandDefinition = {
       kind: 'success',
       text: [
         'dsh-kiro changelog:',
+        '  0.6.46 布局对齐 kiro-cli（回显紧贴输入框）：',
+        '        - 空闲时不再常驻状态栏：`[default] · 工作区 · 模型` 一次性打印进会话（等同 kiro-cli 的',
+        '          `Model: auto (/model to change)` 那一行），所以回车回显的 `N% >` 现在就紧贴在输入框上面',
+        '        - 状态栏改为「有信息才出现」：切换模型/agent、plan 模式、正在选命令（/ @ !）、',
+        '          等待审批或确认时才显示，平时不占那一行',
+        '        - 输入框上方那行空隙在回显后自动收掉（和 WSL/kiro-cli 一样，敲过的行贴着提示符往上堆）',
+        '        - 修掉启动信息可能打印两次：splash 冻结进 <Static> 之前追加消息会被切片重印一次',
         '  0.6.45 命令选择器补全（所有子命令都能看到）：',
         '        - 回车一个命令时，选择器现在列出该命令的「全部」子命令：/chat 之前漏了 delete 和 help',
         '        - 原本只有 chat/spec/agent/engine/loop/tools 有选择器，现在 knowledge、prompts、todos、',

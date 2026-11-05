@@ -38,6 +38,8 @@ export interface PromptProps {
      * trailing query token is replaced by `insert` plus a space. Bumping the
      * seq applies it once; the same seq is ignored.
      */
+    /** Drop the blank row above the prompt (an echoed prompt line precedes it). */
+    readonly tightTop?: boolean;
     readonly pendingInsert?: {
         readonly token: string;
         readonly insert: string;
@@ -59,4 +61,4 @@ export interface PromptProps {
     readonly popupOpen?: boolean;
 }
 /** Render the prompt input row. */
-export declare function Prompt({ busy, contextPct, contextApprox, popupOpen, placeholder, onSubmit, onEmptySubmit, onPrefix, history, onAutocompleteMove, onAutocompleteCommit, pendingInsert, autocompleteActive, }: PromptProps): JSX.Element;
+export declare function Prompt({ busy, contextPct, contextApprox, popupOpen, placeholder, onSubmit, onEmptySubmit, onPrefix, history, onAutocompleteMove, onAutocompleteCommit, pendingInsert, tightTop, autocompleteActive, }: PromptProps): JSX.Element;

@@ -3,7 +3,7 @@ import { SessionController } from '../src/runtime/session-controller'
 import { contextWindowOf } from '../src/runtime/model-catalog'
 import { render } from 'ink-testing-library'
 import React from 'react'
-import { StatusBar } from '../src/ui/StatusBar'
+import { StatusBar, identityText, shouldShowStatusBar } from '../src/ui/StatusBar'
 import type { AgentStatusSnapshot } from '../src/runtime/types'
 
 function driver(): { ctrl: SessionController; emit: (event: unknown) => void } {
@@ -354,5 +354,52 @@ describe('honest context limit', () => {
     expect(frame).not.toContain('░')
     expect(frame).not.toContain('tokens')
     unmount()
+  })
+})
+
+describe('transient status bar (kiro-cli layout)', () => {
+  const snap = (over: Partial<AgentStatusSnapshot> = {}): AgentStatusSnapshot => ({
+    status: 'idle', activeAgent: undefined, activeModel: 'm1', activeProvider: 'p1',
+    lastTurnReason: undefined, contextUsedTokens: 0, contextLimitTokens: 1000,
+    planMode: false, workspace: '/home/gary/work',
+    ...over,
+  })
+
+  it('identity text carries agent, workspace, model and the kiro engine combo', () => {
+    expect(identityText(snap(), undefined)).toBe('[default] · 工作区: ~/work · p1/m1')
+    expect(identityText(snap({ loopDriver: 'kiro', toolEngine: 'rust' }), 'backend')).toBe(
+      '[backend] · 工作区: ~/work · p1/m1 · [kiro/rust]',
+    )
+    expect(identityText(snap({ activeModel: undefined, activeProvider: undefined }), undefined)).toContain('model: pending')
+  })
+
+  it('hides the bar while nothing changed, shows it when it has news', () => {
+    const boot = identityText(snap(), undefined)
+    // Unchanged identity at idle: no bar, so an echoed prompt line sits
+    // directly above the prompt (kiro-cli has no permanent bar either).
+    expect(shouldShowStatusBar({ agent: snap(), bootIdentity: boot })).toBe(false)
+    // Model switched since boot.
+    expect(shouldShowStatusBar({ agent: snap({ activeModel: 'm2' }), bootIdentity: boot })).toBe(true)
+    // Agent switched.
+    expect(shouldShowStatusBar({ agent: snap(), activeAgentName: 'backend', bootIdentity: boot })).toBe(true)
+    // Plan mode toggled.
+    expect(shouldShowStatusBar({ agent: snap({ planMode: true }), bootIdentity: boot })).toBe(true)
+    // Prefix being typed, or a decision waiting.
+    expect(shouldShowStatusBar({ agent: snap(), bootIdentity: boot, prefix: '/' })).toBe(true)
+    expect(shouldShowStatusBar({ agent: snap(), bootIdentity: boot, awaitingDecision: true })).toBe(true)
+    // Before the boot line exists there is nothing to compare against.
+    expect(shouldShowStatusBar({ agent: snap(), bootIdentity: undefined })).toBe(true)
+  })
+
+  it('prints the boot line once and ignores repeats', () => {
+    const ctrl = new SessionController()
+    ctrl.appendBootInfo('[default] · 工作区: ~/w · p/m')
+    ctrl.appendBootInfo('[default] · 工作区: ~/w · p/m')
+    const bootRows = ctrl.state.messages.filter((m) => m.id === 'boot-info')
+    expect(bootRows).toHaveLength(1)
+    expect(bootRows[0]?.text).toContain('工作区')
+    // Empty text is never printed.
+    ctrl.appendBootInfo('   ')
+    expect(ctrl.state.messages.filter((m) => m.id === 'boot-info')).toHaveLength(1)
   })
 })

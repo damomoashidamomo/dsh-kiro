@@ -56,6 +56,8 @@ export interface PromptProps {
    * trailing query token is replaced by `insert` plus a space. Bumping the
    * seq applies it once; the same seq is ignored.
    */
+  /** Drop the blank row above the prompt (an echoed prompt line precedes it). */
+  readonly tightTop?: boolean
   readonly pendingInsert?: {
     readonly token: string
     readonly insert: string
@@ -91,6 +93,7 @@ export function Prompt({
   onAutocompleteMove,
   onAutocompleteCommit,
   pendingInsert,
+  tightTop,
   autocompleteActive,
 }: PromptProps): JSX.Element {
   // While a turn runs, typing + Enter steers the live turn instead of
@@ -328,7 +331,7 @@ export function Prompt({
   }, [])
 
   return (
-    <Box flexDirection="column" marginTop={1}>
+    <Box flexDirection="column" marginTop={tightTop === true ? 0 : 1}>
       {buffer.images.length > 0 ? (
         <Box flexDirection="row">
           <Text dimColor>[{buffer.images.length} pending image(s)]</Text>

@@ -184,6 +184,14 @@ export declare class SessionController {
      * make every press after the first invisible.
      */
     appendPromptEcho(gutter: string): void;
+    /**
+     * Print the session identity (`[default] · 工作区: … · provider/model`) ONCE
+     * into the transcript at boot — the kiro-cli `Model: auto (/model to
+     * change)` line. The live status bar can then stay hidden while nothing
+     * changes, which is what puts an echoed prompt line directly above the
+     * prompt instead of behind a permanent bar.
+     */
+    appendBootInfo(text: string): void;
     /** Patch the agent snapshot (used by status bar updates outside the event bus). */
     patchAgent(snapshot: Partial<AgentStatusSnapshot>): void;
     /**

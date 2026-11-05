@@ -9,7 +9,7 @@ import { Box, Text, useApp, useInput, useStdout } from 'ink'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Transcript } from './Transcript'
 import { Prompt } from './Prompt'
-import { StatusBar } from './StatusBar'
+import { StatusBar, identityText, shouldShowStatusBar } from './StatusBar'
 import { ProgressOverlay } from './ProgressOverlay'
 import { SlashMenu } from './SlashMenu'
 import { OptionMenu, withSessionTitles, type OptionItem } from './OptionMenu'
@@ -217,6 +217,42 @@ export function App({ controller, seedTask, activeAgentName, onSubmit, fileSearc
     if (splashSettled || !splashBlink) return undefined
     return splash.replace('Kiro CLI · DeepSeek Harness', 'Kiro CLI ◉ DeepSeek Harness')
   }, [splash, splashBlink, splashSettled])
+  // The session identity is printed once into the transcript (kiro-cli's
+  // `Model: auto (/model to change)` line). The live bar then only appears
+  // when the identity diverges or a decision is pending — so at rest the last
+  // transcript row (an echoed `0% >`) sits directly above the prompt.
+  const bootIdentity = useRef<string | undefined>(undefined)
+  const identity = identityText(state.agent, activeAgentName)
+  useEffect(() => {
+    if (bootIdentity.current !== undefined) return
+    // The splash must be frozen into <Static> FIRST: it becomes staticItems[0],
+    // and Ink's <Static> prints `items.slice(rendered)`. Appending a message
+    // before the header would re-slice to the same message once the header
+    // lands and print it a SECOND time (a duplicated boot line on screen).
+    if (!splashSettled) return
+    // Wait for the boot model resolution so the line does not say "pending";
+    // fall back after a moment in case the provider never declares one.
+    const known = state.agent.activeProvider !== undefined && state.agent.activeModel !== undefined
+    const printBoot = (): void => {
+      if (bootIdentity.current !== undefined) return
+      bootIdentity.current = identity
+      controller.appendBootInfo(identity)
+    }
+    if (known) {
+      printBoot()
+      return
+    }
+    const timer = setTimeout(printBoot, 2500)
+    return () => clearTimeout(timer)
+  }, [identity, splashSettled, state.agent.activeProvider, state.agent.activeModel, controller])
+
+  // A shell echo (`0% >`) belongs right above the prompt, the way kiro-cli
+  // stacks them; the Prompt's usual breathing gap would sit between the two.
+  const lastIsPromptEcho = (() => {
+    const last = state.messages[state.messages.length - 1]
+    return last !== undefined && last.kind === 'echo' && last.id.startsWith('echo-')
+  })()
+
   const activeToolName = useMemo(() => {
     for (let i = state.messages.length - 1; i >= 0; i -= 1) {
       const msg = state.messages[i]
@@ -390,7 +426,15 @@ export function App({ controller, seedTask, activeAgentName, onSubmit, fileSearc
         busy={state.agent.status === 'running'}
         subtext={state.hasActiveTool ? 'executing…' : undefined}
       />
-      <StatusBar agent={state.agent} prefix={prefix} activeAgentName={activeAgentName} />
+      {shouldShowStatusBar({
+        agent: state.agent,
+        activeAgentName,
+        prefix,
+        bootIdentity: bootIdentity.current,
+        awaitingDecision: state.approval !== undefined || state.question !== undefined,
+      })
+        ? <StatusBar agent={state.agent} prefix={prefix} activeAgentName={activeAgentName} />
+        : null}
       {optionMenu !== undefined ? (
         <OptionMenu
           title={optionMenu.title}
@@ -427,6 +471,7 @@ export function App({ controller, seedTask, activeAgentName, onSubmit, fileSearc
         />
       ) : (
         <Prompt
+          tightTop={lastIsPromptEcho}
           busy={state.agent.status === 'running'}
           contextPct={contextPct}
           contextApprox={contextApprox}
