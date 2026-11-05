@@ -24,7 +24,7 @@ import {
   commandTextOf,
   type ApprovalPattern,
 } from './trust-store'
-import { settleCut, settlePieceText } from './streaming-settle'
+import { settleCut, settlePieceText, wallCut } from './streaming-settle'
 import {
   findToolCallIndex,
   previewValue,
@@ -88,6 +88,17 @@ function idFor(kind: string, seq: number): string {
  * runtime plugin; the controller does not own the agent — it follows whatever
  * agent the runtime plugin creates.
  */
+/**
+ * Rows of streaming tail kept OUTSIDE `<Static>`: the renderer repaints only
+ * changed lines now, but a tail taller than the screen still cannot flow into
+ * the terminal scrollback while it is live, so the wall-of-text guard settles
+ * it in paragraphs of about this height.
+ */
+function liveTailRows(): number {
+  const rows = process.stdout.rows ?? 24
+  return Math.max(4, Math.min(12, Math.floor(rows / 3)))
+}
+
 export class SessionController {
   private stateValue: SessionRenderState = emptyState()
 
@@ -1030,8 +1041,18 @@ export class SessionController {
         streaming: true,
       }
     }
-    const cut = settleCut(segment.text)
     const settledUpTo = segment.settledUpTo ?? 0
+    // Block boundaries first; a single unbroken line (a wall of text with no
+    // newline at all) has no boundary to cut at, so it is capped separately —
+    // otherwise the whole answer lives in Ink's live region and never reaches
+    // the scrollback until the turn ends.
+    const blockCut = settleCut(segment.text)
+    const rawCut = blockCut > settledUpTo
+      ? blockCut
+      : wallCut(segment.text, settledUpTo, liveTailRows(), (process.stdout.columns ?? 100) - 4)
+    // Defensive: a settle offset may never pass the text end (a piece would
+    // then be clamped short while the tail's offset moved further).
+    const cut = Math.min(rawCut, segment.text.length)
     const piece: Message | undefined = cut > settledUpTo
       ? {
           id: idFor('assistant-settled', messages.length),

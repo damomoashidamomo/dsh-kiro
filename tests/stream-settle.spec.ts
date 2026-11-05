@@ -117,3 +117,41 @@ describe('streaming settle into Static pieces', () => {
     expect(done.map((m) => m.text)).toEqual(['partial answer', 'more'])
   })
 })
+
+describe('wall-of-text guard (live tail cap)', () => {
+  it('settles an unbroken line in paragraph-sized pieces', () => {
+    const { ctrl, emit } = driver()
+    // 4000 chars with NO newline: settleCut has no boundary to offer, so
+    // without the wall guard the whole answer stays live (a full screen of
+    // text that never reaches the scrollback).
+    const wall = `${'流式输出的长段落文字'.repeat(250)}`
+    for (let i = 0; i < wall.length; i += 200) {
+      emit(delta(wall.slice(i, i + 200)) as never)
+    }
+    const assistant = ctrl.state.messages.filter((m) => m.kind === 'assistant')
+    expect(assistant.length).toBeGreaterThan(1)
+    const streaming = assistant.filter((m) => m.streaming)
+    expect(streaming).toHaveLength(1)
+    // The live tail stays short: at most the cap (12 rows at 100 columns).
+    const tail = streaming[0]
+    const liveText = tail?.text.slice(tail.settledUpTo ?? 0) ?? ''
+    expect(liveText.length).toBeLessThan(1200)
+    // Nothing is lost or duplicated: pieces + tail rebuild the answer.
+    const rebuilt = assistant.map((m) => {
+      const from = m.streaming ? m.settledUpTo ?? 0 : 0
+      return m.text.slice(from)
+    }).join('')
+    expect(rebuilt).toBe(wall)
+  })
+
+  it('leaves fenced code alone — code has newlines, so settleCut owns it', () => {
+    const { ctrl, emit } = driver()
+    emit(delta('```\nconst a = 1\nconst b = 2') as never)
+    const assistant = ctrl.state.messages.filter((m) => m.kind === 'assistant')
+    // Unbalanced fence: nothing settled, the block stays live and renders as
+    // a code block instead of being cut mid-fence.
+    expect(assistant).toHaveLength(1)
+    expect(assistant[0]?.text).toContain('const b = 2')
+    expect(assistant[0]?.streaming).toBe(true)
+  })
+})

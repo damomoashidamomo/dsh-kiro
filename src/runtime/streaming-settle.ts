@@ -8,6 +8,8 @@
  * @module @damomoashidamomo/dsh-kiro/runtime/streaming-settle
  */
 
+import { displayWidth } from '../markdown/render'
+
 /**
  * Find the offset just past the LAST safe line boundary for settling a
  * streaming answer into `<Static>` pieces. A boundary is unsafe when:
@@ -44,4 +46,43 @@ export function settleCut(text: string): number {
  */
 export function settlePieceText(full: string, settledUpTo: number, cut: number): string {
   return full.slice(settledUpTo, cut).replace(/\n$/u, '')
+}
+
+/** Terminal rows `text` occupies after markdown-ish wrapping. */
+export function estimateRows(text: string, columns: number): number {
+  const cols = Math.max(20, columns)
+  let rows = 0
+  for (const line of text.split('\n')) {
+    rows += Math.max(1, Math.ceil(displayWidth(line) / cols))
+  }
+  return rows
+}
+
+/**
+ * Wall-of-text guard: a model that streams ONE unbroken line (no newline at
+ * all) keeps the whole answer in Ink's live region, so the region grows to a
+ * full screen of text that only ever exists on screen — never in the
+ * scrollback. `settleCut` cannot help (there is no boundary to cut at) and
+ * cutting without a newline is only safe for plain paragraphs, which is
+ * exactly what this guard targets: fenced code and tables always carry
+ * newlines, so they are left to `settleCut`.
+ *
+ * Returns the offset to settle up to, or -1 when the tail is already small
+ * enough or is line-structured (not this guard's job).
+ */
+export function wallCut(text: string, settledUpTo: number, maxRows: number, columns: number): number {
+  const tail = text.slice(settledUpTo)
+  if (tail.includes('\n')) return -1
+  const cols = Math.max(20, columns)
+  if (estimateRows(tail, cols) <= maxRows) return -1
+  // Never settle past the end of the tail: an offset beyond `text.length`
+  // would advance `settledUpTo` while the emitted piece is clamped short,
+  // and the next piece would then start INSIDE already-shown text
+  // (duplicated words on screen).
+  const limit = Math.min(tail.length, Math.max(40, maxRows * cols))
+  const slice = tail.slice(0, limit)
+  // Prefer a word boundary near the limit so the piece reads as a paragraph.
+  const space = slice.lastIndexOf(' ')
+  const at = space > limit * 0.5 ? space + 1 : limit
+  return settledUpTo + at
 }

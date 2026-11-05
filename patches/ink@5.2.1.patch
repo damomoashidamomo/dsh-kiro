@@ -15,35 +15,119 @@ index 0a345aeec3abe17c28414b78b5cc5fd2343cce57..93430c207f620aba356325d5a89f47f8
                  // but with option = true, so we need to take this into account here
                  // to avoid breaking changes in Ink.
 diff --git a/build/ink.js b/build/ink.js
-index a9c444ff161ed4b6ea13909591844909015fe97c..9a92875bd51b98ba99dba498a2159a01d29d2c02 100644
+index a9c444f..f22445b 100644
 --- a/build/ink.js
-+++ b/build/ink.js	
-@@ -129,7 +129,7 @@ export default class Ink {
++++ b/build/ink.js
+@@ -118,18 +118,24 @@ export default class Ink {
+         if (hasStaticOutput) {
+             this.fullStaticOutput += staticOutput;
+         }
+-        if (outputHeight >= this.options.stdout.rows) {
+-            this.options.stdout.write(ansiEscapes.clearTerminal + this.fullStaticOutput + output);
+-            this.lastOutput = output;
+-            return;
+-        }
++        // dsh-kiro patch: NO clearTerminal fallback. Ink used to answer a live
++        // region taller than the terminal with ESC[2J (clear screen) + ESC[3J
++        // (clear SCROLLBACK) + a reprint of the ENTIRE static transcript, on
++        // every single frame — the whole screen flashed while an answer
++        // streamed and the user's scrollback was destroyed. log-update now
++        // repaints only the changed lines, clamped to the visible screen, so
++        // tall frames scroll naturally and nothing needs to be cleared.
+         // To ensure static output is cleanly rendered before main output, clear main output first
+         if (hasStaticOutput) {
+             this.log.clear();
              this.options.stdout.write(staticOutput);
              this.log(output);
          }
 -        if (!hasStaticOutput && output !== this.lastOutput) {
++        // dsh-kiro patch: a caret-ONLY move (arrow keys / Home) produces an
++        // identical frame, which ink would skip — but the real terminal cursor
++        // still has to be repositioned, so re-render when the published caret
++        // moved.
 +        if (!hasStaticOutput && (output !== this.lastOutput || this.log.caretMoved())) {
              this.throttledLog(output);
          }
          this.lastOutput = output;
 diff --git a/build/log-update.js b/build/log-update.js
-index 547421e47903fbdce8ecab87e4fbdce901663f03..a87ca1e35f5e46562146f2c593afb0c22ae719e1 100644
+index 547421e..4f353b8 100644
 --- a/build/log-update.js
-+++ b/build/log-update.js	
-@@ -2,6 +2,11 @@ import ansiEscapes from 'ansi-escapes';
++++ b/build/log-update.js
+@@ -2,28 +2,152 @@ import ansiEscapes from 'ansi-escapes';
  import cliCursor from 'cli-cursor';
  const create = (stream, { showCursor = false } = {}) => {
      let previousLineCount = 0;
 +    let activeCaret;
++    // dsh-kiro flicker fix: the previous frame's LINES, so a new frame only
++    // repaints the part that actually changed (see writeFrame).
++    let previousLines = [];
 +    const readCaret = () => (typeof globalThis.__kiroCaret === 'object' && globalThis.__kiroCaret !== null)
 +        ? globalThis.__kiroCaret
 +        : undefined;
 +    const sameCaret = (a, b) => a === b || (a && b && a.up === b.up && a.col === b.col);
++    // Rows we can address with relative moves; anything above is scrollback.
++    const terminalRows = () => (typeof stream.rows === 'number' && stream.rows > 0 ? stream.rows : 24);
      let previousOutput = '';
      let hasHiddenCursor = false;
++    // dsh-kiro patch: line-diff repaint. Ink used to erase EVERY line of the
++    // live region and reprint the whole frame on each render, so a streaming
++    // answer (or just the status-bar clock) blanked and repainted the entire
++    // block ~10x/s — the visible flicker. Rewrite only from the first line
++    // that differs; unchanged lines above it are left untouched.
++    //
++    // The move-up is clamped to the screen height: when the live region is
++    // taller than the terminal its top lines have already scrolled into the
++    // scrollback, where they cannot (and need not) be repainted — that is the
++    // case where ink's own fallback used to write clearTerminal (ESC[2J +
++    // ESC[3J + a full static reprint) on EVERY frame.
++    const writeFrame = (lines) => {
++        if (previousLines.length === 0) {
++            // Nothing of ours on screen yet (or the region was cleared):
++            // write the whole frame, parked at column 0.
++            stream.write('\r' + lines.join('\n'));
++            return;
++        }
++        const shared = Math.min(previousLines.length, lines.length);
++        let first = 0;
++        while (first < shared && previousLines[first] === lines[first]) {
++            first += 1;
++        }
++        if (first === shared && previousLines.length === lines.length) {
++            return; // identical text — a caret-only move is handled by render
++        }
++        const reach = Math.min(previousLines.length - 1, terminalRows() - 1);
++        // Start at the changed line, but never above the oldest line still on
++        // screen (the rest has scrolled into the scrollback).
++        const from = Math.max(first, previousLines.length - 1 - reach);
++        let out = '';
++        const up = previousLines.length - 1 - from;
++        if (up > 0) {
++            out += `\x1b[${up}A`;
++        }
++        out += '\r';
++        for (let i = from; i < lines.length; i += 1) {
++            if (i > from) {
++                out += '\n';
++            }
++            out += `\x1b[2K${lines[i]}`;
++        }
++        // The frame shrank: blank whatever is left below the new last line
++        // (bounded by the screen — the rest is off-screen already).
++        if (lines.length < previousLines.length) {
++            const extra = Math.min(previousLines.length - lines.length, terminalRows() - 1);
++            out += '\x1b[2K';
++            for (let i = 0; i < extra; i += 1) {
++                out += '\n\x1b[2K';
++            }
++            if (extra > 0) {
++                out += `\x1b[${extra}A`;
++            }
++            out += '\r';
++        }
++        stream.write(out);
++    };
      const render = (str) => {
-@@ -9,20 +14,72 @@ const create = (stream, { showCursor = false } = {}) => {
+         if (!showCursor && !hasHiddenCursor) {
              cliCursor.hide();
              hasHiddenCursor = true;
          }
@@ -63,20 +147,23 @@ index 547421e47903fbdce8ecab87e4fbdce901663f03..a87ca1e35f5e46562146f2c593afb0c2
 +        // the real terminal cursor ends up at the END of the last line — an
 +        // in-band escape cannot position it — so relative moves (CUU · CR ·
 +        // CUF · show) follow the write, and unjump() walks back down before
-+        // the next erase (eraseLines needs the cursor on the region's bottom
-+        // line or it clears the wrong rows).
++        // the next write (the repaint math needs the cursor on the region's
++        // bottom line or it rewrites the wrong rows).
 +        const caret = readCaret();
-+        if (output === previousOutput && sameCaret(caret, activeCaret)) {
++        const textSame = output === previousOutput;
++        if (textSame && sameCaret(caret, activeCaret)) {
              return;
          }
 -        previousOutput = output;
 -        stream.write(ansiEscapes.eraseLines(previousLineCount) + output);
 -        previousLineCount = output.split('\n').length;
 +        unjump();
-+        if (output !== previousOutput) {
++        if (!textSame) {
++            const lines = output.split('\n');
 +            previousOutput = output;
-+            stream.write(ansiEscapes.eraseLines(previousLineCount) + '\r' + output);
-+            previousLineCount = output.split('\n').length;
++            writeFrame(lines);
++            previousLines = lines;
++            previousLineCount = lines.length;
 +        }
 +        activeCaret = caret;
 +        if (activeCaret !== undefined) {
@@ -90,7 +177,7 @@ index 547421e47903fbdce8ecab87e4fbdce901663f03..a87ca1e35f5e46562146f2c593afb0c2
 +        }
      };
 +    // Walk the cursor back to the region's bottom line after a caret jump.
-+    // Called before erasing AND (via ink's static writes) before any raw
++    // Called before repainting AND (via ink's static writes) before any raw
 +    // stdout.write that would otherwise land mid-frame.
 +    const unjump = () => {
 +        if (activeCaret !== undefined && activeCaret.up > 0) {
@@ -106,10 +193,11 @@ index 547421e47903fbdce8ecab87e4fbdce901663f03..a87ca1e35f5e46562146f2c593afb0c2
      render.clear = () => {
 -        stream.write(ansiEscapes.eraseLines(previousLineCount));
 +        unjump();
-+        // '\r': after a caret jump the cursor column is the caret column —
-+        // static output written right after clear() must start at column 0.
-+        stream.write(ansiEscapes.eraseLines(previousLineCount) + '\r');
++        // Bound the erase to what is actually on screen: with a live region
++        // taller than the terminal the extra lines live in the scrollback.
++        stream.write(ansiEscapes.eraseLines(Math.min(previousLineCount, terminalRows())) + '\r');
          previousOutput = '';
++        previousLines = [];
          previousLineCount = 0;
      };
      render.done = () => {
@@ -120,5 +208,14 @@ index 547421e47903fbdce8ecab87e4fbdce901663f03..a87ca1e35f5e46562146f2c593afb0c2
 +            stream.write('\n');
 +        }
          previousOutput = '';
++        previousLines = [];
          previousLineCount = 0;
          if (!showCursor) {
+             cliCursor.show();
+@@ -34,4 +158,4 @@ const create = (stream, { showCursor = false } = {}) => {
+ };
+ const logUpdate = { create };
+ export default logUpdate;
+-//# sourceMappingURL=log-update.js.map
+\ No newline at end of file
++//# sourceMappingURL=log-update.js.map

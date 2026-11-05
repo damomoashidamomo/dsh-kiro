@@ -8,6 +8,12 @@ export const changelogCommand: CommandDefinition = {
       kind: 'success',
       text: [
         'dsh-kiro changelog:',
+        '  0.6.40 闪烁根治（渲染层）：',
+        '        - 行级差异重绘：每帧只重画变化的那几行，流式输出不再整块擦除重画',
+        '        - 去掉 ink 的 clearTerminal 兜底（ESC[2J + ESC[3J + 全量历史重印）：',
+        '          活动区高于屏幕时不再整屏闪、也不再清掉回滚历史',
+        '        - 活动区高度上限：纯文本长墙按段落沉入 Static，答案自动进入回滚历史',
+        '        - 回归测试：流式 30 行 / 收缩 / 屏外变更 均断言 0 次清屏且重绘有上限',
         '  0.5.x  链接可点击与防闪烁：',
         '        - 回答里的链接 Ctrl+点击 直达（OSC 8；修复 Ink 依赖拆坏超链接）',
         '        - 流式输出按块沉入 Static：空闲 0 重绘，长回答不再整屏闪烁',

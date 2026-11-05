@@ -23,3 +23,18 @@ export declare function settleCut(text: string): number;
  * newline dropped — a piece is its own markdown block.
  */
 export declare function settlePieceText(full: string, settledUpTo: number, cut: number): string;
+/** Terminal rows `text` occupies after markdown-ish wrapping. */
+export declare function estimateRows(text: string, columns: number): number;
+/**
+ * Wall-of-text guard: a model that streams ONE unbroken line (no newline at
+ * all) keeps the whole answer in Ink's live region, so the region grows to a
+ * full screen of text that only ever exists on screen — never in the
+ * scrollback. `settleCut` cannot help (there is no boundary to cut at) and
+ * cutting without a newline is only safe for plain paragraphs, which is
+ * exactly what this guard targets: fenced code and tables always carry
+ * newlines, so they are left to `settleCut`.
+ *
+ * Returns the offset to settle up to, or -1 when the tail is already small
+ * enough or is line-structured (not this guard's job).
+ */
+export declare function wallCut(text: string, settledUpTo: number, maxRows: number, columns: number): number;

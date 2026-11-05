@@ -17,11 +17,6 @@ import { type ApprovalPattern } from './trust-store';
 import type { AgentStatusSnapshot, ApprovalChoice, ApprovalRequestUi, OverlayKind, PickerItem, QuestionChoice, QuestionRequestUi, SessionRenderState } from './types';
 /** Subscriber callback when the render state changes. */
 export type StateListener = (state: SessionRenderState) => void;
-/**
- * The controller that projects session events onto UI state. One instance per
- * runtime plugin; the controller does not own the agent — it follows whatever
- * agent the runtime plugin creates.
- */
 export declare class SessionController {
     private stateValue;
     /** Current render snapshot (read-only view for services like /retry). */
