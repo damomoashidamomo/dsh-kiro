@@ -24,6 +24,8 @@ export type MessageKind =
   | 'system'
   | 'todo'
   | 'error'
+  /** Not a message: a shell-like blank line from Enter on an empty prompt. */
+  | 'blank'
 
 /** Tool call execution state machine. */
 export type ToolState = 'pending' | 'running' | 'done' | 'failed' | 'cancelled'

@@ -404,6 +404,7 @@ export function App({ controller, seedTask, activeAgentName, onSubmit, fileSearc
           contextPct={contextPct}
           contextApprox={contextApprox}
           history={submitHistory}
+          onEmptySubmit={() => controller.appendBlankLine()}
           onSubmit={(text) => {
             // Option picker: a BARE enumerated command opens the picker
             // instead of running bare (which only printed usage text).

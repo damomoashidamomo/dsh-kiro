@@ -8,6 +8,13 @@ export const changelogCommand: CommandDefinition = {
       kind: 'success',
       text: [
         'dsh-kiro changelog:',
+        '  0.6.42 空回车换行 + 用量条修复：',
+        '        - 空输入按回车不再石沉大海：像 shell 提示符那样每按一次把对话顶上去一行',
+        '          （行内是零宽字符，视觉为空白行——空格会被 Ink 当行尾空白裁掉）',
+        '        - 每条空白行是独立消息：Ink 的 <Static> 只打印一次，复用 id 会让第二次起隐身',
+        '        - 上下文窗口也取自平台适配器（llm.resolveModelInfo）与 token-meter 投影：',
+        '          配置里没写 contextWindow 的模型，左侧 `0% >` 用量条照常显示',
+        '        - 启动第一帧即正确（不必等首次请求）；恢复会话 / 切换模型后保持同步',
         '  0.6.40 闪烁根治（渲染层）：',
         '        - 行级差异重绘：每帧只重画变化的那几行，流式输出不再整块擦除重画',
         '        - 去掉 ink 的 clearTerminal 兜底（ESC[2J + ESC[3J + 全量历史重印）：',

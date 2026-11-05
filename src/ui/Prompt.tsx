@@ -38,6 +38,11 @@ export interface PromptProps {
   readonly placeholder?: string
   /** Submit handler — receives the trimmed text and pending images. */
   readonly onSubmit: (text: string, images: readonly PendingImage[]) => void
+  /**
+   * Enter on an EMPTY prompt (no draft, no pending image) — the shell-like
+   * blank line. Without it the key silently does nothing.
+   */
+  readonly onEmptySubmit?: () => void
   /** Notify the parent when a special prefix is active (`/`, `@`, `!`). */
   readonly onPrefix?: (prefix: '/' | '@' | '!' | undefined, query: string) => void
   /** Initial history to seed the buffer with. */
@@ -73,6 +78,7 @@ export function Prompt({
   popupOpen,
   placeholder,
   onSubmit,
+  onEmptySubmit,
   onPrefix,
   history = [],
   onAutocompleteMove,
@@ -111,7 +117,12 @@ export function Prompt({
       if (outcome.kind === 'submit') {
         const text = prev.text.trim()
         const images = prev.images
-        if (text === '' && images.length === 0) return prev
+        if (text === '' && images.length === 0) {
+          // Empty Enter: print a blank line (shell behaviour) instead of
+          // swallowing the key press.
+          Promise.resolve().then(() => onEmptySubmit?.())
+          return prev
+        }
         Promise.resolve().then(() => onSubmit(text, images))
         return emptyBuffer(next.history)
       }

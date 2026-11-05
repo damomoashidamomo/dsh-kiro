@@ -20,6 +20,11 @@ export interface PromptProps {
     readonly placeholder?: string;
     /** Submit handler — receives the trimmed text and pending images. */
     readonly onSubmit: (text: string, images: readonly PendingImage[]) => void;
+    /**
+     * Enter on an EMPTY prompt (no draft, no pending image) — the shell-like
+     * blank line. Without it the key silently does nothing.
+     */
+    readonly onEmptySubmit?: () => void;
     /** Notify the parent when a special prefix is active (`/`, `@`, `!`). */
     readonly onPrefix?: (prefix: '/' | '@' | '!' | undefined, query: string) => void;
     /** Initial history to seed the buffer with. */
@@ -52,4 +57,4 @@ export interface PromptProps {
     readonly popupOpen?: boolean;
 }
 /** Render the prompt input row. */
-export declare function Prompt({ busy, contextPct, contextApprox, popupOpen, placeholder, onSubmit, onPrefix, history, onAutocompleteMove, onAutocompleteCommit, pendingInsert, autocompleteActive, }: PromptProps): JSX.Element;
+export declare function Prompt({ busy, contextPct, contextApprox, popupOpen, placeholder, onSubmit, onEmptySubmit, onPrefix, history, onAutocompleteMove, onAutocompleteCommit, pendingInsert, autocompleteActive, }: PromptProps): JSX.Element;

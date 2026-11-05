@@ -12,7 +12,9 @@ export interface TodoItem {
     readonly status: 'pending' | 'in_progress' | 'completed';
 }
 /** UI-facing message kinds. */
-export type MessageKind = 'user' | 'assistant' | 'reasoning' | 'tool-call' | 'tool-result' | 'system' | 'todo' | 'error';
+export type MessageKind = 'user' | 'assistant' | 'reasoning' | 'tool-call' | 'tool-result' | 'system' | 'todo' | 'error'
+/** Not a message: a shell-like blank line from Enter on an empty prompt. */
+ | 'blank';
 /** Tool call execution state machine. */
 export type ToolState = 'pending' | 'running' | 'done' | 'failed' | 'cancelled';
 /** Single tool invocation rendered in the transcript. */

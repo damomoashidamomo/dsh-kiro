@@ -43,9 +43,26 @@ export function Message({ message }: MessageProps): JSX.Element {
       return <SystemMessage text={message.text} />
     case 'error':
       return <ErrorMessage text={message.text} />
+    case 'blank':
+      return <BlankLine />
     default:
       return <SystemMessage text="(unknown message kind)" />
   }
+}
+
+/**
+ * A shell-like blank line (Enter on an empty prompt), pushing the conversation
+ * up one row like a shell prompt does.
+ *
+ * The row holds a zero-width space rather than a blank: Ink trims trailing
+ * whitespace per line (`output.js` → `trimEnd`), so an all-whitespace item is
+ * written as the empty string and the press would be invisible. U+200B is not
+ * whitespace, has display width 0, and therefore prints an empty-looking row.
+ */
+const BLANK_GLYPH = '\u200b'
+
+function BlankLine(): JSX.Element {
+  return <Text>{BLANK_GLYPH}</Text>
 }
 
 /** Render a user prompt with the `›` gutter. */

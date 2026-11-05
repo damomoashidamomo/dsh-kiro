@@ -107,6 +107,8 @@ export class SessionController {
     return this.stateValue
   }
   private readonly listeners = new Set<StateListener>()
+  /** Monotonic counter for shell-like blank-line messages. */
+  private blankSeq = 0
   private agent: Agent | undefined
   /** App context (for platform projections such as contextPressure). */
   private boundCtx: Context | undefined
@@ -605,6 +607,29 @@ export class SessionController {
       this.publish()
     }
     resolve?.({ kind: 'dismissed' })
+  }
+
+  /**
+   * Shell-like comfort: Enter on an EMPTY prompt prints a blank line and
+   * pushes the transcript up, instead of silently doing nothing. One message
+   * per press — `<Static>` prints an item exactly once and never repaints it,
+   * so a reused id would make every press after the first invisible.
+   */
+  appendBlankLine(): void {
+    const messages = [...this.state.messages]
+    this.blankSeq = (this.blankSeq ?? 0) + 1
+    messages.push({
+      id: `blank-${this.blankSeq}`,
+      kind: 'blank',
+      text: '',
+      tool: undefined,
+      createdAt: Date.now(),
+      seq: messages.length,
+      usage: undefined,
+      streaming: false,
+    })
+    this.stateValue = { ...this.state, messages }
+    this.publish()
   }
 
   /** Patch the agent snapshot (used by status bar updates outside the event bus). */
