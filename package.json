@@ -1,6 +1,6 @@
 {
   "name": "@damomoashidamomo/dsh-kiro",
-  "version": "0.6.43",
+  "version": "0.6.44",
   "description": "Kiro-CLI equivalent TUI bundle for DeepSeek Harness \u2014 rich terminal UI with markdown rendering, slash commands, custom agents, MCP, LSP, checkpointing and knowledge base. Dark-green themed.",
   "type": "module",
   "main": "lib/index.js",
