@@ -528,7 +528,14 @@ export function App({ controller, seedTask, activeAgentName, onSubmit, fileSearc
             // Args already typed (`/chat resume`) — commit submits the full
             // draft; committing only the highlighted name would drop them.
             if (prefix === '/' && prefixQuery.includes(' ')) {
-              onSubmit(`/${prefixQuery.trim()}`)
+              const full = `/${prefixQuery.trim()}`
+              // This Enter was consumed by the POPUP, not by the prompt's
+              // submit path, so the prompt must be cleared here. Leaving it
+              // meant the next command was appended to the old draft:
+              // `/chat list` + `/chat` became `/chat list/chat`.
+              insertSeq.current += 1
+              setAtInsert({ token: '', insert: '', seq: insertSeq.current, clearAll: true })
+              onSubmit(full)
             } else {
               // '/' picker: submit the HIGHLIGHTED command (arrow keys move
               // autocompleteSelected via onAutocompleteMove).

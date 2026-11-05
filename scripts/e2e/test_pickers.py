@@ -14,6 +14,7 @@ import subprocess
 import unittest
 
 from harness import Tui
+from screen import Screen
 
 SGR_RE = re.compile(r'\x1b\[[0-9;?]*[a-zA-Z]')
 
@@ -101,6 +102,42 @@ class PickerTest(unittest.TestCase):
         # Every session row carries either a timestamp or a title — never the
         # old hardcoded `（无简介）`.
         self.assertFalse(any('无简介' in row for row in session_rows))
+
+    def test_40_draft_clears_after_a_command_with_args(self):
+        """Enter with args typed is consumed by the popup, not the prompt.
+
+        The popup committed `/chat list` but never cleared the prompt, so the
+        next thing typed was appended to it: typing `/chat` afterwards became
+        `/chat list/chat` (unknown subcommand) and the resume menu never
+        opened. Reported as "/chat list 之后按 /chat 不弹菜单了".
+        """
+        fresh = Tui(columns=110, lines=40)
+        try:
+            fresh.drain(1.5)
+            fresh.type('/chat list', delay=0.02)
+            fresh.drain(0.4)
+            fresh.write(b'\r')
+            fresh.drain(1.4)
+            screen = Screen(110, 40)
+            screen.feed(fresh.raw)
+            prompt = [row for row in screen.rows() if '% >' in row]
+            self.assertRegex(
+                prompt[-1] if prompt else '',
+                r'%\s*>\s*(Type a message|$)',
+                'the draft was not cleared after a command with arguments',
+            )
+            # And the picker still opens afterwards (the reported symptom).
+            fresh.type('/chat', delay=0.02)
+            fresh.drain(0.4)
+            fresh.write(b'\r')
+            fresh.drain(1.2)
+            screen2 = Screen(110, 40)
+            screen2.feed(fresh.raw)
+            joined = '\n'.join(screen2.rows())
+            self.assertIn('会话管理', joined, 'the /chat picker did not open after a command with args')
+            self.assertIn('resume', joined)
+        finally:
+            fresh.quit()
 
 
 if __name__ == '__main__':
