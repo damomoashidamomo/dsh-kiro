@@ -17,6 +17,7 @@ import { PickerOverlay } from './PickerOverlay'
 import { ApprovalOverlay } from './ApprovalOverlay'
 import { PlanReviewOverlay } from './PlanReviewOverlay'
 import { Autocomplete, slashCandidates, type AutocompleteItem } from './Autocomplete'
+import { STRINGS } from './strings'
 import { banner, palette } from '../theme/palette'
 import { splashMark } from '../theme/banner'
 import Fuse from 'fuse.js'
@@ -347,6 +348,20 @@ export function App({ controller, seedTask, activeAgentName, onSubmit, fileSearc
     return pct < 10 ? Math.round(pct * 10) / 10 : Math.round(pct)
   })()
 
+  /**
+   * The gutter text the prompt shows right now (`0% > ` / `约 12% > ` / `> `),
+   * echoed into the transcript on an empty Enter — a shell prints its prompt
+   * again. Kept in sync with Prompt's own gutter by the same rules.
+   */
+  const echoGutter = (() => {
+    const pct = contextPct
+    const prefix = pct === undefined
+      ? ''
+      : `${contextApprox === true ? STRINGS.prompt.approxPrefix : ''}${pct}% `
+    return `${prefix}> `
+  })()
+
+
   return (
     <Box flexDirection="column" height="100%">
       {splashSettled ? null : (
@@ -404,7 +419,7 @@ export function App({ controller, seedTask, activeAgentName, onSubmit, fileSearc
           contextPct={contextPct}
           contextApprox={contextApprox}
           history={submitHistory}
-          onEmptySubmit={() => controller.appendBlankLine()}
+          onEmptySubmit={() => controller.appendPromptEcho(echoGutter)}
           onSubmit={(text) => {
             // Option picker: a BARE enumerated command opens the picker
             // instead of running bare (which only printed usage text).

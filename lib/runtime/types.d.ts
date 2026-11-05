@@ -13,8 +13,8 @@ export interface TodoItem {
 }
 /** UI-facing message kinds. */
 export type MessageKind = 'user' | 'assistant' | 'reasoning' | 'tool-call' | 'tool-result' | 'system' | 'todo' | 'error'
-/** Not a message: a shell-like blank line from Enter on an empty prompt. */
- | 'blank';
+/** Not a message: the shell-like prompt echo from Enter on an empty prompt. */
+ | 'echo';
 /** Tool call execution state machine. */
 export type ToolState = 'pending' | 'running' | 'done' | 'failed' | 'cancelled';
 /** Single tool invocation rendered in the transcript. */

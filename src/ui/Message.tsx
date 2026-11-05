@@ -43,26 +43,23 @@ export function Message({ message }: MessageProps): JSX.Element {
       return <SystemMessage text={message.text} />
     case 'error':
       return <ErrorMessage text={message.text} />
-    case 'blank':
-      return <BlankLine />
+    case 'echo':
+      return <EchoLine text={message.text} />
     default:
       return <SystemMessage text="(unknown message kind)" />
   }
 }
 
-/**
- * A shell-like blank line (Enter on an empty prompt), pushing the conversation
- * up one row like a shell prompt does.
- *
- * The row holds a zero-width space rather than a blank: Ink trims trailing
- * whitespace per line (`output.js` → `trimEnd`), so an all-whitespace item is
- * written as the empty string and the press would be invisible. U+200B is not
- * whitespace, has display width 0, and therefore prints an empty-looking row.
- */
-const BLANK_GLYPH = '\u200b'
+/** Zero-width space: a row Ink cannot trim away (it strips trailing blanks). */
+const ECHO_FALLBACK = '\u200b'
 
-function BlankLine(): JSX.Element {
-  return <Text>{BLANK_GLYPH}</Text>
+/**
+ * The shell-like prompt echo (Enter on an empty prompt): the gutter of the
+ * prompt line at the moment it was pressed — `% > ` — dimmed, so the
+ * transcript reads like a stack of shell prompts instead of a blank gap.
+ */
+function EchoLine({ text }: { text: string }): JSX.Element {
+  return <Text dimColor>{text === '' ? ECHO_FALLBACK : text}</Text>
 }
 
 /** Render a user prompt with the `›` gutter. */

@@ -107,8 +107,8 @@ export class SessionController {
     return this.stateValue
   }
   private readonly listeners = new Set<StateListener>()
-  /** Monotonic counter for shell-like blank-line messages. */
-  private blankSeq = 0
+  /** Monotonic counter for shell-like prompt-echo messages. */
+  private echoSeq = 0
   private agent: Agent | undefined
   /** App context (for platform projections such as contextPressure). */
   private boundCtx: Context | undefined
@@ -610,18 +610,19 @@ export class SessionController {
   }
 
   /**
-   * Shell-like comfort: Enter on an EMPTY prompt prints a blank line and
-   * pushes the transcript up, instead of silently doing nothing. One message
-   * per press — `<Static>` prints an item exactly once and never repaints it,
-   * so a reused id would make every press after the first invisible.
+   * Shell-like comfort: Enter on an EMPTY prompt echoes the prompt line
+   * (`0% > `) into the transcript, pushing the conversation up one row, the
+   * way a shell prints a fresh prompt. One message per press — `<Static>`
+   * prints an item exactly once and never repaints it, so a reused id would
+   * make every press after the first invisible.
    */
-  appendBlankLine(): void {
+  appendPromptEcho(gutter: string): void {
     const messages = [...this.state.messages]
-    this.blankSeq = (this.blankSeq ?? 0) + 1
+    this.echoSeq += 1
     messages.push({
-      id: `blank-${this.blankSeq}`,
-      kind: 'blank',
-      text: '',
+      id: `echo-${this.echoSeq}`,
+      kind: 'echo',
+      text: gutter,
       tool: undefined,
       createdAt: Date.now(),
       seq: messages.length,

@@ -27,8 +27,8 @@ export declare class SessionController {
     /** Current render snapshot (read-only view for services like /retry). */
     get state(): SessionRenderState;
     private readonly listeners;
-    /** Monotonic counter for shell-like blank-line messages. */
-    private blankSeq;
+    /** Monotonic counter for shell-like prompt-echo messages. */
+    private echoSeq;
     private agent;
     /** App context (for platform projections such as contextPressure). */
     private boundCtx;
@@ -177,12 +177,13 @@ export declare class SessionController {
     /** Withdraw the question without a user answer (signal/turn end). */
     cancelQuestion(): void;
     /**
-     * Shell-like comfort: Enter on an EMPTY prompt prints a blank line and
-     * pushes the transcript up, instead of silently doing nothing. One message
-     * per press — `<Static>` prints an item exactly once and never repaints it,
-     * so a reused id would make every press after the first invisible.
+     * Shell-like comfort: Enter on an EMPTY prompt echoes the prompt line
+     * (`0% > `) into the transcript, pushing the conversation up one row, the
+     * way a shell prints a fresh prompt. One message per press — `<Static>`
+     * prints an item exactly once and never repaints it, so a reused id would
+     * make every press after the first invisible.
      */
-    appendBlankLine(): void;
+    appendPromptEcho(gutter: string): void;
     /** Patch the agent snapshot (used by status bar updates outside the event bus). */
     patchAgent(snapshot: Partial<AgentStatusSnapshot>): void;
     /**
