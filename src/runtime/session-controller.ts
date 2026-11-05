@@ -84,11 +84,6 @@ function idFor(kind: string, seq: number): string {
 
 
 /**
- * The controller that projects session events onto UI state. One instance per
- * runtime plugin; the controller does not own the agent — it follows whatever
- * agent the runtime plugin creates.
- */
-/**
  * Rows of streaming tail kept OUTSIDE `<Static>`: the renderer repaints only
  * changed lines now, but a tail taller than the screen still cannot flow into
  * the terminal scrollback while it is live, so the wall-of-text guard settles
@@ -99,6 +94,11 @@ function liveTailRows(): number {
   return Math.max(4, Math.min(12, Math.floor(rows / 3)))
 }
 
+/**
+ * The controller that projects session events onto UI state. One instance per
+ * runtime plugin; the controller does not own the agent — it follows whatever
+ * agent the runtime plugin creates.
+ */
 export class SessionController {
   private stateValue: SessionRenderState = emptyState()
 
