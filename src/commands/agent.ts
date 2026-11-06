@@ -187,13 +187,30 @@ export const agentCommand: CommandDefinition = {
             applied.push(`引擎 → ${preset.engine}${preset.toolEngine === 'rust' ? '+rust' : ''}`)
           }
         }
-        // DSH-loop parity: the persona prompt rides a system-semantic user
-        // message (the platform persona override is not per-session).
+        // Persona delivery depends on the engine: kiro-loop folds it into its
+        // system prompt; the DSH engine has NO per-session system-prompt
+        // channel (pushSystem is transcript-only), so the prompt rides a
+        // one-shot instruction turn — a real user message the model answers.
         if (typeof preset.prompt === 'string' && preset.prompt.trim() !== '') {
-          const injectSvc = get?.call(ctx, 'kiroRetry') as { submit?: (text: string) => void } | undefined
-          void injectSvc // prompt already in system prompt for kiro-loop; for dsh loop inject once
-          const controllerSvc = get?.call(ctx, 'kiroController') as { pushSystem?: (t: string) => void } | undefined
-          controllerSvc?.pushSystem?.(`◇ 人格提示已装载（kiro-loop 生效于系统提示）`)
+          const loopMode = (globalThis as { __kiroLoopMode?: () => 'dsh' | 'kiro' }).__kiroLoopMode?.() ?? 'dsh'
+          if (loopMode === 'kiro') {
+            applied.push('人格提示 → 系统提示已注入（kiro 引擎）')
+          } else {
+            const send = serviceOf<{ submit(text: string): void }>(agent, 'kiroRetry')
+            if (send !== undefined) {
+              const injection = [
+                '【会话指令】从现在起按以下人设工作，直到我另行通知：',
+                '',
+                preset.prompt,
+                '',
+                '确认已理解人设即可，简短回复，不要开始执行任务。',
+              ].join('\n')
+              setTimeout(() => send.submit(injection), 0)
+              applied.push('人格提示 → 已作为会话指令发送（dsh 引擎）')
+            } else {
+              applied.push('人格提示 → 未生效（提交服务不可用），可用 /engine kiro 后重试 swap')
+            }
+          }
         }
         const lines = [`已切换到 agent「${target}」（${match.source} 级）：`]
         lines.push(applied.length > 0 ? `  ${applied.join(' · ')}` : '  未声明模型/档位，保持现状。')

@@ -389,6 +389,9 @@ async function mount(ctx: Context, startup: KiroStartup): Promise<void> {
   // THIS ref only if it reaches this closure, which the proxy breaks.
   ;(globalThis as { __kiroPersonaSet?: (n: { prompt?: string; tools?: readonly string[]; name?: string }) => void }).__kiroPersonaSet =
     (next) => { personaRef.current = next }
+  // Current engine ('dsh' | 'kiro') for callers outside the runtime scope —
+  // read LIVE (closure over the mutable loopMode), not snapshotted.
+  ;(globalThis as { __kiroLoopMode?: () => 'dsh' | 'kiro' }).__kiroLoopMode = () => loopMode
 
   // Option-menu data bridges (agent presets + recent sessions).
   {
@@ -647,10 +650,13 @@ async function mount(ctx: Context, startup: KiroStartup): Promise<void> {
       return
     }
 
-    // Slash command dispatch.
-    const parsed = parseCommand(trimmed)
+    // Slash command dispatch. parseCommand only matches [a-z] names — an
+    // uppercase variant (/Help) would fall through and reach the MODEL as a
+    // prompt. Normalize the command word before parsing.
+    const normalized = trimmed.replace(/^\/([^\s]+)/u, (word) => word.toLowerCase())
+    const parsed = parseCommand(normalized)
     if (parsed !== undefined && commands !== undefined) {
-      commands.execute(agent, trimmed, [], new AbortController().signal)
+      commands.execute(agent, normalized, [], new AbortController().signal)
         .then((outcome) => {
           if (outcome === undefined) {
             controller.pushSystem(`Unknown command: /${parsed.name}`)
