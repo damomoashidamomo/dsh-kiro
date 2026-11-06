@@ -18,8 +18,8 @@ interface SelectionService {
 
 export const skillsCommand: CommandDefinition = {
   name: 'skills',
-  description: 'Skills: selective loading (like /model)',
-  input: { hint: '[<name> on|off]' },
+  description: '技能开关：菜单里逐个切换（或 <name> on|off）',
+  input: { hint: '[<name> on|off]（无参数打开开关菜单）' },
   handler: async ({ agent, rawInput }) => {
     const ctx = (agent as { ctx?: unknown }).ctx
     const get = (ctx as { get?: (name: string) => unknown } | undefined)?.get
@@ -32,6 +32,9 @@ export const skillsCommand: CommandDefinition = {
 
     const tokens = rawInput.trim().split(/\s+/u).filter(Boolean)
     if (tokens.length === 0) {
+      // Bare /skills normally opens the INTERACTIVE toggle menu (App.tsx
+      // intercepts it before this handler runs). This text listing is the
+      // fallback for when the picker cannot build (no skills / no service).
       const rows = service.list()
       if (rows.length === 0) {
         return {

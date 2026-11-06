@@ -173,7 +173,10 @@ export function apply(ctx: Context): void {
     }
   })
 
-  ctx.provide(KIRO_SKILL_SELECTION, {
+  // UI bridge for the /skills option picker (App.tsx renders outside the
+  // agent scope, so it cannot ctx.get the service directly — same pattern as
+  // __kiroChatList).
+  const selection: SelectionService = {
     list(): readonly { name: string; description: string; source: string; enabled: boolean }[] {
       const rows: Array<{ name: string; description: string; source: string; enabled: boolean }> = []
       for (const skill of discover(process.cwd()).values()) {
@@ -200,7 +203,11 @@ export function apply(ctx: Context): void {
     refresh(): void {
       invalidate?.()
     },
-  } satisfies SelectionService as SelectionService)
+  }
+  ctx.provide(KIRO_SKILL_SELECTION, selection)
+  ;(globalThis as {
+    __kiroSkills?: () => SelectionService | undefined
+  }).__kiroSkills = () => selection
 
   // Provider registration lives for the process lifetime (single-mount TUI
   // plugin); the typed cleanup hook is not reachable through the structural

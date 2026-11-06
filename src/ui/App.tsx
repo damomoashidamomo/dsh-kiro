@@ -330,6 +330,37 @@ export function App({ controller, seedTask, activeAgentName, onSubmit, fileSearc
   }
 
   const optionMenuFor = (name: string): { title: string; options: readonly OptionItem[]; apply: (value: string) => void } | undefined => {
+    // /skills: a TOGGLE menu — Enter flips the highlighted skill on/off and
+    // the menu stays open, so several skills can be switched in one sitting.
+    if (name === 'skills') {
+      const svc = (globalThis as {
+        __kiroSkills?: () => {
+          list(): readonly { name: string; description: string; source: string; enabled: boolean }[]
+          setEnabled(name: string, enabled: boolean): boolean
+          refresh(): void
+        } | undefined
+      }).__kiroSkills?.()
+      if (svc === undefined) return undefined
+      if (svc.list().length === 0) return undefined // /skills 命令自己会说明如何放置技能
+      const build = (): readonly OptionItem[] => svc.list().map((skill) => ({
+        value: skill.name,
+        label: `${skill.enabled ? '◉' : '○'} ${skill.name}`,
+        hint: `${skill.source} · ${skill.description !== '' ? clipColumnsForMenu(skill.description, 60) : '（无描述）'}`,
+      }))
+      const menu: { title: string; options: readonly OptionItem[]; apply: (value: string) => void } = {
+        title: '技能开关（◉ 开 · ○ 关 · Enter 切换 · Esc 关闭）',
+        options: build(),
+        apply: (value: string) => {
+          const current = svc.list().find((skill) => skill.name === value)
+          if (current === undefined) return
+          svc.setEnabled(value, !current.enabled)
+          svc.refresh()
+          // Rebuild in place: the menu STAYS OPEN for the next toggle.
+          setOptionMenu((currentMenu) => currentMenu === undefined ? currentMenu : { ...currentMenu, options: build() })
+        },
+      }
+      return menu
+    }
     const picker = pickerFor(name)
     if (picker === undefined) return undefined
     const rows: OptionItem[] = []
@@ -572,6 +603,18 @@ export function App({ controller, seedTask, activeAgentName, onSubmit, fileSearc
               // Same ranker the popup used: Enter runs the highlighted row.
               const filtered = rankCandidates(items, prefixQuery)
               const pick = filtered[autocompleteSelected] ?? filtered[0]
+              if (pick === undefined) {
+                // Zero matches (a typo like /agnet): the popup said so, but it
+                // must NOT swallow Enter — swallowing left the draft stuck and
+                // every following keystroke concatenated onto it. Submit the
+                // draft through the honest "unknown command" path instead.
+                insertSeq.current += 1
+                setAtInsert({ token: '', insert: '', seq: insertSeq.current, clearAll: true })
+                onSubmit(`/${prefixQuery.trim()}`)
+                setPrefix(undefined)
+                setPrefixQuery('')
+                return
+              }
               if (pick !== undefined) {
                 // insert is the BARE name; commands submit with the '/' prefix.
                 // Popup commits bypass the wrapper below, so re-run the
