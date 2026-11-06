@@ -135,7 +135,16 @@ export const agentCommand: CommandDefinition = {
         const applied = await applyAgentPreset(ctx, target, preset as never, {
           injectTurn: (text) => {
             const send = serviceOf<{ submit(text: string): void }>(agent, 'kiroRetry')
-            setTimeout(() => send?.submit(text), 0)
+            // Detached submit: a platform-side assert here must NOT kill the
+            // TUI (bare setTimeout exceptions exit the process).
+            setTimeout(() => {
+              try {
+                send?.submit(text)
+              } catch (error) {
+                const report = serviceOf<{ pushSystem?: (t: string) => void }>(agent, 'kiroController')
+                report?.pushSystem?.(`✗ 人格指令发送失败：${error instanceof Error ? error.message : String(error)}`)
+              }
+            }, 0)
           },
         })
         const lines = [`已切换到 agent「${target}」（${match.source} 级）：`]

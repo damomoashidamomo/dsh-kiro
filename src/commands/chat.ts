@@ -423,7 +423,15 @@ export const chatCommand: CommandDefinition = {
           const send = serviceOf<{ submit(text: string): void }>(agent, 'kiroRetry')
           if (send !== undefined) {
             notes.push('  继续对话：已自动接着聊（--no-continue 可关闭）')
-            setTimeout(() => send.submit('继续'), 0)
+            setTimeout(() => {
+              try {
+                send.submit('继续')
+              } catch (error) {
+                // A detached submit must not take the whole TUI down.
+                const report = serviceOf<{ pushSystem?: (t: string) => void }>(agent, 'kiroController')
+                report?.pushSystem?.(`✗ 自动继续发送失败：${error instanceof Error ? error.message : String(error)}`)
+              }
+            }, 0)
           }
         }
         return { kind: 'success', text: notes.join('\n') }

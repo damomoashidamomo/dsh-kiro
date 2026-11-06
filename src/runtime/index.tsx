@@ -395,6 +395,16 @@ async function mount(ctx: Context, startup: KiroStartup): Promise<void> {
   // Current engine ('dsh' | 'kiro') for callers outside the runtime scope —
   // read LIVE (closure over the mutable loopMode), not snapshotted.
   ;(globalThis as { __kiroLoopMode?: () => 'dsh' | 'kiro' }).__kiroLoopMode = () => loopMode
+  // Queue a system-semantic message into the CURRENT agent's next-turn inbox
+  // WITHOUT waking the loop — the dsh engine has no per-session system-prompt
+  // channel, so agent personas ride this (the message reaches the model with
+  // the user's next question; no detached turn, no stream doubling).
+  ;(globalThis as { __kiroAgentInject?: (text: string) => void }).__kiroAgentInject = (text) => {
+    agentRef.current?.inject(createUserMessage({
+      content: [{ type: 'text', text }],
+      source: { kind: 'plugin', plugin: 'kiro-agent' },
+    }))
+  }
 
   // Option-menu data bridges (agent presets + recent sessions).
   {
@@ -486,7 +496,15 @@ async function mount(ctx: Context, startup: KiroStartup): Promise<void> {
       const applied = await applyAgentPreset(ctx, presetName, effective as never, {
         // setTimeout(0): `submit` is declared later in the module body — a
         // synchronous call from this mount-time IIFE would hit its TDZ.
-        injectTurn: (text) => { setTimeout(() => submit(text), 0) },
+        injectTurn: (text) => {
+          setTimeout(() => {
+            try {
+              submit(text)
+            } catch (error) {
+              controller.pushSystem(`✗ 启动人设指令发送失败：${error instanceof Error ? error.message : String(error)}`)
+            }
+          }, 0)
+        },
       })
       controller.pushSystem(`◇ 已按 agent「${presetName}」（${match.source} 级）应用启动配置：\n  ${applied.join(' · ')}`)
     })()
@@ -656,8 +674,33 @@ async function mount(ctx: Context, startup: KiroStartup): Promise<void> {
         return { ok: true, message: `已恢复会话 ${target}。` }
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error)
-        controller.pushSystem(`✗ 会话切换失败：${message}`)
-        return { ok: false, message: `切换失败：${message}` }
+        // The old agent was already disposed above — leaving it dead makes the
+        // TUI a zombie (every submit crashes on the disposed handle). Recover
+        // by creating a FRESH session so the app stays usable.
+        try {
+          agentHandle = await agents.create({
+            sessionId: brandString<SessionId>(`session-${randomUUID()}`),
+            meta: { cwd: process.cwd() },
+            agentOptions,
+            setup: setupAgent,
+          })
+          agentRef.current = agentHandle.agent
+          // bindAgent already ran inside setupAgent — calling it again here
+          // would subscribe the stream channel TWICE (every streaming chunk
+          // rendered doubled). Just re-apply the status-bar model facts.
+          controller.patchAgent({
+            activeAgent: startup.agent,
+            activeModel: bootModelId,
+            activeProvider: selection.provider,
+            contextLimitTokens: bootModelWindow ?? undefined,
+          })
+          controller.pushSystem(`✗ 会话切换失败：${message}\n◇ 已开启新会话保底，TUI 保持可用。`)
+          return { ok: false, message: `切换失败（已开新会话保底）：${message}` }
+        } catch (recoveryError) {
+          const rMessage = recoveryError instanceof Error ? recoveryError.message : String(recoveryError)
+          controller.pushSystem(`✗ 会话切换失败：${message}；保底新会话也失败：${rMessage}`)
+          return { ok: false, message: `切换失败：${message}（保底也失败：${rMessage}）` }
+        }
       }
     },
   })

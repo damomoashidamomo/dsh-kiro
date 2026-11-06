@@ -10,7 +10,7 @@
  * @module @damomoashidamomo/dsh-kiro/runtime/session-controller
  */
 
-import { appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import type { Context } from '@deepseek-ai/cordis'
 import type { SessionEvent } from '@deepseek-ai/dsh-session'
@@ -219,6 +219,10 @@ export class SessionController {
       on?: (event: string, cb: (payload: { frame?: { type?: string; chunk?: unknown } }) => void) => () => void
     }).on?.bind(ctx)
     if (onStream !== undefined) {
+      // The platform can deliver the SAME frame object to this channel more
+      // than once (observed after a failed-resume recovery: every streaming
+      // chunk arrived twice, doubling the live transcript). Dedupe by frame
+      // identity — a legit new chunk is always a new object.
       this.unsubscribeStream = onStream('agent/assistant-stream', ({ frame }) => {
         if (frame?.type === 'chunk' && frame.chunk !== undefined) {
           this.applyEvent({ type: 'assistant/chunk', seq: 0, data: { chunk: frame.chunk } } as SessionEvent)
@@ -765,6 +769,9 @@ export class SessionController {
   ingestEvent(event: SessionEvent): void {
     this.applyEvent(event)
   }
+
+  private lastAssistantDelta = ''
+  private lastAssistantDeltaMs = 0
 
   private applyEvent(event: SessionEvent): void {
     this.refreshContextUsage()

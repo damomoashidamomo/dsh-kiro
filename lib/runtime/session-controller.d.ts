@@ -227,6 +227,8 @@ export declare class SessionController {
      * UI render identically for both drivers).
      */
     ingestEvent(event: SessionEvent): void;
+    private lastAssistantDelta;
+    private lastAssistantDeltaMs;
     private applyEvent;
     /**
      * Close any tool-call message still marked streaming (a result that never

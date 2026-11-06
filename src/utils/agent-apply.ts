@@ -108,18 +108,28 @@ export async function applyAgentPreset(
     const loopMode = (globalThis as { __kiroLoopMode?: () => 'dsh' | 'kiro' }).__kiroLoopMode?.() ?? 'dsh'
     if (loopMode === 'kiro') {
       applied.push('人格提示 → 系统提示已注入（kiro 引擎）')
-    } else if (opts.injectTurn !== undefined) {
+    } else {
+      // dsh engine: the persona rides the NEXT turn's inbox (queued, no wake).
+      // A detached-submit instruction turn here made the platform stream bus
+      // double-emit deltas on the FOLLOWING turns (transcript rendered
+      // doubled), so it is deliberately not used.
       const injection = [
         '【会话指令】从现在起按以下人设工作，直到我另行通知：',
         '',
         preset.prompt,
         '',
-        '确认已理解人设即可，简短回复，不要开始执行任务。',
+        '（本条为系统装载的人设，无需确认。）',
       ].join('\n')
-      opts.injectTurn(injection)
-      applied.push('人格提示 → 已作为会话指令发送（dsh 引擎）')
-    } else {
-      applied.push('人格提示 → 未生效（无法发送会话指令），可用 /engine kiro 后重试 swap')
+      const inject = (globalThis as { __kiroAgentInject?: (text: string) => void }).__kiroAgentInject
+      if (inject !== undefined) {
+        inject(injection)
+        applied.push('人格提示 → 已注入下回合上下文（dsh 引擎，随下次提问生效）')
+      } else if (opts.injectTurn !== undefined) {
+        opts.injectTurn(injection)
+        applied.push('人格提示 → 已作为会话指令发送（dsh 引擎）')
+      } else {
+        applied.push('人格提示 → 未生效（无注入通道），可用 /engine kiro 后重试 swap')
+      }
     }
   }
   return applied
