@@ -525,7 +525,21 @@ export function App({ controller, seedTask, activeAgentName, onSubmit, fileSearc
           initialQuery={prefix === '/' ? prefixQuery : ''}
           active={slashMenuOpen}
           onClose={() => setSlashMenuOpen(false)}
-          onSelect={(text) => onSubmit(text)}
+          onSelect={(text) => {
+            // The ALL-commands menu must respect the same interception as
+            // hand-typing: a BARE enumerated command opens its option picker
+            // instead of silently executing the bare handler.
+            const bare = text.trim().replace(/^\//u, '').trim().toLowerCase()
+            if (optionMenu === undefined && bare !== '' && !bare.includes(' ')) {
+              const picker = optionMenuFor(bare)
+              if (picker !== undefined) {
+                setOptionMenu(picker)
+                setSlashMenuOpen(false)
+                return
+              }
+            }
+            onSubmit(text)
+          }}
         />
       ) : (
         <Prompt
@@ -564,31 +578,35 @@ export function App({ controller, seedTask, activeAgentName, onSubmit, fileSearc
           onAutocompleteMove={(delta) => {
             setAutocompleteSelected((idx) => Math.max(0, idx + delta))
           }}
-          onAutocompleteCommit={() => {
+          onAutocompleteCommit={(draft) => {
+            // The draft is the source of truth: prefixQuery state updates via
+            // a useEffect and lags a fast-typed draft (typed /agent + Enter in
+            // one burst submitted the STALE query '/agnet').
             if (prefix === '@') {
               // Insert the picked mention into the draft instead of
               // submitting; the user keeps composing the message. Mirror
               // the popover's Fuse ordering so the highlighted row is what
               // gets inserted.
+              const query = draft.startsWith('@') ? draft.slice(1) : prefixQuery
               const fuse = new Fuse([...atItems], {
                 keys: ['label', 'hint', 'keywords'],
                 threshold: 0.35,
                 ignoreLocation: true,
                 minMatchCharLength: 1,
               })
-              const ranked = prefixQuery === '' ? [...atItems] : fuse.search(prefixQuery).map((r) => r.item)
+              const ranked = query === '' ? [...atItems] : fuse.search(query).map((r) => r.item)
               const picked = ranked.slice(autocompleteSelected, autocompleteSelected + 1)[0]
               if (picked !== undefined) {
                 insertSeq.current += 1
-                setAtInsert({ token: `@${prefixQuery}`, insert: picked.insert, seq: insertSeq.current })
+                setAtInsert({ token: draft, insert: picked.insert, seq: insertSeq.current })
               }
               setAutocompleteSelected(0)
               return
             }
             // Args already typed (`/chat resume`) — commit submits the full
             // draft; committing only the highlighted name would drop them.
-            if (prefix === '/' && prefixQuery.includes(' ')) {
-              const full = `/${prefixQuery.trim()}`
+            if (prefix === '/' && draft.includes(' ')) {
+              const full = draft.trim()
               // This Enter was consumed by the POPUP, not by the prompt's
               // submit path, so the prompt must be cleared here. Leaving it
               // meant the next command was appended to the old draft:
@@ -600,8 +618,10 @@ export function App({ controller, seedTask, activeAgentName, onSubmit, fileSearc
               // '/' picker: submit the HIGHLIGHTED command (arrow keys move
               // autocompleteSelected via onAutocompleteMove).
               const items = slashCandidates(ALL_COMMANDS.map((c) => ({ name: c.name, description: c.description })))
-              // Same ranker the popup used: Enter runs the highlighted row.
-              const filtered = rankCandidates(items, prefixQuery)
+              // Same ranker the popup used: Enter runs the highlighted row —
+              // ranked by the LIVE draft's query, not the lagging state.
+              const query = draft.startsWith('/') ? draft.slice(1) : prefixQuery
+              const filtered = rankCandidates(items, query)
               const pick = filtered[autocompleteSelected] ?? filtered[0]
               if (pick === undefined) {
                 // Zero matches (a typo like /agnet): the popup said so, but it
@@ -610,7 +630,7 @@ export function App({ controller, seedTask, activeAgentName, onSubmit, fileSearc
                 // draft through the honest "unknown command" path instead.
                 insertSeq.current += 1
                 setAtInsert({ token: '', insert: '', seq: insertSeq.current, clearAll: true })
-                onSubmit(`/${prefixQuery.trim()}`)
+                onSubmit(draft.trim())
                 setPrefix(undefined)
                 setPrefixQuery('')
                 return

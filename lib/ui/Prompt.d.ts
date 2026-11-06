@@ -31,8 +31,12 @@ export interface PromptProps {
     readonly history?: readonly string[];
     /** Move the autocomplete highlight by `delta` (typically ±1 on arrow keys). */
     readonly onAutocompleteMove?: (delta: number) => void;
-    /** Commit the currently highlighted autocomplete entry. */
-    readonly onAutocompleteCommit?: () => void;
+    /**
+     * Commit the currently highlighted autocomplete entry. Receives the CURRENT
+     * draft text: App-level prefix/query state updates via a useEffect and can
+     * lag a fast-typed draft, so the commit must decide from the real buffer.
+     */
+    readonly onAutocompleteCommit?: (draft: string) => void;
     /**
      * Insert a picked `@`-mention into the draft (path completion): the
      * trailing query token is replaced by `insert` plus a space. Bumping the

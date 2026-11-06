@@ -15,6 +15,7 @@ import { spawnSync } from 'node:child_process'
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { agentDirs, agentTemplate, createAgent, deleteAgent, findAgent, listAgents, renameAgent, validateAgentFile } from '../utils/agent-store'
+import { tokenizeArgs } from '../utils/args'
 
 /** The directories this workspace reads agent definitions from. */
 function dirs() {
@@ -39,7 +40,8 @@ function flagValue(args: readonly string[], flag: string): string | undefined {
 function parseSubcommand(input: string): { name: string; args: string[] } {
   const trimmed = input.trim()
   if (trimmed === '') return { name: 'list', args: [] }
-  const tokens = trimmed.split(/\s+/u)
+  // Quote-aware: --prompt "多词 文本" must arrive as ONE token without quotes.
+  const tokens = tokenizeArgs(trimmed)
   return { name: tokens[0] ?? 'list', args: tokens.slice(1) }
 }
 
@@ -93,7 +95,13 @@ export const agentCommand: CommandDefinition = {
         if (match === undefined) return { kind: 'error', text: `no agent named "${target}"` }
         let preset: { model?: string; provider?: string; effort?: string; prompt?: string; engine?: string; toolEngine?: string; tools?: readonly string[]; allowedTools?: readonly string[] } = {}
         try {
-          preset = JSON.parse(readFileSync(match.path, 'utf8')) as typeof preset
+          const parsed: unknown = JSON.parse(readFileSync(match.path, 'utf8'))
+          // A definition that is valid JSON but not an object (`null`, `42`,
+          // `"x"`) would crash the field reads below.
+          if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) {
+            return { kind: 'error', text: `${match.path} 不是有效的 agent 定义（顶层必须是对象）` }
+          }
+          preset = parsed as typeof preset
         } catch {
           return { kind: 'error', text: `${match.path} 不是有效 JSON` }
         }
@@ -130,8 +138,8 @@ export const agentCommand: CommandDefinition = {
             ? { tools: (preset as { tools: readonly string[] }).tools.filter((t) => typeof t === 'string') }
             : {}),
         })
-        applied.push(typeof preset.prompt === 'string' && preset.prompt.trim() !== '' ? '人格提示 → 已注入' : '')
-        applied.push(Array.isArray((preset as { tools?: unknown }).tools) ? `工具面 → 按预设过滤` : '')
+        if (typeof preset.prompt === 'string' && preset.prompt.trim() !== '') applied.push('人格提示 → 已注入')
+        if (Array.isArray((preset as { tools?: unknown }).tools)) applied.push('工具面 → 按预设过滤')
         const allowed = (preset as { allowedTools?: unknown }).allowedTools
         if (Array.isArray(allowed)) {
           const controllerSvc = get?.call(ctx, 'kiroController') as
@@ -168,7 +176,16 @@ export const agentCommand: CommandDefinition = {
       }
       case 'create': {
         // kiro-cli shape: /agent create [NAME] [--description "..."] [--prompt "..."]
-        const name = flagValue(args, 'name') ?? args.find((arg) => !arg.startsWith('-') && args.indexOf(arg) === args.lastIndexOf(arg)) ?? args.find((arg) => !arg.startsWith('-'))
+        const FLAGGED = new Set(['--name', '--description', '--prompt', '--directory', '--from'])
+        // Positional name = the first token that is neither a flag nor a
+        // flag's VALUE (`/agent create --prompt hello` must not name the
+        // agent "hello").
+        const positional = args.filter((arg, i) => {
+          if (arg.startsWith('-')) return false
+          const prev = args[i - 1]
+          return prev === undefined || !(FLAGGED.has(prev) || prev.startsWith('--'))
+        })
+        const name = flagValue(args, 'name') ?? positional[0]
         if (name === undefined || name.trim() === '') {
           return { kind: 'error', text: 'usage: /agent create <name> [--description "..."] [--prompt "..."]' }
         }

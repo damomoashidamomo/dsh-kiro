@@ -18,6 +18,7 @@ import type { CommandDefinition } from '@deepseek-ai/dsh-commands'
 import { randomUUID } from 'node:crypto'
 import { createRequire } from 'node:module'
 import { join } from 'node:path'
+import { joinPathTokens, tokenizeArgs } from '../utils/args'
 import {
   deleteSession,
   filterSessions,
@@ -326,9 +327,14 @@ export const chatCommand: CommandDefinition = {
       }
       case 'save': {
         // kiro-cli shape: /chat save <PATH> [-f|--force]
-        const parsed = parseSaveArgs(args)
+        // Paths may contain spaces ("deepseek harness work zone"): tokenize
+        // quote-aware, then join every non-flag token back into one path.
+        const tokens = tokenizeArgs(args.join(' '))
+        const parsed = parseSaveArgs(tokens)
         if (parsed.help) return { kind: 'success', text: SAVE_USAGE }
-        if (parsed.path === undefined) {
+        const pathTokens = tokens.filter((token) => !token.startsWith('-'))
+        const pathArg = pathTokens.length > 0 ? joinPathTokens(pathTokens) : parsed.path
+        if (pathArg === undefined) {
           return { kind: 'error', text: `error: the following required arguments were not provided:\n  <PATH>\n\n${SAVE_USAGE}` }
         }
         const info = serviceOf<SessionInfoService>(agent, 'kiroSessionInfo')
@@ -348,7 +354,7 @@ export const chatCommand: CommandDefinition = {
           return { kind: 'error', text: `/chat save: ${summaryRow.dir} 里读不到事件` }
         }
         const { title, firstUser, commands } = await readSessionTitleAsync(summaryRow.dir)
-        const target = resolveUserPath(parsed.path)
+        const target = resolveUserPath(pathArg)
         try {
           writeExportFile(target, buildExport({
             id: currentId,
@@ -371,8 +377,9 @@ export const chatCommand: CommandDefinition = {
         }
       }
       case 'load': {
-        const flagless = args.filter((arg) => !arg.startsWith('-'))
-        const target = flagless[0]
+        const tokens = tokenizeArgs(args.join(' '))
+        const pathTokens = tokens.filter((token) => !token.startsWith('-'))
+        const target = pathTokens.length > 0 ? joinPathTokens(pathTokens) : undefined
         if (target === undefined) {
           return { kind: 'error', text: `error: the following required arguments were not provided:\n  <PATH>\n\n${LOAD_USAGE}` }
         }
