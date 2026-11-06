@@ -18,7 +18,7 @@
  */
 
 import { execFileSync } from 'node:child_process'
-import { linkSync, mkdirSync, readdirSync, statSync } from 'node:fs'
+import { existsSync, linkSync, mkdirSync, readdirSync, statSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -42,6 +42,9 @@ const PAYLOAD = [
   'cordis.patch.yml',
   'README.md',
   'README.zh.md',
+  // The Rust tool engine: without it the profile silently falls back to the
+  // DSH tool pipeline whenever the cwd is not the repo.
+  'engine/target/release/kiro-toold',
 ]
 
 function* walk(path) {
@@ -59,6 +62,7 @@ let linked = 0
 let present = 0
 for (const entry of PAYLOAD) {
   const source = join(repo, entry)
+  if (!existsSync(source)) continue // e.g. the engine not built on this machine
   for (const file of walk(source)) {
     const relative = file.slice(repo.length + 1)
     const target = join(packageDir, relative)

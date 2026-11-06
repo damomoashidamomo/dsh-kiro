@@ -1,0 +1,126 @@
+/**
+ * Apply a custom-agent preset to the LIVE session — the shared core behind
+ * `/agent swap` AND boot-time `--agent` / `set-default` activation.
+ *
+ * Everything resolves through the agent-scope ctx services (same receiver
+ * rules the swap path always used). Persona delivery is engine-aware:
+ * kiro-loop folds it into the system prompt, the DSH engine has no per-session
+ * system-prompt channel so it rides `opts.injectTurn` (a real instruction turn
+ * the model acknowledges).
+ *
+ * @module @damomoashidamomo/dsh-kiro/utils/agent-apply
+ */
+
+export interface AgentPreset {
+  model?: string
+  provider?: string
+  effort?: string
+  prompt?: string
+  engine?: string
+  toolEngine?: string
+  tools?: readonly string[]
+  allowedTools?: readonly string[]
+}
+
+export interface ApplyPresetOptions {
+  /** Where the persona is already in the system prompt (kiro engine), a
+   * dsh-engine preset instead sends one instruction turn through this hook. */
+  readonly injectTurn?: (text: string) => void
+}
+
+/** Agent-scope service lookup (cordis receiver rules). */
+function svc<T>(ctx: unknown, name: string): T | undefined {
+  const scope = (ctx as { get?: (name: string) => unknown } | undefined)
+  const get = scope?.get
+  return typeof get === 'function' ? get.call(ctx, name) as T | undefined : undefined
+}
+
+/**
+ * Apply the preset. Returns the human-readable "applied" lines for the swap /
+ * boot confirmation message. Best-effort: a missing service skips that facet.
+ */
+export async function applyAgentPreset(
+  ctx: unknown,
+  name: string,
+  preset: AgentPreset,
+  opts: ApplyPresetOptions = {},
+): Promise<string[]> {
+  const applied: string[] = []
+  const switcher = svc<{ apply?: (next: unknown) => void }>(ctx, 'kiroModelSwitch')
+  const effort = svc<{ setManual?: (level: string) => void }>(ctx, 'kiroEffortControl')
+
+  // kiro's own template writes `"model": null` — null means "inherit current".
+  const modelSpec = typeof preset.model === 'string' && preset.model.trim() !== '' ? preset.model : undefined
+  const full = modelSpec === undefined
+    ? undefined
+    : `${preset.provider ?? (modelSpec.includes('/') ? modelSpec.split('/')[0] : undefined)}/${modelSpec.includes('/') ? modelSpec.split('/')[1] : modelSpec}`
+  if (full !== undefined && switcher?.apply !== undefined) {
+    const [provider, model] = full.split('/')
+    switcher.apply({ provider, model })
+    applied.push(`模型 → ${full}`)
+  }
+  if (typeof preset.effort === 'string' && preset.effort !== '' && effort?.setManual !== undefined) {
+    effort.setManual(preset.effort)
+    applied.push(`档位 → ${preset.effort}`)
+  }
+
+  // Persona + tools ride the persona service (kiro-loop system prompt +
+  // schema filter); allowedTools become session trust.
+  const directSet = (globalThis as { __kiroPersonaSet?: (n: { prompt?: string; tools?: readonly string[]; name?: string }) => void }).__kiroPersonaSet
+  const personaSvc = directSet !== undefined
+    ? { set: directSet }
+    : svc<{ set?: (next: { prompt?: string; tools?: readonly string[]; name?: string }) => void }>(ctx, 'kiroPersona')
+  personaSvc?.set?.({
+    name,
+    ...(typeof preset.prompt === 'string' && preset.prompt.trim() !== '' ? { prompt: preset.prompt } : {}),
+    ...(Array.isArray(preset.tools) ? { tools: preset.tools.filter((t) => typeof t === 'string') } : {}),
+  })
+  const hasPrompt = typeof preset.prompt === 'string' && preset.prompt.trim() !== ''
+  if (hasPrompt) applied.push('人格提示 → 已装载')
+
+  if (Array.isArray(preset.allowedTools) && preset.allowedTools.length > 0) {
+    const controllerSvc = svc<{ allowToolForSession?: (tool: string) => void }>(ctx, 'kiroController')
+    for (const tool of preset.allowedTools) {
+      if (typeof tool === 'string' && tool !== '') controllerSvc?.allowToolForSession?.(tool)
+    }
+    applied.push(`免审批 → ${preset.allowedTools.length} 个工具（本会话）`)
+  }
+
+  // Preset-declared engine rides the whole-unit switch. Decided BEFORE the
+  // persona delivery note, because the delivery channel depends on it.
+  const wantsKiro = preset.engine === 'kiro' || preset.engine === 'dsh'
+  if (wantsKiro) {
+    const engineSvc = svc<{ set?: (u: 'kiro' | 'dsh', o?: { rust?: boolean }) => Promise<string> }>(ctx, 'kiroEngineSwitch')
+    if (engineSvc?.set !== undefined) {
+      const unit = preset.engine as 'kiro' | 'dsh'
+      const rust = preset.toolEngine === 'rust' && unit === 'kiro'
+      const message = await engineSvc.set(unit, { rust })
+      applied.push(`引擎 → ${unit}${rust ? ' + Rust 工具引擎（Landlock）' : ''}${message !== '' ? `（${message}）` : ''}`)
+    } else {
+      applied.push(`引擎 → 未切换（引擎服务不可用）`)
+    }
+  }
+
+  // Persona DELIVERY: kiro-loop already folded the prompt into its system
+  // prompt; the DSH engine has no per-session system-prompt channel, so the
+  // persona rides a one-shot instruction turn the model answers.
+  if (hasPrompt) {
+    const loopMode = (globalThis as { __kiroLoopMode?: () => 'dsh' | 'kiro' }).__kiroLoopMode?.() ?? 'dsh'
+    if (loopMode === 'kiro') {
+      applied.push('人格提示 → 系统提示已注入（kiro 引擎）')
+    } else if (opts.injectTurn !== undefined) {
+      const injection = [
+        '【会话指令】从现在起按以下人设工作，直到我另行通知：',
+        '',
+        preset.prompt,
+        '',
+        '确认已理解人设即可，简短回复，不要开始执行任务。',
+      ].join('\n')
+      opts.injectTurn(injection)
+      applied.push('人格提示 → 已作为会话指令发送（dsh 引擎）')
+    } else {
+      applied.push('人格提示 → 未生效（无法发送会话指令），可用 /engine kiro 后重试 swap')
+    }
+  }
+  return applied
+}

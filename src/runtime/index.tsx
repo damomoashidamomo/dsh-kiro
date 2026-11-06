@@ -15,7 +15,10 @@ import { installModelSelection } from '@deepseek-ai/dsh-agent'
 import type { Agent, AgentHandle, AgentSetup, ModelSelection, ModelSelectionRef } from '@deepseek-ai/dsh-agent'
 import { createUserMessage } from '@deepseek-ai/dsh-llm'
 import { SessionId } from '@deepseek-ai/dsh-session'
+import { readFileSync } from 'node:fs'
 import { parseCommand } from '@deepseek-ai/dsh-commands'
+import { applyAgentPreset } from '../utils/agent-apply'
+import { agentDirs, findAgent } from '../utils/agent-store'
 import { App } from '../ui/App'
 import type { AutocompleteItem } from '../ui/Autocomplete'
 import { SessionController } from './session-controller'
@@ -451,6 +454,42 @@ async function mount(ctx: Context, startup: KiroStartup): Promise<void> {
       return engineSvc?.set?.(unit, opts) ?? ''
     } }
     void svc.set(startup.engine, { rust: startup.engine === 'kiro' }).then((msg) => { if (msg !== '') controller.pushSystem(`◇ ${msg}`) })
+  }
+
+  // Boot-time agent preset: --agent / set-default used to set a LABEL only —
+  // the preset's engine/toolEngine/prompt/model never applied. Apply the full
+  // preset here, after the loop driver and services exist. An explicit
+  // --engine flag keeps precedence over the preset's engine.
+  if (startup.agent !== undefined && startup.agent.trim() !== '') {
+    const presetName = startup.agent.trim()
+    void (async () => {
+      const match = findAgent(agentDirs(), presetName)
+      if (match === undefined) {
+        controller.pushSystem(`◇ 注意：agent「${presetName}」不存在（.kiro/agents/ 下没有同名定义），按默认配置启动。`)
+        return
+      }
+      let preset: Record<string, unknown> = {}
+      try {
+        const parsed: unknown = JSON.parse(readFileSync(match.path, 'utf8'))
+        if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) {
+          controller.pushSystem(`✗ agent「${presetName}」的定义不是有效对象，按默认配置启动。`)
+          return
+        }
+        preset = parsed as Record<string, unknown>
+      } catch {
+        controller.pushSystem(`✗ agent「${presetName}」的定义不是合法 JSON，按默认配置启动。`)
+        return
+      }
+      // The preset must not fight an explicit --engine flag.
+      const effective = { ...preset } as Record<string, unknown>
+      if (startup.engine !== undefined) delete effective.engine
+      const applied = await applyAgentPreset(ctx, presetName, effective as never, {
+        // setTimeout(0): `submit` is declared later in the module body — a
+        // synchronous call from this mount-time IIFE would hit its TDZ.
+        injectTurn: (text) => { setTimeout(() => submit(text), 0) },
+      })
+      controller.pushSystem(`◇ 已按 agent「${presetName}」（${match.source} 级）应用启动配置：\n  ${applied.join(' · ')}`)
+    })()
   }
 
   ctx.provide('kiroToolEngine', {

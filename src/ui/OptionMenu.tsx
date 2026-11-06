@@ -11,7 +11,7 @@
 
 import { Box, Text, useInput, useStdout } from 'ink'
 import { displayWidth } from '../markdown/render'
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { palette } from '../theme/palette'
 
 export interface OptionItem {
@@ -46,6 +46,11 @@ function clipColumns(text: string, width: number): string {
 
 export function OptionMenu({ title, options, onPick, onCancel }: OptionMenuProps): JSX.Element {
   const [cursor, setCursor] = useState(0)
+  const digitRef = useRef('')
+  const digitTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
+  useEffect(() => () => {
+    if (digitTimer.current !== undefined) clearTimeout(digitTimer.current)
+  }, [])
   const { stdout } = useStdout()
   const columns = stdout?.columns ?? 100
   const terminalRows = stdout?.rows ?? 30
@@ -88,10 +93,31 @@ export function OptionMenu({ title, options, onPick, onCancel }: OptionMenuProps
       onCancel()
       return
     }
-    if (!key.ctrl && !key.meta && /^[1-9]$/u.test(input)) {
-      const idx = Number(input) - 1
-      const pick = options[idx]
-      if (pick !== undefined) onPick(pick.value)
+    // Number selection supports 1-2 digits (the /chat menu lists 20+ rows).
+    // A digit commits immediately when it cannot be the PREFIX of a longer
+    // number (`5` with 15 options); otherwise it waits 500 ms for a possible
+    // second digit (`1` then `4` → row 14).
+    if (!key.ctrl && !key.meta && /^[0-9]+$/u.test(input)) {
+      // A burst write ("14") arrives as ONE input event - feed each digit
+      // through the buffer separately.
+      for (const ch of input) {
+        const next = (digitRef.current + ch).replace(/^0+(?=\d)/u, '')
+        const commit = (num: number) => {
+          digitRef.current = ''
+          if (digitTimer.current !== undefined) clearTimeout(digitTimer.current)
+          const pick = options[num - 1]
+          if (pick !== undefined) onPick(pick.value)
+        }
+        const idx = Number(next) - 1
+        if (idx >= options.length || next.length >= 2 || Number(next) * 10 > options.length) {
+          commit(Number(next))
+          return
+        }
+        digitRef.current = next
+        if (digitTimer.current !== undefined) clearTimeout(digitTimer.current)
+        digitTimer.current = setTimeout(() => commit(Number(digitRef.current)), 500)
+      }
+      return
     }
   })
 

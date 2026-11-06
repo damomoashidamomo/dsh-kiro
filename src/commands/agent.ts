@@ -16,6 +16,7 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { agentDirs, agentTemplate, createAgent, deleteAgent, findAgent, listAgents, renameAgent, validateAgentFile } from '../utils/agent-store'
 import { tokenizeArgs } from '../utils/args'
+import { applyAgentPreset } from '../utils/agent-apply'
 
 /** The directories this workspace reads agent definitions from. */
 function dirs() {
@@ -113,110 +114,34 @@ export const agentCommand: CommandDefinition = {
         }
       }
       case 'swap': {
-        // Honest subset: apply the preset's declared provider/model/effort
-        // to the CURRENT session via the live model-switch machinery. A
-        // persona-level switch (separate system prompt / toolset per agent)
-        // has no first-class platform switch yet — the preset's `prompt`
-        // field is reported instead of silently ignored.
+        // Honest subset: apply the preset's declared provider/model/effort to
+        // the CURRENT session via the live model-switch machinery — the same
+        // core the boot-time --agent / set-default activation uses.
         const target = args[0]
         if (target === undefined) return { kind: 'success', text: 'usage: /agent swap <name>' }
         const match = findAgent(dirs(), target)
         if (match === undefined) return { kind: 'error', text: `no agent named "${target}"` }
-        let preset: { model?: string; provider?: string; effort?: string; prompt?: string; engine?: string; toolEngine?: string; tools?: readonly string[]; allowedTools?: readonly string[] } = {}
+        let preset: Record<string, unknown> = {}
         try {
           const parsed: unknown = JSON.parse(readFileSync(match.path, 'utf8'))
-          // A definition that is valid JSON but not an object (`null`, `42`,
-          // `"x"`) would crash the field reads below.
           if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) {
             return { kind: 'error', text: `${match.path} 不是有效的 agent 定义（顶层必须是对象）` }
           }
-          preset = parsed as typeof preset
+          preset = parsed as Record<string, unknown>
         } catch {
           return { kind: 'error', text: `${match.path} 不是有效 JSON` }
         }
         const ctx = (agent as { ctx?: unknown }).ctx
-        const get = (ctx as { get?: (name: string) => unknown } | undefined)?.get
-        const switcher = get?.call(ctx, 'kiroModelSwitch') as { apply?: (next: unknown) => void } | undefined
-        const effort = get?.call(ctx, 'kiroEffortControl') as { setManual?: (level: string) => void } | undefined
-        const applied: string[] = []
-        // kiro's own template writes `"model": null` — treat null like absent,
-        // or a freshly created agent crashes the swap right here.
-        const modelSpec = typeof preset.model === 'string' && preset.model.trim() !== '' ? preset.model : undefined
-        const full = modelSpec === undefined
-          ? undefined
-          : `${preset.provider ?? (modelSpec.includes('/') ? modelSpec.split('/')[0] : undefined)}/${modelSpec.includes('/') ? modelSpec.split('/')[1] : modelSpec}`
-        if (full !== undefined && switcher?.apply !== undefined) {
-          const [provider, model] = full.split('/')
-          switcher.apply({ provider, model })
-          applied.push(`模型 → ${full}`)
-        }
-        if (typeof preset.effort === 'string' && effort?.setManual !== undefined) {
-          effort.setManual(preset.effort)
-          applied.push(`档位 → ${preset.effort}`)
-        }
-        // Agent-parity: prompt + tools ride the persona service (kiro-loop
-        // system prompt + schema filter); allowedTools become session trust.
-        const directSet = (globalThis as { __kiroPersonaSet?: (n: { prompt?: string; tools?: readonly string[]; name?: string }) => void }).__kiroPersonaSet
-        const personaSvc = directSet !== undefined
-          ? { set: directSet }
-          : get?.call(ctx, 'kiroPersona') as { set?: (next: { prompt?: string; tools?: readonly string[]; name?: string }) => void } | undefined
-        personaSvc?.set?.({
-          name: target,
-          ...(typeof preset.prompt === 'string' && preset.prompt !== '' ? { prompt: preset.prompt } : {}),
-          ...(Array.isArray((preset as { tools?: unknown }).tools)
-            ? { tools: (preset as { tools: readonly string[] }).tools.filter((t) => typeof t === 'string') }
-            : {}),
-        })
-        if (typeof preset.prompt === 'string' && preset.prompt.trim() !== '') applied.push('人格提示 → 已注入')
-        if (Array.isArray((preset as { tools?: unknown }).tools)) applied.push('工具面 → 按预设过滤')
-        const allowed = (preset as { allowedTools?: unknown }).allowedTools
-        if (Array.isArray(allowed)) {
-          const controllerSvc = get?.call(ctx, 'kiroController') as
-            | { allowToolForSession?: (tool: string) => void }
-            | undefined
-          for (const tool of allowed) {
-            if (typeof tool === 'string' && tool !== '') controllerSvc?.allowToolForSession?.(tool)
-          }
-          if (allowed.length > 0) applied.push(`免审批 → ${String(allowed.length)} 个工具（本会话）`)
-        }
-        // Preset-declared engines ride the whole-unit switch.
-        if ((preset.engine === 'kiro' || preset.engine === 'dsh')) {
-          const engineSvc = get?.call(ctx, 'kiroEngineSwitch') as { set?: (u: 'kiro' | 'dsh', o?: { rust?: boolean }) => Promise<string> } | undefined
-          if (engineSvc?.set !== undefined) {
-            await engineSvc.set(preset.engine, { rust: preset.toolEngine === 'rust' })
-            applied.push(`引擎 → ${preset.engine}${preset.toolEngine === 'rust' ? '+rust' : ''}`)
-          }
-        }
-        // Persona delivery depends on the engine: kiro-loop folds it into its
-        // system prompt; the DSH engine has NO per-session system-prompt
-        // channel (pushSystem is transcript-only), so the prompt rides a
-        // one-shot instruction turn — a real user message the model answers.
-        if (typeof preset.prompt === 'string' && preset.prompt.trim() !== '') {
-          const loopMode = (globalThis as { __kiroLoopMode?: () => 'dsh' | 'kiro' }).__kiroLoopMode?.() ?? 'dsh'
-          if (loopMode === 'kiro') {
-            applied.push('人格提示 → 系统提示已注入（kiro 引擎）')
-          } else {
+        const applied = await applyAgentPreset(ctx, target, preset as never, {
+          injectTurn: (text) => {
             const send = serviceOf<{ submit(text: string): void }>(agent, 'kiroRetry')
-            if (send !== undefined) {
-              const injection = [
-                '【会话指令】从现在起按以下人设工作，直到我另行通知：',
-                '',
-                preset.prompt,
-                '',
-                '确认已理解人设即可，简短回复，不要开始执行任务。',
-              ].join('\n')
-              setTimeout(() => send.submit(injection), 0)
-              applied.push('人格提示 → 已作为会话指令发送（dsh 引擎）')
-            } else {
-              applied.push('人格提示 → 未生效（提交服务不可用），可用 /engine kiro 后重试 swap')
-            }
-          }
-        }
+            setTimeout(() => send?.submit(text), 0)
+          },
+        })
         const lines = [`已切换到 agent「${target}」（${match.source} 级）：`]
         lines.push(applied.length > 0 ? `  ${applied.join(' · ')}` : '  未声明模型/档位，保持现状。')
         if (typeof preset.prompt === 'string' && preset.prompt !== '') {
-          lines.push(`  该预设带人格提示（${preset.prompt.length} 字）——平台暂无按 agent 隔离系统提示的开关，`)
-          lines.push('  如需生效可放入 .kiro/steering/<name>.md 后 /steering reload。')
+          lines.push('  人设长期生效建议：内容放入 .kiro/steering/ 后 /steering reload（工作区级）。')
         }
         return { kind: 'success', text: lines.join('\n') }
       }
