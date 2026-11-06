@@ -22,6 +22,19 @@ function dirs() {
   return agentDirs()
 }
 
+/** The user-global agent dir (where create/generate land, like kiro-cli). */
+function AGENT_DIRS_FALLBACK(): string {
+  return agentDirs().user
+}
+
+/** Generic agent-scope service lookup (cordis receiver rules apply). */
+function serviceOf<T>(agentCtx: unknown, name: string): T | undefined {
+  const ctx = (agentCtx as { ctx?: unknown }).ctx
+  if (ctx === undefined || ctx === null) return undefined
+  const get = (ctx as { get?: (name: string) => unknown }).get
+  return typeof get === 'function' ? get.call(ctx, name) as T | undefined : undefined
+}
+
 /** Pick $EDITOR like /editor does. */
 function pickEditor(): string {
   return process.env['EDITOR'] ?? process.env['VISUAL'] ?? (process.platform === 'win32' ? 'notepad' : 'vi')
@@ -37,12 +50,28 @@ function flagValue(args: readonly string[], flag: string): string | undefined {
   return undefined
 }
 
+/** 中文子命令别名 — 输入法下打中文比记英文拼写自然。 */
+const ALIASES: Record<string, string> = {
+  生成: 'generate',
+  列表: 'list',
+  切换: 'swap',
+  新建: 'create',
+  创建: 'create',
+  编辑: 'edit',
+  删除: 'delete',
+  重命名: 'rename',
+  校验: 'validate',
+  查看: 'show',
+  帮助: 'help',
+}
+
 function parseSubcommand(input: string): { name: string; args: string[] } {
   const trimmed = input.trim()
   if (trimmed === '') return { name: 'list', args: [] }
   // Quote-aware: --prompt "多词 文本" must arrive as ONE token without quotes.
   const tokens = tokenizeArgs(trimmed)
-  return { name: tokens[0] ?? 'list', args: tokens.slice(1) }
+  const name = ALIASES[tokens[0] ?? ''] ?? tokens[0] ?? 'list'
+  return { name, args: tokens.slice(1) }
 }
 
 /** Bridge for the /agent option menu (shadow-proxy-free list access). */
@@ -266,11 +295,56 @@ export const agentCommand: CommandDefinition = {
         if (!result.ok) return { kind: 'error', text: `${path}: ${result.reason}` }
         return { kind: 'success', text: `✔ ${path} 是合法 JSON，name="${result.name}"` }
       }
-      case 'generate':
+      case 'generate': {
+        // Model-authored definition: hand the description to the live model
+        // as a structured turn — it has the file tools to write the JSON and
+        // this TUI shows its work. `/agent generate` alone explains usage.
+        const positional = args.filter((arg, i) => {
+          if (arg.startsWith('-')) return false
+          const prev = args[i - 1]
+          return prev === undefined || !prev.startsWith('--')
+        })
+        const description = positional.join(' ').trim()
+        if (description === '') {
+          return { kind: 'error', text: 'usage: /agent generate <描述> [--name 名字]\n  例：/agent generate 专注 Rust 后端审查的助手 --name rust-reviewer' }
+        }
+        const name = flagValue(args, 'name') ?? positional[0] ?? `generated-${Date.now() % 100000}`
+        const target = join(AGENT_DIRS_FALLBACK(), `${name}.json`)
+        if (existsSync(target)) {
+          return { kind: 'error', text: `已存在 ${target}（换个 --name，或先 /agent delete ${name}）` }
+        }
+        const send = serviceOf<{ submit(text: string): void }>(agent, 'kiroRetry')
+        if (send === undefined) {
+          return { kind: 'error', text: '/agent generate: 无法驱动模型（提交服务不可用）' }
+        }
+        const prompt = [
+          `请创建一个自定义 agent 定义文件：${target}`,
+          '',
+          '要求：',
+          '1. 严格使用以下 JSON 结构（字段与 kiro-cli 兼容，不要增删字段）：',
+          '   { "name": "...", "description": "...", "prompt": "...", "mcpServers": {}, "tools": ["*"], "toolAliases": {}, "allowedTools": [], "resources": [], "hooks": {}, "toolsSettings": {}, "includeMcpJson": false, "model": null }',
+          `2. name 字段必须是：${name}`,
+          `3. description：一句话概括这个 agent 的职责（基于下面的需求）`,
+          `4. prompt：为该 agent 写一段完整的系统提示（中文，按需求定制，300 字以内）`,
+          '',
+          `agent 需求：${description}`,
+          '',
+          '用文件工具写好文件后，简短确认文件路径即可。',
+        ].join('\n')
+        setTimeout(() => send.submit(prompt), 0)
+        return {
+          kind: 'success',
+          text: [
+            `已把生成任务交给模型（写完后模型会确认）：`,
+            `  目标文件：${target}`,
+            `  需求：${description}`,
+            `  完成后用 /agent swap ${name} 启用。`,
+          ].join('\n'),
+        }
+      }
       case 'migrate':
-        // Honest placeholders: generate needs a model-authored definition
-        // pipeline, migrate converts kiro profiles — both phase 4.
-        return { kind: 'success', text: `/agent ${sub} lands in phase 4.` }
+        // Honest placeholder: migrate converts kiro profiles — phase 4.
+        return { kind: 'success', text: '/agent migrate lands in phase 4.' }
       case 'schema':
         return {
           kind: 'success',
@@ -287,7 +361,7 @@ export const agentCommand: CommandDefinition = {
           ].join('\n'),
         }
       case 'help':
-        return { kind: 'success', text: '/agent <list|show|swap|create|edit|delete|rename|set-default|validate|generate|schema|help> [name]' }
+        return { kind: 'success', text: '/agent <list|show|swap|create|edit|delete|rename|set-default|validate|generate|schema|help> [name]\n  支持中文别名：生成/列表/切换/新建/编辑/删除/重命名/校验/查看' }
       default:
         return { kind: 'success', text: `unknown subcommand: ${sub}. Try /agent help.` }
     }

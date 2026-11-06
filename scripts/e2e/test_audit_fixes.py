@@ -67,6 +67,30 @@ class CreateFlagValueTest(unittest.TestCase):
                          'the flag value must not become an agent named hello')
 
 
+class GenerateUsageTest(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.tui = Tui(columns=110, lines=36)
+        cls.tui.drain(1.5)
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.tui.quit()
+
+    def test_10_generate_without_description_asks_for_one(self):
+        self.tui.type('/agent generate', delay=0.02)
+        self.tui.drain(0.4)
+        self.tui.write(b'\r')
+        self.tui.drain(1.5)
+        self.assertIn('usage: /agent generate <描述>', self.tui.visible())
+        # The Chinese alias must reach the same branch.
+        self.tui.type('/agent 生成', delay=0.02)
+        self.tui.drain(0.4)
+        self.tui.write(b'\r')
+        self.tui.drain(1.5)
+        self.assertIn('usage: /agent generate <描述>', self.tui.visible())
+
+
 class UppercaseDispatchTest(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
