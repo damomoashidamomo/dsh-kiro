@@ -38,11 +38,13 @@ export interface CommandPicker {
  */
 export const COMMAND_PICKERS: Readonly<Record<string, CommandPicker>> = {
   chat: {
-    title: '会话管理（列出 / 新开 / 恢复 / 删除）',
+    title: '会话管理（列出 / 新开 / 恢复 / 导出 / 导入 / 删除）',
     rows: [
       { value: 'list', hint: '列出会话（含时间与简介）' },
       { value: 'new', hint: '存盘当前会话并开启新会话' },
       { value: 'resume <id>', hint: '在当前 TUI 内切换到该会话', needsArg: true },
+      { value: 'save <path>', hint: '把当前会话导出成 JSON 文件（-f 覆盖）', needsArg: true },
+      { value: 'load <path>', hint: '从 JSON 文件恢复会话（默认自动接着聊）', needsArg: true },
       { value: 'delete <id>', hint: '删除一个存盘会话', needsArg: true },
       { value: 'help', hint: '用法说明' },
     ],

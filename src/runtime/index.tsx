@@ -541,6 +541,24 @@ async function mount(ctx: Context, startup: KiroStartup): Promise<void> {
     },
   })
 
+  // Facts `/chat save` needs: which session is live, and a flush so the log on
+  // disk matches the transcript before it is exported.
+  ctx.provide('kiroSessionInfo', {
+    currentId(): string | undefined {
+      const agent = agentRef.current
+      return agent === undefined ? undefined : String(agent.session.id)
+    },
+    async flush(): Promise<void> {
+      const agent = agentRef.current
+      if (agent === undefined) return
+      try {
+        await sessions.flush(agent.session)
+      } catch {
+        // Best-effort: an export of a stale-by-one-write log still works.
+      }
+    },
+  })
+
   ctx.provide('kiroSessionReader', {
     readSession: (id: string) => sessionQueryService?.readSession?.(brandString<SessionId>(id)),
   })

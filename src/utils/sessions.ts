@@ -256,6 +256,17 @@ export async function readSessionTitleAsync(dir: string, maxBytes = 2_000_000): 
   return acc
 }
 
+/**
+ * Directory a session for `cwd` belongs in: the platform encodes the project
+ * path into the bucket name (`/tmp/x` -> `--tmp-x--`, a space becomes `~0020`).
+ * A restored session must land in the bucket of the CURRENT directory so it
+ * shows up in `/chat list` here.
+ */
+export function sessionSourceDir(cwd: string, home: string = defaultHome()): string {
+  const clean = cwd.replace(/^\//u, '').replace(/\//gu, '-').replace(/ /gu, '~0020')
+  return join(home, 'sessions', `--${clean}--`)
+}
+
 /** List every session under `$DSH_HOME/sessions`, newest first. */
 /** Short-lived cache: a picker open lists sessions more than once. */
 const LISTING_TTL_MS = 5000

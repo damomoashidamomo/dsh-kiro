@@ -60,6 +60,13 @@ export declare function readSessionTitle(dir: string, maxBytes?: number): Sessio
  * is read through `fs/promises`.
  */
 export declare function readSessionTitleAsync(dir: string, maxBytes?: number): Promise<SessionTitle>;
+/**
+ * Directory a session for `cwd` belongs in: the platform encodes the project
+ * path into the bucket name (`/tmp/x` -> `--tmp-x--`, a space becomes `~0020`).
+ * A restored session must land in the bucket of the CURRENT directory so it
+ * shows up in `/chat list` here.
+ */
+export declare function sessionSourceDir(cwd: string, home?: string): string;
 /** Drop the cached listing (after a delete, or in tests). */
 export declare function invalidateSessionCache(): void;
 export declare function listSessions(home?: string): readonly SessionSummary[];

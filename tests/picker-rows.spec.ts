@@ -18,15 +18,21 @@ const sessions = (count: number) => Array.from({ length: count }, (_, i) => ({
 const subs = pickerFor('chat')!.rows
 
 describe('chat picker rows', () => {
-  it('puts the sessions directly after the resume row, before delete/help', () => {
+  it('puts the sessions directly after the resume row, before save/load/delete/help', () => {
     const rows = chatPickerRows(subs, sessions(3), 3, 20)
     const values = rows.map((row) => row.value)
     const resumeAt = values.indexOf('resume <id>')
     expect(resumeAt).toBeGreaterThan(-1)
     expect(values[resumeAt + 1]).toMatch(/^resume session-/u)
     expect(values[resumeAt + 3]).toMatch(/^resume session-/u)
-    expect(values[resumeAt + 4]).toBe('delete <id>')
+    expect(values.slice(resumeAt + 4)).toEqual(['save <path>', 'load <path>', 'delete <id>', 'help'])
     expect(values[values.length - 1]).toBe('help')
+  })
+
+  it('offers save and load next to the other session actions', () => {
+    const values = chatPickerRows(subs, sessions(1), 1, 20).map((row) => row.value)
+    expect(values).toContain('save <path>')
+    expect(values).toContain('load <path>')
   })
 
   it('keeps every static subcommand when sessions are inserted', () => {

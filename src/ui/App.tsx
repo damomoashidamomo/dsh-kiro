@@ -6,7 +6,7 @@
  */
 
 import { Box, Text, useApp, useInput, useStdout } from 'ink'
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Transcript } from './Transcript'
 import { Prompt } from './Prompt'
 import { StatusBar, identityText, shouldShowStatusBar } from './StatusBar'
@@ -61,6 +61,15 @@ function approvalDiff(state: SessionRenderState, toolName: string): readonly Dif
   }
   return undefined
 }
+
+/** Printed on the first Ctrl+C / Ctrl+D while idle (kiro-cli's wording). */
+const EXIT_HINT = '(To exit the CLI, press Ctrl+C or Ctrl+D again or type /quit)'
+
+/**
+ * The hint printed on the first Ctrl+C / Ctrl+D. kiro-cli prints the English
+ * line on its own; this TUI is mostly Chinese, so the gloss rides along.
+ */
+const EXIT_HINT_TEXT = `${EXIT_HINT}\n（再按一次 Ctrl+C 或 Ctrl+D 退出，或输入 /quit）`
 
 export interface AppProps {
   /**
@@ -118,18 +127,22 @@ export function App({ controller, seedTask, activeAgentName, onSubmit, fileSearc
     controller.cancelActiveTurn()
   }
 
-  // kiro-style two-stage Ctrl+C: first press cancels the running turn, a
-  // second press while still cancelling exits the TUI back to the shell.
+  // kiro-style two-stage exit. Two different presses share this arming:
+  //  - a turn is running: the first Ctrl+C cancels it, the second exits;
+  //  - idle: the first Ctrl+C / Ctrl+D only clears the draft and prints the
+  //    hint, the second exits. kiro-cli 1.27 behaves exactly like that, and the
+  //    arming does not time out (a second press 12 s later still exits).
   const interruptArmed = useRef<boolean>(false)
 
   useEffect(() => controller.subscribe(setState), [controller])
 
-  // Returning to idle disarms the two-stage exit (the cancel completed).
-  useEffect(() => {
-    if (state.agent.status === 'idle') {
-      interruptArmed.current = false
-    }
-  }, [state.agent.status])
+  // Submitting a prompt disarms the exit: the next Ctrl+C starts over. (The
+  // arming itself is NOT cleared when a cancelled turn returns to idle — kiro
+  // keeps the hint live, so an immediate second press still exits.)
+  const disarmExit = useCallback(() => {
+    interruptArmed.current = false
+  }, [])
+
 
   useEffect(() => {
     if (seeded) return
@@ -146,25 +159,36 @@ export function App({ controller, seedTask, activeAgentName, onSubmit, fileSearc
     if (state.picker !== undefined) return
     if (state.overlay.kind !== 'none') return
     const action = mapKey({ input, key })
-    if (action === 'quit') {
-      exit()
-    } else if (action === 'interrupt') {
-      const status = state.agent.status
-      if (status === 'running' || status === 'cancelling') {
+    if (action === 'quit' || action === 'interrupt') {
+      const busy = state.agent.status === 'running' || state.agent.status === 'cancelling'
+      if (busy) {
+        // A running turn: the first Ctrl+C cancels, the second exits. Ctrl+D
+        // never cancels — it only arms and exits on the second press.
         if (interruptArmed.current) {
-          // Second Ctrl+C while the turn is still being cancelled → exit.
           exit()
-        } else {
-          interruptArmed.current = true
-          controller.patchAgent({ status: 'cancelling' })
-          // Actually abort the in-flight request via the platform.
-          cancelTurn()
+          return
         }
-      } else {
-        // Idle: kiro exits on a single Ctrl+C (kiro.dev issue #6442).
-        exit()
+        interruptArmed.current = true
+        if (action === 'interrupt') {
+          controller.patchAgent({ status: 'cancelling' })
+          cancelTurn()
+        } else {
+          controller.pushSystem(EXIT_HINT_TEXT)
+        }
+        return
       }
-    } else if (state.approval !== undefined || state.question !== undefined) {
+      // Idle: clear the draft and print the hint; only the second press exits.
+      if (interruptArmed.current) {
+        exit()
+        return
+      }
+      interruptArmed.current = true
+      insertSeq.current += 1
+      setAtInsert({ token: '', insert: '', seq: insertSeq.current, clearAll: true })
+      controller.pushSystem(EXIT_HINT_TEXT)
+      return
+    }
+    if (state.approval !== undefined || state.question !== undefined) {
       // While the approval or plan-review panel waits, only quit/interrupt
       // stay live (the interrupt cancels the turn, which aborts the request).
       return
@@ -481,6 +505,8 @@ export function App({ controller, seedTask, activeAgentName, onSubmit, fileSearc
           history={submitHistory}
           onEmptySubmit={() => controller.appendPromptEcho(echoGutter)}
           onSubmit={(text) => {
+            // A submitted prompt starts a fresh two-stage exit count.
+            disarmExit()
             // Option picker: a BARE enumerated command opens the picker
             // instead of running bare (which only printed usage text).
             const bare = text.trim().replace(/^\//u, '').toLowerCase()
