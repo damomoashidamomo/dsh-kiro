@@ -20,8 +20,8 @@ import {
   parseCmdline,
   type AppExit,
 } from '@deepseek-ai/dsh-cmdline'
-import { statSync } from 'node:fs'
-import { resolve } from 'node:path'
+import { readFileSync, statSync } from 'node:fs'
+import { join, resolve } from 'node:path'
 import { banner, resetPalette, colorLevel } from './theme/palette'
 import { splashMark } from './theme/banner'
 
@@ -176,6 +176,22 @@ function readStartup(program: Command): KiroStartup {
     ? undefined
     : opts.trustTools.split(',').map(entry => entry.trim()).filter(entry => entry !== '')
 
+  // `/agent set-default <name>` writes `.kiro/settings.json`; an explicit
+  // --agent flag still wins.
+  const settingsAgent = readSettingsAgent(opts.cwd ?? process.cwd())
+
+
+/** `agent` key of the workspace `.kiro/settings.json`, when present. */
+function readSettingsAgent(cwd: string): string | undefined {
+  try {
+    const raw = readFileSync(join(cwd, '.kiro', 'settings.json'), 'utf8')
+    const parsed = JSON.parse(raw) as { agent?: unknown }
+    return typeof parsed.agent === 'string' && parsed.agent.trim() !== '' ? parsed.agent : undefined
+  } catch {
+    return undefined
+  }
+}
+
   return {
     task: taskArg === '' ? undefined : taskArg,
     resume: opts.resume === true,
@@ -186,7 +202,7 @@ function readStartup(program: Command): KiroStartup {
     deleteSessionId: opts.deleteSession,
     sessionSource: opts.sessionSource,
     listModels: opts.listModels === true,
-    agent: opts.agent,
+    agent: opts.agent ?? settingsAgent,
     workspaceDir: opts.cwd,
     model: opts.model,
     effort: opts.effort,

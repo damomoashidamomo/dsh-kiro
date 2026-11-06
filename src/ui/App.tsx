@@ -608,7 +608,10 @@ export function App({ controller, seedTask, activeAgentName, onSubmit, fileSearc
           popupOpen={prefix !== undefined && !slashMenuOpen}
         />
       )}
-      {prefix === '/' && !slashMenuOpen && optionMenu === undefined ? (
+      {prefix === '/' && !slashMenuOpen && optionMenu === undefined && !prefixQuery.includes(' ') ? (
+        // A query with a space (`/agent create`) already has its command
+        // chosen — ranking COMMAND NAMES against it only lists unrelated
+        // commands and misleads. The Enter key submits the full draft.
         <Autocomplete
           trigger="/"
           query={slashQuery}

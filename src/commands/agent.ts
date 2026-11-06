@@ -1,48 +1,39 @@
 /**
- * `/agent` — manage custom agents. Phase 3 ships the listing + show subcommand
- * (read-only against the .kiro/agents/ directories), the create / edit /
- * delete writers land in phase 4.
+ * `/agent` — manage custom agents against `.kiro/agents/` directories
+ * (project first, then the user-global one — the same files kiro-cli reads).
+ *
+ * create / edit / delete / rename / set-default / validate are implemented
+ * here (kiro-cli parity): create writes the kiro-shaped template (name,
+ * description, prompt, tools ["*"], allowedTools, model, …) and — unless
+ * `--prompt` is given — opens $EDITOR on it, the way kiro-cli opens vim.
+ * generate (model-authored definitions) and migrate stay phase-4 stubs.
  */
 
+
 import type { CommandDefinition } from '@deepseek-ai/dsh-commands'
-import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs'
-import { basename, join } from 'node:path'
-import { homedir } from 'node:os'
+import { spawnSync } from 'node:child_process'
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
+import { join } from 'node:path'
+import { agentDirs, agentTemplate, createAgent, deleteAgent, findAgent, listAgents, renameAgent, validateAgentFile } from '../utils/agent-store'
 
-const AGENT_DIRS = [
-  join(process.cwd(), '.kiro', 'agents'),
-  join(homedir(), '.kiro', 'agents'),
-]
-
-interface AgentSummary {
-  readonly name: string
-  readonly source: 'project' | 'user'
-  readonly path: string
-  readonly description: string
+/** The directories this workspace reads agent definitions from. */
+function dirs() {
+  return agentDirs()
 }
 
-function listAgents(): AgentSummary[] {
-  const out: AgentSummary[] = []
-  for (const [source, dir] of [['project', AGENT_DIRS[0]], ['user', AGENT_DIRS[1]]] as const) {
-    if (!existsSync(dir)) continue
-    for (const entry of readdirSync(dir)) {
-      if (!entry.endsWith('.json')) continue
-      const path = join(dir, entry)
-      if (statSync(path).isDirectory()) continue
-      try {
-        const raw = JSON.parse(readFileSync(path, 'utf8')) as { name?: string; description?: string }
-        out.push({
-          name: raw.name ?? basename(entry, '.json'),
-          source,
-          path,
-          description: typeof raw.description === 'string' ? raw.description : '',
-        })
-      } catch {
-        out.push({ name: basename(entry, '.json'), source, path, description: '(invalid JSON)' })
-      }
-    }
+/** Pick $EDITOR like /editor does. */
+function pickEditor(): string {
+  return process.env['EDITOR'] ?? process.env['VISUAL'] ?? (process.platform === 'win32' ? 'notepad' : 'vi')
+}
+
+/** Flag lookup: --name x / --name=x / positional. */
+function flagValue(args: readonly string[], flag: string): string | undefined {
+  for (let i = 0; i < args.length; i += 1) {
+    const arg = args[i] as string
+    if (arg === `--${flag}`) return args[i + 1]
+    if (arg.startsWith(`--${flag}=`)) return arg.slice(flag.length + 3)
   }
-  return out
+  return undefined
 }
 
 function parseSubcommand(input: string): { name: string; args: string[] } {
@@ -68,7 +59,7 @@ export const agentCommand: CommandDefinition = {
       case '': {
         const agents = listAgents()
         if (agents.length === 0) {
-          return { kind: 'success', text: '(no custom agents yet — use /agent create <name> in phase 4)' }
+          return { kind: 'success', text: '（还没有自定义 agent — /agent create <name> 创建一个）' }
         }
         const lines = [`${agents.length.toString()} custom agent(s):`]
         for (const a of agents) {
@@ -81,7 +72,7 @@ export const agentCommand: CommandDefinition = {
       case 'show': {
         const target = args[0]
         if (target === undefined) return { kind: 'success', text: 'usage: /agent show <name>' }
-        const match = listAgents().find((a) => a.name === target)
+        const match = findAgent(dirs(), target)
         if (match === undefined) return { kind: 'success', text: `no agent named "${target}"` }
         try {
           const raw = readFileSync(match.path, 'utf8')
@@ -98,7 +89,7 @@ export const agentCommand: CommandDefinition = {
         // field is reported instead of silently ignored.
         const target = args[0]
         if (target === undefined) return { kind: 'success', text: 'usage: /agent swap <name>' }
-        const match = listAgents().find((a) => a.name === target)
+        const match = findAgent(dirs(), target)
         if (match === undefined) return { kind: 'error', text: `no agent named "${target}"` }
         let preset: { model?: string; provider?: string; effort?: string; prompt?: string; engine?: string; toolEngine?: string; tools?: readonly string[]; allowedTools?: readonly string[] } = {}
         try {
@@ -111,15 +102,18 @@ export const agentCommand: CommandDefinition = {
         const switcher = get?.call(ctx, 'kiroModelSwitch') as { apply?: (next: unknown) => void } | undefined
         const effort = get?.call(ctx, 'kiroEffortControl') as { setManual?: (level: string) => void } | undefined
         const applied: string[] = []
-        const full = preset.model !== undefined
-          ? `${preset.provider ?? (preset.model.includes('/') ? preset.model.split('/')[0] : undefined)}/${preset.model.includes('/') ? preset.model.split('/')[1] : preset.model}`
-          : undefined
+        // kiro's own template writes `"model": null` — treat null like absent,
+        // or a freshly created agent crashes the swap right here.
+        const modelSpec = typeof preset.model === 'string' && preset.model.trim() !== '' ? preset.model : undefined
+        const full = modelSpec === undefined
+          ? undefined
+          : `${preset.provider ?? (modelSpec.includes('/') ? modelSpec.split('/')[0] : undefined)}/${modelSpec.includes('/') ? modelSpec.split('/')[1] : modelSpec}`
         if (full !== undefined && switcher?.apply !== undefined) {
           const [provider, model] = full.split('/')
           switcher.apply({ provider, model })
           applied.push(`模型 → ${full}`)
         }
-        if (preset.effort !== undefined && effort?.setManual !== undefined) {
+        if (typeof preset.effort === 'string' && effort?.setManual !== undefined) {
           effort.setManual(preset.effort)
           applied.push(`档位 → ${preset.effort}`)
         }
@@ -136,7 +130,7 @@ export const agentCommand: CommandDefinition = {
             ? { tools: (preset as { tools: readonly string[] }).tools.filter((t) => typeof t === 'string') }
             : {}),
         })
-        applied.push(preset.prompt !== undefined && String(preset.prompt).trim() !== '' ? '人格提示 → 已注入' : '')
+        applied.push(typeof preset.prompt === 'string' && preset.prompt.trim() !== '' ? '人格提示 → 已注入' : '')
         applied.push(Array.isArray((preset as { tools?: unknown }).tools) ? `工具面 → 按预设过滤` : '')
         const allowed = (preset as { allowedTools?: unknown }).allowedTools
         if (Array.isArray(allowed)) {
@@ -149,7 +143,7 @@ export const agentCommand: CommandDefinition = {
           if (allowed.length > 0) applied.push(`免审批 → ${String(allowed.length)} 个工具（本会话）`)
         }
         // Preset-declared engines ride the whole-unit switch.
-        if (preset.engine === 'kiro' || preset.engine === 'dsh') {
+        if ((preset.engine === 'kiro' || preset.engine === 'dsh')) {
           const engineSvc = get?.call(ctx, 'kiroEngineSwitch') as { set?: (u: 'kiro' | 'dsh', o?: { rust?: boolean }) => Promise<string> } | undefined
           if (engineSvc?.set !== undefined) {
             await engineSvc.set(preset.engine, { rust: preset.toolEngine === 'rust' })
@@ -166,20 +160,99 @@ export const agentCommand: CommandDefinition = {
         }
         const lines = [`已切换到 agent「${target}」（${match.source} 级）：`]
         lines.push(applied.length > 0 ? `  ${applied.join(' · ')}` : '  未声明模型/档位，保持现状。')
-        if (preset.prompt !== undefined) {
+        if (typeof preset.prompt === 'string' && preset.prompt !== '') {
           lines.push(`  该预设带人格提示（${preset.prompt.length} 字）——平台暂无按 agent 隔离系统提示的开关，`)
           lines.push('  如需生效可放入 .kiro/steering/<name>.md 后 /steering reload。')
         }
         return { kind: 'success', text: lines.join('\n') }
       }
-      case 'create':
-      case 'edit':
-      case 'delete':
+      case 'create': {
+        // kiro-cli shape: /agent create [NAME] [--description "..."] [--prompt "..."]
+        const name = flagValue(args, 'name') ?? args.find((arg) => !arg.startsWith('-') && args.indexOf(arg) === args.lastIndexOf(arg)) ?? args.find((arg) => !arg.startsWith('-'))
+        if (name === undefined || name.trim() === '') {
+          return { kind: 'error', text: 'usage: /agent create <name> [--description "..."] [--prompt "..."]' }
+        }
+        const clean = name.trim().replace(/\.json$/u, '')
+        const description = flagValue(args, 'description') ?? ''
+        const prompt = flagValue(args, 'prompt') ?? null
+        let target: string
+        try {
+          target = createAgent(dirs(), clean, description, prompt).path
+        } catch (error) {
+          return { kind: 'error', text: `/agent create: ${error instanceof Error ? error.message : String(error)}` }
+        }
+        if (prompt === null) {
+          // kiro-cli opens vim on the fresh config; do the same via $EDITOR.
+          const editor = pickEditor()
+          const result = spawnSync(editor, [target], { stdio: 'inherit' })
+          if (result.error !== undefined || result.status !== 0) {
+            return { kind: 'success', text: `已创建 ${target}（编辑器 ${editor} 没跑起来，可稍后 /agent edit ${clean}）` }
+          }
+        }
+        return { kind: 'success', text: `✔ 已创建 agent：${target}\n  用 /agent swap ${clean} 切换，/agent edit ${clean} 修改。` }
+      }
+      case 'edit': {
+        const target = args.filter((arg) => !arg.startsWith('-'))[0]
+        if (target === undefined) return { kind: 'error', text: 'usage: /agent edit <name>' }
+        const match = findAgent(dirs(), target)
+        if (match === undefined) return { kind: 'error', text: `no agent named "${target}"` }
+        const result = spawnSync(pickEditor(), [match.path], { stdio: 'inherit' })
+        if (result.error !== undefined || result.status !== 0) {
+          return { kind: 'error', text: `编辑器没跑起来：直接改 ${match.path}` }
+        }
+        return { kind: 'success', text: `✔ 已保存 ${match.path}（/agent swap ${target} 生效）` }
+      }
+      case 'delete': {
+        const target = args.filter((arg) => !arg.startsWith('-'))[0]
+        if (target === undefined) return { kind: 'error', text: 'usage: /agent delete <name>' }
+        let removed: { path: string }
+        try {
+          removed = deleteAgent(dirs(), target)
+        } catch (error) {
+          return { kind: 'error', text: `/agent delete: ${error instanceof Error ? error.message : String(error)}` }
+        }
+        return { kind: 'success', text: `✔ 已删除 ${removed.path}` }
+      }
+      case 'rename': {
+        const positional = args.filter((arg) => !arg.startsWith('-'))
+        const [from, to] = positional
+        if (from === undefined || to === undefined) return { kind: 'error', text: 'usage: /agent rename <old> <new>' }
+        let renamed: { path: string }
+        try {
+          renamed = renameAgent(dirs(), from, to)
+        } catch (error) {
+          return { kind: 'error', text: `/agent rename: ${error instanceof Error ? error.message : String(error)}` }
+        }
+        return { kind: 'success', text: `✔ ${from} → ${to}（${renamed.path}）` }
+      }
+      case 'set-default': {
+        const target = args.filter((arg) => !arg.startsWith('-'))[0]
+        if (target === undefined) return { kind: 'error', text: 'usage: /agent set-default <name>' }
+        if (findAgent(dirs(), target) === undefined) return { kind: 'error', text: `no agent named "${target}"` }
+        // kiro-cli writes the default into its own settings; here the boot-time
+        // agent comes from .kiro/settings.json (agent key) — write that.
+        const settingsPath = join(process.cwd(), '.kiro', 'settings.json')
+        let settings: Record<string, unknown> = {}
+        try { settings = JSON.parse(readFileSync(settingsPath, 'utf8')) as Record<string, unknown> } catch {}
+        settings['agent'] = target
+        mkdirSync(join(process.cwd(), '.kiro'), { recursive: true })
+        writeFileSync(settingsPath, `${JSON.stringify(settings, null, 2)}\n`, 'utf8')
+        return { kind: 'success', text: `✔ 默认 agent → ${target}（写入 ${settingsPath}，下次启动生效）` }
+      }
+      case 'validate': {
+        const target = flagValue(args, 'path') ?? args.filter((arg) => !arg.startsWith('-'))[0]
+        if (target === undefined) return { kind: 'error', text: 'usage: /agent validate <path-or-name>' }
+        const match = findAgent(dirs(), target.replace(/\.json$/u, ''))
+        const path = match?.path ?? target
+        if (!existsSync(path)) return { kind: 'error', text: `读不到 ${path}` }
+        const result = validateAgentFile(path)
+        if (!result.ok) return { kind: 'error', text: `${path}: ${result.reason}` }
+        return { kind: 'success', text: `✔ ${path} 是合法 JSON，name="${result.name}"` }
+      }
       case 'generate':
       case 'migrate':
-      case 'validate':
-      case 'rename':
-      case 'set-default':
+        // Honest placeholders: generate needs a model-authored definition
+        // pipeline, migrate converts kiro profiles — both phase 4.
         return { kind: 'success', text: `/agent ${sub} lands in phase 4.` }
       case 'schema':
         return {
@@ -197,7 +270,7 @@ export const agentCommand: CommandDefinition = {
           ].join('\n'),
         }
       case 'help':
-        return { kind: 'success', text: '/agent <list|show|swap|create|edit|delete|generate|schema|help> [name]' }
+        return { kind: 'success', text: '/agent <list|show|swap|create|edit|delete|rename|set-default|validate|generate|schema|help> [name]' }
       default:
         return { kind: 'success', text: `unknown subcommand: ${sub}. Try /agent help.` }
     }
