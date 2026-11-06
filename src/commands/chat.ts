@@ -20,6 +20,7 @@ import {
   filterSessions,
   formatTimestamp,
   listSessions,
+  readSessionTitleAsync,
 } from '../utils/sessions'
 
 interface SessionSwitchService {
@@ -51,12 +52,36 @@ function clipTitle(title: string, maxUnits = 48): string {
 }
 
 /**
- * Best-effort one-line description of a session: the platform's
- * `session/title` event (session-title-llm summarizes with the model and
- * logs it durably), falling back to the first user message excerpt. Reads
- * run through sessionQuery.readSession; failures just yield no title.
+ * Best-effort one-line description of a session: the durable `session/title`
+ * event (session-title-llm summarizes with the model), falling back to the
+ * first user message excerpt.
+ *
+ * The log is read STRAIGHT FROM DISK (`readSessionTitle`). Going through the
+ * platform's session query looked cleaner, but its persistence listing refuses
+ * to load any log when the store holds a duplicate session id ("appears in
+ * multiple project directories") or a log whose tail fails validation — and
+ * then every row silently lost its title. The platform reader stays as a
+ * second chance for whatever the file did not answer (forks, live sessions).
  */
 async function loadTitles(agentCtx: unknown, ids: readonly string[], limit = 10): Promise<Map<string, string>> {
+  const titles = new Map<string, string>()
+  const wanted = ids.slice(0, limit)
+  const dirs = new Map(listSessions().map((row) => [row.id, row.dir]))
+  const unresolved: string[] = []
+  // Scan the logs concurrently but off the render path: readSessionTitleAsync
+  // awaits each frame, so the menu keeps repainting while titles stream in.
+  const scanned = await Promise.all(wanted.map(async (id) => {
+    const dir = dirs.get(id)
+    if (dir === undefined) return { id, clipped: '' }
+    const { title, firstUser } = await readSessionTitleAsync(dir)
+    return { id, clipped: clipTitle(title !== '' ? title : firstUser) }
+  }))
+  for (const { id, clipped } of scanned) {
+    if (clipped !== '') titles.set(id, clipped)
+    else unresolved.push(id)
+  }
+  if (unresolved.length === 0) return titles
+
   // Through the runtime-provided bridge (see kiro-runtime index.tsx): a
   // direct agent-scope ctx.get('sessionQuery') hits a cordis shadow proxy
   // that breaks the engine's receiver.
@@ -67,9 +92,8 @@ async function loadTitles(agentCtx: unknown, ids: readonly string[], limit = 10)
       | { readSession?: (id: string) => Promise<{ events: ReadonlyArray<{ type: string; data: unknown }> }> }
       | undefined)?.readSession
     : undefined
-  const titles = new Map<string, string>()
   if (readSession === undefined) return titles
-  await Promise.all(ids.slice(0, limit).map(async (id) => {
+  await Promise.all(unresolved.map(async (id) => {
     try {
       const snapshot = await readSession(id)
       let title = ''

@@ -361,7 +361,7 @@ export function App({ controller, seedTask, activeAgentName, onSubmit, fileSearc
     if (name === 'chat') {
       const titlesSvc = (globalThis as { __kiroChatTitles?: (ids: readonly string[]) => Promise<Map<string, string>> }).__kiroChatTitles
       const ids = rows
-        .map((row) => /^resume (.+)$/u.exec(row.value)?.[1])
+        .map((row) => /^resume (session-\S+)$/u.exec(row.value)?.[1])
         .filter((id): id is string => id !== undefined)
       if (titlesSvc !== undefined && ids.length > 0) {
         void titlesSvc(ids).then((titles) => {

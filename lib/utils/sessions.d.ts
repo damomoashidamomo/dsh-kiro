@@ -26,7 +26,33 @@ export interface SessionSummary {
     /** Source bucket — the cwd-hash segment under `sessions/`. */
     readonly source: string;
 }
-/** List every session under `$DSH_HOME/sessions`, newest first. */
+/**
+ * Async twin of {@link readSessionTitle}. Titles are read while the /chat menu
+ * is already on screen, so the scan must not block the Ink event loop: every
+ * frame decompression is awaited (yielding between frames) and the file itself
+ * is read through `fs/promises`.
+ */
+export declare function readSessionTitleAsync(dir: string, maxBytes?: number): Promise<SessionTitle>;
+/** What the picker shows for a session: a title, else the first user message. */
+export interface SessionTitle {
+    readonly title: string;
+    readonly firstUser: string;
+}
+/**
+ * Read a session's title straight from its log file.
+ *
+ * This deliberately does NOT go through the platform's session query: its
+ * persistence listing refuses to load ANY log once the store contains a
+ * duplicate session id ("appears in multiple project directories") or a log
+ * whose tail fails validation, which silently removed every title from the
+ * /chat menu and from `/chat list`. Reading the file we already located keeps
+ * the listing working whatever shape the store is in.
+ *
+ * Preference: the durable `session/title` event, else the first user message.
+ */
+export declare function readSessionTitle(dir: string, maxBytes?: number): SessionTitle;
+/** Drop the cached listing (after a delete, or in tests). */
+export declare function invalidateSessionCache(): void;
 export declare function listSessions(home?: string): readonly SessionSummary[];
 /**
  * Narrow a session listing by the current working directory or an explicit

@@ -11,8 +11,10 @@ truth instead of a hardcoded copy.
 import json
 import re
 import subprocess
+import shutil
 import unittest
 
+from fake_sessions import make_sessions
 from harness import Tui
 from screen import Screen
 
@@ -137,6 +139,40 @@ class PickerTest(unittest.TestCase):
             self.assertIn('会话管理', joined, 'the /chat picker did not open after a command with args')
             self.assertIn('resume', joined)
         finally:
+            fresh.quit()
+
+    def test_50_session_rows_carry_a_title(self):
+        """Every session row shows a 简介 (title or first user message).
+
+        Reported twice: rows only ever showed a timestamp. The platform's
+        session query returned nothing for these logs — its persistence listing
+        refuses to load the whole store once one session id appears in two
+        project dirs — so titles now come from the log file directly. This
+        drives the real path: two fabricated sessions in the workspace's source
+        dir, one with a durable title, one whose first user message stands in.
+        """
+        fresh = Tui(columns=110, lines=40)
+        made = []
+        try:
+            fresh.drain(1.5)
+            made = make_sessions(fresh.tmp, [
+                {'id': 'session-fake1111-0000-0000-0000-000000000000',
+                 'title': '重构登录流程', 'firstUser': '帮我重构登录流程'},
+                {'id': 'session-fake2222-0000-0000-0000-000000000000',
+                 'firstUser': '这条会话没有标题,只有首条消息'},
+            ])
+            fresh.type('/chat', delay=0.02)
+            fresh.drain(0.4)
+            fresh.write(b'\r')
+            fresh.drain(2.5)
+            screen = Screen(110, 40)
+            screen.feed(fresh.raw)
+            joined = '\n'.join(screen.rows())
+            self.assertIn('重构登录流程', joined, 'the durable session title never reached the menu')
+            self.assertIn('这条会话没有标题', joined, 'the first-user-message fallback never reached the menu')
+        finally:
+            for path in made:
+                shutil.rmtree(path, ignore_errors=True)
             fresh.quit()
 
 

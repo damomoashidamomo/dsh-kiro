@@ -12,9 +12,11 @@
  */
 
 import { existsSync, readdirSync, readFileSync, rmSync, statSync } from 'node:fs'
+import { readFile } from 'node:fs/promises'
 import { homedir } from 'node:os'
 import { isAbsolute, join, relative } from 'node:path'
-import { zstdDecompressSync } from 'node:zlib'
+import { zstdDecompress, zstdDecompressSync } from 'node:zlib'
+import { promisify } from 'node:util'
 import { brandString } from '@deepseek-ai/dsh-brand'
 import { SessionId } from '@deepseek-ai/dsh-session'
 
@@ -80,8 +82,202 @@ function readHeader(path: string): { id: string; cwd: string; createdAt: number 
   }
 }
 
+/** Promise-based single-frame zstd decode (yields to the event loop). */
+const decompress = promisify(zstdDecompress)
+
+/** zstd frame magic — the store appends one frame per durable write. */
+const ZSTD_MAGIC = Buffer.from([0x28, 0xb5, 0x2f, 0xfd])
+
+/**
+ * Append logs hold MANY concatenated zstd frames; `zstdDecompressSync` stops at
+ * the first one, so a single call returns just the header. Split on the magic
+ * and decompress frame by frame.
+ *
+ * `maxBytes` bounds the work: a session that ran for hours can hold megabytes,
+ * and the title scan only needs the top of the log.
+ */
+function decompressFrames(file: string, maxBytes: number): string[] {
+  let raw: Buffer
+  try {
+    raw = readFileSync(file)
+  } catch {
+    return []
+  }
+  const starts: number[] = []
+  for (let i = 0; i + 4 <= raw.length; i += 1) {
+    if (raw.compare(ZSTD_MAGIC, 0, 4, i, i + 4) === 0) starts.push(i)
+  }
+  if (starts.length === 0) return []
+  const out: string[] = []
+  let used = 0
+  for (let i = 0; i < starts.length; i += 1) {
+    const begin = starts[i] as number
+    const end = i + 1 < starts.length ? (starts[i + 1] as number) : raw.length
+    try {
+      const plain = zstdDecompressSync(raw.subarray(begin, end)).toString('utf8')
+      out.push(plain)
+      used += plain.length
+    } catch {
+      // A torn tail frame is normal (crash mid-write) — keep what parsed.
+      continue
+    }
+    if (used >= maxBytes) break
+  }
+  return out
+}
+
+/** `ZSTD` frame offsets in a byte buffer (append logs are frame-concatenated). */
+function frameOffsets(raw: Buffer): number[] {
+  const starts: number[] = []
+  for (let i = 0; i + 4 <= raw.length; i += 1) {
+    if (raw.compare(ZSTD_MAGIC, 0, 4, i, i + 4) === 0) starts.push(i)
+  }
+  return starts
+}
+
+/** Pull the title candidates out of one decompressed frame's JSONL text. */
+function foldTitleFrame(
+  frame: string,
+  current: { title: string; firstUser: string },
+): { title: string; firstUser: string } {
+  let { title, firstUser } = current
+  for (const line of frame.split('\n')) {
+    if (line.trim() === '') continue
+    if (title !== '' && firstUser !== '') break
+    let event: { type?: unknown; data?: unknown }
+    try {
+      event = JSON.parse(line) as { type?: unknown; data?: unknown }
+    } catch {
+      continue
+    }
+    if (event.type === 'session/title') {
+      const value = (event.data as { title?: unknown } | undefined)?.title
+      if (typeof value === 'string' && value.trim() !== '') title = tidy(value)
+      continue
+    }
+    if (firstUser !== '' || event.type !== 'user/message') continue
+    const data = event.data as { content?: unknown; source?: { kind?: unknown } } | undefined
+    if (data?.source?.kind !== 'user' || !Array.isArray(data.content)) continue
+    for (const part of data.content) {
+      const text = part as { type?: unknown; text?: unknown } | undefined
+      if (text?.type === 'text' && typeof text.text === 'string' && text.text.trim() !== '') {
+        firstUser = tidy(text.text)
+        break
+      }
+    }
+  }
+  return { title, firstUser }
+}
+
+/**
+ * Async twin of {@link readSessionTitle}. Titles are read while the /chat menu
+ * is already on screen, so the scan must not block the Ink event loop: every
+ * frame decompression is awaited (yielding between frames) and the file itself
+ * is read through `fs/promises`.
+ */
+export async function readSessionTitleAsync(dir: string, maxBytes = 2_000_000): Promise<SessionTitle> {
+  let raw: Buffer
+  try {
+    raw = await readFile(join(dir, 'session.v3.jsonl.zstd'))
+  } catch {
+    return { title: '', firstUser: '' }
+  }
+  const starts = frameOffsets(raw)
+  let acc = { title: '', firstUser: '' }
+  let used = 0
+  for (let i = 0; i < starts.length; i += 1) {
+    const begin = starts[i] as number
+    const end = i + 1 < starts.length ? (starts[i + 1] as number) : raw.length
+    let plain: string
+    try {
+      plain = (await decompress(raw.subarray(begin, end))).toString('utf8')
+    } catch {
+      continue
+    }
+    used += plain.length
+    acc = foldTitleFrame(plain, acc)
+    if ((acc.title !== '' && acc.firstUser !== '') || used >= maxBytes) break
+  }
+  return acc
+}
+
+/** What the picker shows for a session: a title, else the first user message. */
+export interface SessionTitle {
+  readonly title: string
+  readonly firstUser: string
+}
+
+/** Trim a title candidate to one readable line. */
+function tidy(text: string, limit = 48): string {
+  const flat = text.replace(/\s+/gu, ' ').trim()
+  return flat.length <= limit ? flat : `${flat.slice(0, limit - 1)}…`
+}
+
+/**
+ * Read a session's title straight from its log file.
+ *
+ * This deliberately does NOT go through the platform's session query: its
+ * persistence listing refuses to load ANY log once the store contains a
+ * duplicate session id ("appears in multiple project directories") or a log
+ * whose tail fails validation, which silently removed every title from the
+ * /chat menu and from `/chat list`. Reading the file we already located keeps
+ * the listing working whatever shape the store is in.
+ *
+ * Preference: the durable `session/title` event, else the first user message.
+ */
+export function readSessionTitle(dir: string, maxBytes = 2_000_000): SessionTitle {
+  const file = join(dir, 'session.v3.jsonl.zstd')
+  let title = ''
+  let firstUser = ''
+  for (const frame of decompressFrames(file, maxBytes)) {
+    for (const line of frame.split('\n')) {
+      if (line.trim() === '') continue
+      let event: { type?: unknown; data?: unknown }
+      try {
+        event = JSON.parse(line) as { type?: unknown; data?: unknown }
+      } catch {
+        continue
+      }
+      const type = event.type
+      if (type === 'session/title') {
+        const value = (event.data as { title?: unknown } | undefined)?.title
+        if (typeof value === 'string' && value.trim() !== '') title = tidy(value)
+      } else if (firstUser === '' && type === 'user/message') {
+        const data = event.data as { content?: unknown; source?: { kind?: unknown } } | undefined
+        if (data?.source?.kind !== 'user' || !Array.isArray(data.content)) continue
+        for (const part of data.content) {
+          const text = (part as { type?: unknown; text?: unknown } | undefined)
+          if (text?.type === 'text' && typeof text.text === 'string' && text.text.trim() !== '') {
+            firstUser = tidy(text.text)
+            break
+          }
+        }
+      }
+      if (title !== '' && firstUser !== '') return { title, firstUser }
+    }
+  }
+  return { title, firstUser }
+}
+
 /** List every session under `$DSH_HOME/sessions`, newest first. */
+/** Short-lived cache: a picker open lists sessions more than once. */
+const LISTING_TTL_MS = 5000
+const listingCache = new Map<string, { at: number; rows: readonly SessionSummary[] }>()
+
+/** Drop the cached listing (after a delete, or in tests). */
+export function invalidateSessionCache(): void {
+  listingCache.clear()
+}
+
 export function listSessions(home: string = defaultHome()): readonly SessionSummary[] {
+  const cached = listingCache.get(home)
+  if (cached !== undefined && Date.now() - cached.at < LISTING_TTL_MS) return cached.rows
+  const rows = scanSessions(home)
+  listingCache.set(home, { at: Date.now(), rows })
+  return rows
+}
+
+function scanSessions(home: string): readonly SessionSummary[] {
   const root = join(home, 'sessions')
   if (!existsSync(root)) return []
   const out: SessionSummary[] = []
@@ -133,6 +329,7 @@ export function filterSessions(
  * Returns `true` when a directory was removed, `false` otherwise.
  */
 export function deleteSession(id: string, home: string = defaultHome()): boolean {
+  invalidateSessionCache()
   const root = join(home, 'sessions')
   if (!existsSync(root)) return false
   for (const source of readdirSync(root)) {
