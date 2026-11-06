@@ -14,6 +14,18 @@
  * equivalents handled by `startup.ts` + the runtime mount.
  */
 import type { CommandDefinition } from '@deepseek-ai/dsh-commands';
+/**
+ * One-line description for a session row.
+ *
+ * Order: the durable title, then the first user message, then — for a session
+ * that only ever ran slash commands (no message at all) — the commands it ran,
+ * because a bare timestamp cannot tell two of those apart.
+ */
+export declare function summaryOf(session: {
+    title: string;
+    firstUser: string;
+    commands: readonly string[];
+}): string;
 /** Render the listing table: one line per session, id · date · summary. */
 declare function listText(rows: ReadonlyArray<{
     id: string;
@@ -23,6 +35,13 @@ declare function listText(rows: ReadonlyArray<{
     all: boolean;
     titles?: ReadonlyMap<string, string>;
 }): string;
+/**
+ * Hint for `/chat resume` without an id.
+ *
+ * It used to re-print the five most recent sessions, which duplicated the table
+ * `/chat list` already prints. Point at the two ways to pick a session instead.
+ */
+export declare function resumeHint(): string;
 /** How many recent sessions the option menu offers (before height fitting). */
 export declare const PICKER_SESSIONS = 20;
 /**

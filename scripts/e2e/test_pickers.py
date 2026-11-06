@@ -160,6 +160,10 @@ class PickerTest(unittest.TestCase):
                  'title': '重构登录流程', 'firstUser': '帮我重构登录流程'},
                 {'id': 'session-fake2222-0000-0000-0000-000000000000',
                  'firstUser': '这条会话没有标题,只有首条消息'},
+                # No message at all — only commands, like the sessions that showed
+                # a bare timestamp in the report.
+                {'id': 'session-fake3333-0000-0000-0000-000000000000',
+                 'commands': ['chat list', 'model']},
             ])
             fresh.type('/chat', delay=0.02)
             fresh.drain(0.4)
@@ -170,6 +174,7 @@ class PickerTest(unittest.TestCase):
             joined = '\n'.join(screen.rows())
             self.assertIn('重构登录流程', joined, 'the durable session title never reached the menu')
             self.assertIn('这条会话没有标题', joined, 'the first-user-message fallback never reached the menu')
+            self.assertIn('命令 /chat list', joined, 'a command-only session did not name its commands')
         finally:
             for path in made:
                 shutil.rmtree(path, ignore_errors=True)

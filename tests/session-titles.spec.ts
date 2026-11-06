@@ -49,7 +49,7 @@ describe('session titles from disk', () => {
       [userMessage('重构登录流程')],
       [{ type: 'session/title', seq: 1, data: { title: '登录重构' } }],
     ])
-    expect(readSessionTitle(dir)).toEqual({ title: '登录重构', firstUser: '重构登录流程' })
+    expect(readSessionTitle(dir)).toEqual({ title: '登录重构', firstUser: '重构登录流程', commands: [] })
   })
 
   it('falls back to the first user message, ignoring injected context', () => {
@@ -82,7 +82,7 @@ describe('session titles from disk', () => {
     expect(readSessionTitle(dir).firstUser).toBe('首条消息')
     const empty = join(home, 'nope')
     mkdirSync(empty, { recursive: true })
-    expect(readSessionTitle(empty)).toEqual({ title: '', firstUser: '' })
+    expect(readSessionTitle(empty)).toEqual({ title: '', firstUser: '', commands: [] })
   })
 
   it('flattens a multi-line message into one readable line', () => {
@@ -117,5 +117,43 @@ describe('session titles from disk', () => {
     const id = 'session-7777bbbb-0000-0000-0000-000000000000'
     writeSession(id, [[header(id, Date.now())], [userMessage('列出我')]])
     expect(listSessions(home).map((row) => row.id)).toContain(id)
+  })
+})
+
+describe('command-only sessions', () => {
+  const command = (name: string, args: string, seq: number) =>
+    ({ type: 'command/run', seq, data: { name, args, source: { kind: 'user' } } })
+
+  it('collects the commands a message-less session ran', () => {
+    const id = 'session-c0mmand1-0000-0000-0000-000000000000'
+    const dir = writeSession(id, [
+      [header(id, Date.now())],
+      [command('chat', 'list', 0), command('model', '', 1)],
+      [command('chat', 'list', 2)], // repeated → deduped
+    ])
+    const result = readSessionTitle(dir)
+    expect(result.commands).toEqual(['/chat list', '/model'])
+    expect(result.firstUser).toBe('')
+  })
+
+  it('caps the list at three commands', () => {
+    const id = 'session-c0mmand2-0000-0000-0000-000000000000'
+    const dir = writeSession(id, [
+      [header(id, Date.now())],
+      [command('a', '', 0), command('b', '', 1), command('c', '', 2), command('d', '', 3)],
+    ])
+    expect(readSessionTitle(dir).commands).toEqual(['/a', '/b', '/c'])
+  })
+
+  it('keeps a real title ahead of the commands', () => {
+    const id = 'session-c0mmand3-0000-0000-0000-000000000000'
+    const dir = writeSession(id, [
+      [header(id, Date.now())],
+      [command('chat', 'list', 0)],
+      [{ type: 'session/title', seq: 1, data: { title: '命令会话也有标题' } }],
+    ])
+    const result = readSessionTitle(dir)
+    expect(result.title).toBe('命令会话也有标题')
+    expect(result.commands).toEqual(['/chat list'])
   })
 })

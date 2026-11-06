@@ -35,13 +35,26 @@ for (const spec of specs) {
     type: 'session', version: 3, id: spec.id, createdAt: spec.createdAt ?? now,
     cwd, isSeeded: false, delegationDepth: 0,
   }]
-  events.push({
-    type: 'user/message', seq: 0, time: now,
-    data: { content: [{ type: 'text', text: spec.firstUser }], source: { kind: 'user' }, role: 'user', id: 'u1' },
-    surfaceOp: 'append',
-  })
+  // Omitting firstUser models a command-only session: no message at all.
+  if (spec.firstUser) {
+    events.push({
+      type: 'user/message', seq: 0, time: now,
+      data: { content: [{ type: 'text', text: spec.firstUser }], source: { kind: 'user' }, role: 'user', id: 'u1' },
+      surfaceOp: 'append',
+    })
+  }
   if (spec.title) {
     events.push({ type: 'session/title', seq: 1, time: now, data: { title: spec.title }, surfaceOp: 'append' })
+  }
+  // Command-only sessions: what the picker can show instead of a summary.
+  const commandBase = spec.firstUser ? 2 : 0
+  for (const [i, command] of (spec.commands || []).entries()) {
+    const [name, ...rest] = command.split(' ')
+    events.push({
+      type: 'command/run', seq: commandBase + i, time: now,
+      data: { commandId: 'cmd-' + i, name, args: rest.join(' '), source: { kind: 'user' } },
+      surfaceOp: 'append',
+    })
   }
   // One zstd frame per append, exactly like the real writer.
   const frames = events.map((event) => z.zstdCompressSync(Buffer.from(JSON.stringify(event) + '\n')))

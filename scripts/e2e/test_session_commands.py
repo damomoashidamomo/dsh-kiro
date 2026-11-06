@@ -35,11 +35,18 @@ class SessionCommandTest(unittest.TestCase):
         self.tui.write('/chat new\r')
         self.assertTrue(self.tui.wait_for('已开启新会话', 30), 'no fresh-session banner')
 
-    def test_30_resume_listing_with_summary(self):
+    def test_30_resume_without_id_prints_usage(self):
+        """/chat resume with no id hints at usage instead of re-listing sessions.
+
+        It used to print the five most recent sessions, duplicating the table
+        `/chat list` already shows; the hint now points at both ways to pick one.
+        """
         self.tui.write('/chat resume\r')
-        self.assertTrue(self.tui.wait_for('当前目录最近的会话', 20), 'no resume hint')
+        self.assertTrue(self.tui.wait_for('/chat resume <session-id>', 20), 'no usage hint')
         self.tui.drain(1.0)
-        self.assertIn('在当前 TUI 内直接切换', self.tui.visible())
+        visible = self.tui.visible()
+        self.assertIn('在当前 TUI 内直接切换', visible)
+        self.assertIn('/chat list', visible)
 
 
 class PasteCommandTest(unittest.TestCase):

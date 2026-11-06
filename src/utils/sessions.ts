@@ -88,42 +88,28 @@ const decompress = promisify(zstdDecompress)
 /** zstd frame magic — the store appends one frame per durable write. */
 const ZSTD_MAGIC = Buffer.from([0x28, 0xb5, 0x2f, 0xfd])
 
-/**
- * Append logs hold MANY concatenated zstd frames; `zstdDecompressSync` stops at
- * the first one, so a single call returns just the header. Split on the magic
- * and decompress frame by frame.
- *
- * `maxBytes` bounds the work: a session that ran for hours can hold megabytes,
- * and the title scan only needs the top of the log.
- */
-function decompressFrames(file: string, maxBytes: number): string[] {
-  let raw: Buffer
-  try {
-    raw = readFileSync(file)
-  } catch {
-    return []
-  }
-  const starts: number[] = []
-  for (let i = 0; i + 4 <= raw.length; i += 1) {
-    if (raw.compare(ZSTD_MAGIC, 0, 4, i, i + 4) === 0) starts.push(i)
-  }
-  if (starts.length === 0) return []
-  const out: string[] = []
-  let used = 0
-  for (let i = 0; i < starts.length; i += 1) {
-    const begin = starts[i] as number
-    const end = i + 1 < starts.length ? (starts[i + 1] as number) : raw.length
-    try {
-      const plain = zstdDecompressSync(raw.subarray(begin, end)).toString('utf8')
-      out.push(plain)
-      used += plain.length
-    } catch {
-      // A torn tail frame is normal (crash mid-write) — keep what parsed.
-      continue
-    }
-    if (used >= maxBytes) break
-  }
-  return out
+/** How many slash commands a command-only session row lists. */
+const MAX_COMMANDS = 3
+
+/** Longest summary a row can show. */
+const SUMMARY_WIDTH = 48
+
+/** What the picker shows for a session: a title, else the first user message. */
+export interface SessionTitle {
+  readonly title: string
+  readonly firstUser: string
+  /**
+   * Slash commands the session ran (`/chat list`), in order, deduped. A session
+   * that only ever ran commands has neither a title nor a message — the
+   * commands are then the only thing that tells one such session from another.
+   */
+  readonly commands: readonly string[]
+}
+
+/** Trim a summary candidate to one readable line. */
+function tidy(text: string, limit = SUMMARY_WIDTH): string {
+  const flat = text.replace(/\s+/gu, ' ').trim()
+  return flat.length <= limit ? flat : `${flat.slice(0, limit - 1)}…`
 }
 
 /** `ZSTD` frame offsets in a byte buffer (append logs are frame-concatenated). */
@@ -135,27 +121,54 @@ function frameOffsets(raw: Buffer): number[] {
   return starts
 }
 
-/** Pull the title candidates out of one decompressed frame's JSONL text. */
-function foldTitleFrame(
+/** Empty accumulator. */
+function emptyTitle(): { title: string; firstUser: string; commands: string[] } {
+  return { title: '', firstUser: '', commands: [] }
+}
+
+/** True once the summary is settled (nothing else in the log can improve it). */
+function settled(acc: { title: string; firstUser: string; commands: string[] }): boolean {
+  return acc.title !== '' && acc.firstUser !== '' && acc.commands.length >= MAX_COMMANDS
+}
+
+/**
+ * Pull the summary candidates out of one decompressed frame's JSONL text.
+ *
+ * Preference in the row: `session/title` (session-title-llm summarizes with the
+ * model and logs it durably), then the first real user message, then the
+ * commands the session ran. System-injected messages are skipped — they are the
+ * harness talking, not the user.
+ */
+function foldFrame(
   frame: string,
-  current: { title: string; firstUser: string },
-): { title: string; firstUser: string } {
+  current: { title: string; firstUser: string; commands: string[] },
+): { title: string; firstUser: string; commands: string[] } {
   let { title, firstUser } = current
+  const commands = [...current.commands]
   for (const line of frame.split('\n')) {
     if (line.trim() === '') continue
-    if (title !== '' && firstUser !== '') break
+    if (settled({ title, firstUser, commands })) break
     let event: { type?: unknown; data?: unknown }
     try {
       event = JSON.parse(line) as { type?: unknown; data?: unknown }
     } catch {
       continue
     }
-    if (event.type === 'session/title') {
+    const type = event.type
+    if (type === 'session/title') {
       const value = (event.data as { title?: unknown } | undefined)?.title
       if (typeof value === 'string' && value.trim() !== '') title = tidy(value)
       continue
     }
-    if (firstUser !== '' || event.type !== 'user/message') continue
+    if (type === 'command/run') {
+      const data = event.data as { name?: unknown; args?: unknown } | undefined
+      const name = typeof data?.name === 'string' ? data.name.trim() : ''
+      const args = typeof data?.args === 'string' ? data.args.trim() : ''
+      const label = name === '' ? '' : `/${name}${args === '' ? '' : ` ${args}`}`
+      if (label !== '' && !commands.includes(label) && commands.length < MAX_COMMANDS) commands.push(label)
+      continue
+    }
+    if (firstUser !== '' || type !== 'user/message') continue
     const data = event.data as { content?: unknown; source?: { kind?: unknown } } | undefined
     if (data?.source?.kind !== 'user' || !Array.isArray(data.content)) continue
     for (const part of data.content) {
@@ -166,13 +179,55 @@ function foldTitleFrame(
       }
     }
   }
-  return { title, firstUser }
+  return { title, firstUser, commands }
 }
 
 /**
- * Async twin of {@link readSessionTitle}. Titles are read while the /chat menu
- * is already on screen, so the scan must not block the Ink event loop: every
- * frame decompression is awaited (yielding between frames) and the file itself
+ * Read a session's summary straight from its log file.
+ *
+ * This deliberately does NOT go through the platform's session query: its
+ * persistence listing refuses to load ANY log once the store contains a
+ * duplicate session id ("appears in multiple project directories") or a log
+ * whose tail fails validation, which silently removed every title from the
+ * /chat menu and from `/chat list`. Reading the file we already located keeps
+ * the listing working whatever shape the store is in.
+ *
+ * The log is an APPEND log of concatenated zstd frames, and
+ * `zstdDecompressSync` stops after the first one — so a single call would only
+ * ever see the header. Split on the magic and decode frame by frame; `maxBytes`
+ * bounds the work on logs that ran for hours.
+ */
+export function readSessionTitle(dir: string, maxBytes = 2_000_000): SessionTitle {
+  let raw: Buffer
+  try {
+    raw = readFileSync(join(dir, 'session.v3.jsonl.zstd'))
+  } catch {
+    return emptyTitle()
+  }
+  const starts = frameOffsets(raw)
+  let acc = emptyTitle()
+  let used = 0
+  for (let i = 0; i < starts.length; i += 1) {
+    const begin = starts[i] as number
+    const end = i + 1 < starts.length ? (starts[i + 1] as number) : raw.length
+    let plain: string
+    try {
+      plain = zstdDecompressSync(raw.subarray(begin, end)).toString('utf8')
+    } catch {
+      // A torn tail frame is normal (crash mid-write) — keep what parsed.
+      continue
+    }
+    used += plain.length
+    acc = foldFrame(plain, acc)
+    if (settled(acc) || used >= maxBytes) break
+  }
+  return acc
+}
+
+/**
+ * Async twin of {@link readSessionTitle}. Summaries are read while the /chat
+ * menu is already on screen, so the scan must not block the Ink event loop:
+ * every frame decode is awaited (yielding between frames) and the file itself
  * is read through `fs/promises`.
  */
 export async function readSessionTitleAsync(dir: string, maxBytes = 2_000_000): Promise<SessionTitle> {
@@ -180,10 +235,10 @@ export async function readSessionTitleAsync(dir: string, maxBytes = 2_000_000): 
   try {
     raw = await readFile(join(dir, 'session.v3.jsonl.zstd'))
   } catch {
-    return { title: '', firstUser: '' }
+    return emptyTitle()
   }
   const starts = frameOffsets(raw)
-  let acc = { title: '', firstUser: '' }
+  let acc = emptyTitle()
   let used = 0
   for (let i = 0; i < starts.length; i += 1) {
     const begin = starts[i] as number
@@ -195,68 +250,10 @@ export async function readSessionTitleAsync(dir: string, maxBytes = 2_000_000): 
       continue
     }
     used += plain.length
-    acc = foldTitleFrame(plain, acc)
-    if ((acc.title !== '' && acc.firstUser !== '') || used >= maxBytes) break
+    acc = foldFrame(plain, acc)
+    if (settled(acc) || used >= maxBytes) break
   }
   return acc
-}
-
-/** What the picker shows for a session: a title, else the first user message. */
-export interface SessionTitle {
-  readonly title: string
-  readonly firstUser: string
-}
-
-/** Trim a title candidate to one readable line. */
-function tidy(text: string, limit = 48): string {
-  const flat = text.replace(/\s+/gu, ' ').trim()
-  return flat.length <= limit ? flat : `${flat.slice(0, limit - 1)}…`
-}
-
-/**
- * Read a session's title straight from its log file.
- *
- * This deliberately does NOT go through the platform's session query: its
- * persistence listing refuses to load ANY log once the store contains a
- * duplicate session id ("appears in multiple project directories") or a log
- * whose tail fails validation, which silently removed every title from the
- * /chat menu and from `/chat list`. Reading the file we already located keeps
- * the listing working whatever shape the store is in.
- *
- * Preference: the durable `session/title` event, else the first user message.
- */
-export function readSessionTitle(dir: string, maxBytes = 2_000_000): SessionTitle {
-  const file = join(dir, 'session.v3.jsonl.zstd')
-  let title = ''
-  let firstUser = ''
-  for (const frame of decompressFrames(file, maxBytes)) {
-    for (const line of frame.split('\n')) {
-      if (line.trim() === '') continue
-      let event: { type?: unknown; data?: unknown }
-      try {
-        event = JSON.parse(line) as { type?: unknown; data?: unknown }
-      } catch {
-        continue
-      }
-      const type = event.type
-      if (type === 'session/title') {
-        const value = (event.data as { title?: unknown } | undefined)?.title
-        if (typeof value === 'string' && value.trim() !== '') title = tidy(value)
-      } else if (firstUser === '' && type === 'user/message') {
-        const data = event.data as { content?: unknown; source?: { kind?: unknown } } | undefined
-        if (data?.source?.kind !== 'user' || !Array.isArray(data.content)) continue
-        for (const part of data.content) {
-          const text = (part as { type?: unknown; text?: unknown } | undefined)
-          if (text?.type === 'text' && typeof text.text === 'string' && text.text.trim() !== '') {
-            firstUser = tidy(text.text)
-            break
-          }
-        }
-      }
-      if (title !== '' && firstUser !== '') return { title, firstUser }
-    }
-  }
-  return { title, firstUser }
 }
 
 /** List every session under `$DSH_HOME/sessions`, newest first. */
