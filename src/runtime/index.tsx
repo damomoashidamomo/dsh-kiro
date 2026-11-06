@@ -396,8 +396,9 @@ async function mount(ctx: Context, startup: KiroStartup): Promise<void> {
     ;(globalThis as { __kiroAgentList?: () => readonly { name: string; description: string }[] }).__kiroAgentList =
       () => agentMod.agentListBridge()
     const chatMod = await import('../commands/chat')
-    ;(globalThis as { __kiroChatList?: () => readonly { id: string; title: string }[] }).__kiroChatList =
-      () => chatMod.chatListBridge()
+    ;(globalThis as {
+      __kiroChatList?: () => { total: number; sessions: readonly { id: string; title: string; when: string }[] }
+    }).__kiroChatList = () => chatMod.chatListBridge()
     // Session titles for the picker are async (they read each session log), so
     // they arrive after the menu is drawn and patch the rows in place.
     ;(globalThis as {

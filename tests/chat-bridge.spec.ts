@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { chatListBridge, chatTitlesBridge } from '../src/commands/chat'
+import { PICKER_SESSIONS, chatListBridge, chatTitlesBridge } from '../src/commands/chat'
 
 /**
  * The /chat option menu used to hand back `title: ''` for every row, so the
@@ -51,8 +51,11 @@ describe('chat sessions bridge', () => {
     expect(titles.size).toBe(0)
   })
 
-  it('gives every listed row an id and a timestamp to show instead of a title', () => {
-    for (const row of chatListBridge()) {
+  it('gives every listed row an id and a timestamp, and reports the total', () => {
+    const listing = chatListBridge()
+    expect(listing.sessions.length).toBeLessThanOrEqual(PICKER_SESSIONS)
+    expect(listing.total).toBeGreaterThanOrEqual(listing.sessions.length)
+    for (const row of listing.sessions) {
       expect(row.id).not.toBe('')
       expect(row.when).not.toBe('')
     }

@@ -48,10 +48,23 @@ export function OptionMenu({ title, options, onPick, onCancel }: OptionMenuProps
   const [cursor, setCursor] = useState(0)
   const { stdout } = useStdout()
   const columns = stdout?.columns ?? 100
+  const terminalRows = stdout?.rows ?? 30
 
   useEffect(() => {
     setCursor(0)
   }, [title])
+
+  // Window the rows so a long menu (/chat with 20 sessions) never pushes the
+  // border, title or footer off a short terminal. The window follows the
+  // cursor, and the numbering stays ABSOLUTE so number keys keep working.
+  const budget = Math.max(4, terminalRows - 6) // border 2, title 1, footer 1, prompt 2
+  const windowed = options.length > budget
+  const start = windowed
+    ? Math.min(Math.max(0, cursor - budget + 2), Math.max(0, options.length - budget))
+    : 0
+  const visible = windowed ? options.slice(start, start + budget) : options
+  const hiddenAbove = start
+  const hiddenBelow = Math.max(0, options.length - (start + visible.length))
 
   useInput((input, key) => {
     if (key.escape) {
@@ -88,7 +101,11 @@ export function OptionMenu({ title, options, onPick, onCancel }: OptionMenuProps
         <Text>{palette.accent(title)}</Text>
       </Box>
       <Box flexDirection="column" paddingX={1}>
-        {options.map((opt, idx) => {
+        {hiddenAbove > 0 ? (
+          <Text dimColor>{`  ↑ 还有 ${hiddenAbove} 项`}</Text>
+        ) : null}
+        {visible.map((opt, offset) => {
+          const idx = start + offset
           const selected = idx === cursor
           const marker = selected ? palette.accent('▸ ') : '  '
           const num = palette.muted(`${idx + 1} `)
@@ -105,6 +122,9 @@ export function OptionMenu({ title, options, onPick, onCancel }: OptionMenuProps
             </Text>
           )
         })}
+        {hiddenBelow > 0 ? (
+          <Text dimColor>{`  ↓ 还有 ${hiddenBelow} 项`}</Text>
+        ) : null}
       </Box>
       <Box paddingX={1}>
         <Text dimColor>↑/↓ 或数字键选择 · Enter 生效 · Esc 取消</Text>

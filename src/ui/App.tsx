@@ -18,6 +18,7 @@ import { ApprovalOverlay } from './ApprovalOverlay'
 import { PlanReviewOverlay } from './PlanReviewOverlay'
 import { Autocomplete, rankCandidates, slashCandidates, type AutocompleteItem } from './Autocomplete'
 import { pickerFor } from '../commands/subcommands'
+import { chatPickerRows, sessionRowBudget } from './pickerRows'
 import { STRINGS } from './strings'
 import { banner, palette } from '../theme/palette'
 import { splashMark } from '../theme/banner'
@@ -317,18 +318,20 @@ export function App({ controller, seedTask, activeAgentName, onSubmit, fileSearc
     // subcommands they belong to.
     if (name === 'chat') {
       const chatSvc = (globalThis as {
-        __kiroChatList?: () => readonly { id: string; title: string; when: string }[]
+        __kiroChatList?: () => { total: number; sessions: readonly { id: string; title: string; when: string }[] }
       }).__kiroChatList
-      for (const session of chatSvc?.() ?? []) {
-        // Timestamp first, title once it resolves — a session without a title
-        // still gets a useful row instead of a placeholder.
-        const hint = session.title !== '' ? session.title : session.when
-        rows.splice(rows.length - 1, 0, {
-          value: `resume ${session.id}`,
-          label: clipColumnsForMenu(session.id.slice(8, 20), 14),
-          hint: clipColumnsForMenu(hint, 60),
-        })
-      }
+      const listing = chatSvc?.() ?? { total: 0, sessions: [] }
+      const built = chatPickerRows(
+        picker.rows,
+        listing.sessions,
+        listing.total,
+        sessionRowBudget(stdout?.rows, picker.rows.length),
+      )
+      rows.splice(0, rows.length, ...built.map((row) => ({
+        ...row,
+        label: clipColumnsForMenu(row.label, 26),
+        hint: clipColumnsForMenu(row.hint, 70),
+      })))
     }
     if (name === 'agent') {
       const currentAgent = (globalThis as { __kiroControllerState?: () => { agent?: { activeAgent?: string } } })

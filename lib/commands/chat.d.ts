@@ -23,6 +23,8 @@ declare function listText(rows: ReadonlyArray<{
     all: boolean;
     titles?: ReadonlyMap<string, string>;
 }): string;
+/** How many recent sessions the option menu offers (before height fitting). */
+export declare const PICKER_SESSIONS = 20;
 /**
  * Bridge for the /chat option menu: recent sessions for this cwd.
  *
@@ -31,11 +33,15 @@ declare function listText(rows: ReadonlyArray<{
  * back `title: ''` for every row, which is why the menu always said
  * 「（无简介）」.
  */
-export declare function chatListBridge(): readonly {
-    id: string;
-    title: string;
-    when: string;
-}[];
+export declare function chatListBridge(): {
+    /** Total sessions matching the cwd (the menu shows only the newest). */
+    total: number;
+    sessions: readonly {
+        id: string;
+        title: string;
+        when: string;
+    }[];
+};
 /**
  * Load the one-line titles for the sessions the option menu shows, keyed by
  * id (`session/title`, falling back to the first user message). An empty map

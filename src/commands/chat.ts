@@ -147,8 +147,8 @@ async function resumeHint(agent: unknown): Promise<string> {
   return lines.join('\n')
 }
 
-/** How many recent sessions the option menu offers. */
-const PICKER_SESSIONS = 8
+/** How many recent sessions the option menu offers (before height fitting). */
+export const PICKER_SESSIONS = 20
 
 /**
  * Bridge for the /chat option menu: recent sessions for this cwd.
@@ -158,12 +158,20 @@ const PICKER_SESSIONS = 8
  * back `title: ''` for every row, which is why the menu always said
  * 「（无简介）」.
  */
-export function chatListBridge(): readonly { id: string; title: string; when: string }[] {
-  return filterSessions(listSessions())
-    .slice(0, PICKER_SESSIONS)
+export function chatListBridge(): {
+  /** Total sessions matching the cwd (the menu shows only the newest). */
+  total: number
+  sessions: readonly { id: string; title: string; when: string }[]
+} {
+  const rows = filterSessions(listSessions())
+  return {
+    total: rows.length,
     // `when` is the fallback the row shows until the title resolves (and
     // forever for a session that never got one).
-    .map((row) => ({ id: row.id, title: '', when: formatTimestamp(row.createdAt) }))
+    sessions: rows
+      .slice(0, PICKER_SESSIONS)
+      .map((row) => ({ id: row.id, title: '', when: formatTimestamp(row.createdAt) })),
+  }
 }
 
 /**
