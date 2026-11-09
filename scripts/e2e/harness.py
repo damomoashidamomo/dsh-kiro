@@ -49,7 +49,8 @@ OSC_RE = re.compile(r'\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)')
 class Tui:
     """One booted TUI session bound to a fresh /tmp workspace."""
 
-    def __init__(self, columns: int = 100, lines: int = 30, boot_timeout: float = 90.0):
+    def __init__(self, columns: int = 100, lines: int = 30, boot_timeout: float = 90.0,
+                 argv: list[str] | None = None):
         self.tmp = f'/tmp/kiro-e2e-{os.getpid()}-{int(time.time() * 1000) % 100000}'
         shutil.rmtree(self.tmp, ignore_errors=True)
         os.makedirs(self.tmp)
@@ -68,7 +69,7 @@ class Tui:
         self.pid, self.fd = pty.fork()
         if self.pid == 0:  # child
             os.chdir(self.tmp)
-            os.execvpe('dsh', ['dsh', '--profile', 'kiro'], self.env)
+            os.execvpe('dsh', ['dsh', '--profile', 'kiro', *(argv or [])], self.env)
 
         fcntl.ioctl(self.fd, termios.TIOCSWINSZ, struct.pack('HHHH', lines, columns, 0, 0))
         if not self.wait_for('Type a message', boot_timeout):
