@@ -176,13 +176,21 @@ function readStartup(program: Command): KiroStartup {
     ? undefined
     : opts.trustTools.split(',').map(entry => entry.trim()).filter(entry => entry !== '')
 
-  // `/agent set-default <name>` writes `.kiro/settings.json`; an explicit
-  // --agent flag still wins.
-  const settingsAgent = readSettingsAgent(opts.cwd ?? process.cwd())
+  // 默认 agent：优先读 dsh-kiro 私有的 .kiro/agent-engines.json（set-default
+  // 的落点），兼容回退 settings.json 的 agent 键。显式 --agent 仍然最优先。
+  const settingsAgent = readDefaultAgent(opts.cwd ?? process.cwd())
 
 
-/** `agent` key of the workspace `.kiro/settings.json`, when present. */
-function readSettingsAgent(cwd: string): string | undefined {
+/** 默认 agent：.kiro/agent-engines.json 的 defaults.agent，兼容回退 settings.json。 */
+function readDefaultAgent(cwd: string): string | undefined {
+  try {
+    const raw = readFileSync(join(cwd, '.kiro', 'agent-engines.json'), 'utf8')
+    const parsed = JSON.parse(raw) as { defaults?: { agent?: unknown } }
+    const agent = parsed.defaults?.agent
+    if (typeof agent === 'string' && agent.trim() !== '') return agent
+  } catch {
+    // fall through to the legacy settings.json location
+  }
   try {
     const raw = readFileSync(join(cwd, '.kiro', 'settings.json'), 'utf8')
     const parsed = JSON.parse(raw) as { agent?: unknown }

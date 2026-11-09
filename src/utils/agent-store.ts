@@ -130,3 +130,75 @@ export function validateAgentFile(path: string): { ok: true; name: string } | { 
   }
   return { ok: true, name: parsed.name }
 }
+
+/** 引擎绑定（dsh-kiro 私有，存工作区 `.kiro/agent-engines.json`）。 */
+export interface EngineBinding {
+  readonly engine: 'kiro' | 'dsh'
+  readonly toolEngine?: 'rust' | 'dsh'
+}
+
+interface AgentEnginesFile {
+  bindings?: Record<string, { engine?: string; toolEngine?: string }>
+  defaults?: { agent?: string }
+}
+
+function enginesFilePath(cwd: string): string {
+  return join(cwd, '.kiro', 'agent-engines.json')
+}
+
+function readEnginesFile(cwd: string): AgentEnginesFile {
+  try {
+    const parsed = JSON.parse(readFileSync(enginesFilePath(cwd), 'utf8')) as AgentEnginesFile
+    return typeof parsed === 'object' && parsed !== null ? parsed : {}
+  } catch {
+    return {}
+  }
+}
+
+function writeEnginesFile(cwd: string, doc: AgentEnginesFile): void {
+  mkdirSync(join(cwd, '.kiro'), { recursive: true })
+  writeFileSync(enginesFilePath(cwd), `${JSON.stringify(doc, null, 2)}\n`, 'utf8')
+}
+
+/** 某 agent 的引擎绑定；未绑定返回 undefined（沿用当前引擎）。 */
+export function getEngineBinding(cwd: string, name: string): EngineBinding | undefined {
+  const binding = readEnginesFile(cwd).bindings?.[name]
+  if (binding === undefined || typeof binding !== 'object') return undefined
+  const engine = binding.engine === 'kiro' || binding.engine === 'dsh' ? binding.engine : undefined
+  if (engine === undefined) return undefined
+  const toolEngine = binding.toolEngine === 'rust' ? 'rust' : binding.toolEngine === 'dsh' ? 'dsh' : undefined
+  return { engine, toolEngine }
+}
+
+/** 写入/更新引擎绑定。 */
+export function setEngineBinding(
+  cwd: string,
+  name: string,
+  binding: EngineBinding,
+): void {
+  const doc = readEnginesFile(cwd)
+  doc.bindings = { ...(doc.bindings ?? {}), [name]: { engine: binding.engine, ...(binding.toolEngine !== undefined ? { toolEngine: binding.toolEngine } : {}) } }
+  writeEnginesFile(cwd, doc)
+}
+
+/** 清除某 agent 的引擎绑定。 */
+export function clearEngineBinding(cwd: string, name: string): boolean {
+  const doc = readEnginesFile(cwd)
+  if (doc.bindings?.[name] === undefined) return false
+  delete doc.bindings[name]
+  writeEnginesFile(cwd, doc)
+  return true
+}
+
+/** 启动默认 agent（`defaults.agent`），未设置返回 undefined。 */
+export function getDefaultAgent(cwd: string): string | undefined {
+  const agent = readEnginesFile(cwd).defaults?.agent
+  return typeof agent === 'string' && agent.trim() !== '' ? agent : undefined
+}
+
+/** 设置启动默认 agent。 */
+export function setDefaultAgent(cwd: string, name: string): void {
+  const doc = readEnginesFile(cwd)
+  doc.defaults = { ...(doc.defaults ?? {}), agent: name }
+  writeEnginesFile(cwd, doc)
+}

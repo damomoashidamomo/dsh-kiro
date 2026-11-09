@@ -17,30 +17,34 @@ from harness import Tui
 from screen import Screen
 
 AGENT = 'engine-e2e'
-AGENT_FILE = os.path.expanduser(f'~/.kiro/agents/{AGENT}.json')
 
 
-def write_agent():
-    os.makedirs(os.path.dirname(AGENT_FILE), exist_ok=True)
-    with open(AGENT_FILE, 'w', encoding='utf-8') as fh:
-        import json
+def setup_workspace(cls_tui):
+    """项目级 agent 定义 + 绑定文件（绝不写 kiro-cli 的全局 agents 目录，
+    也绝不在共享 schema 的文件里放 engine 字段）。"""
+    import json
+    agent_dir = os.path.join(cls_tui.tmp, '.kiro', 'agents')
+    os.makedirs(agent_dir, exist_ok=True)
+    with open(os.path.join(agent_dir, AGENT + '.json'), 'w', encoding='utf-8') as fh:
         json.dump({
             'name': AGENT,
             'description': '引擎绑定测试',
             'prompt': '你是测试助手：所有回复以「[引擎测试]」开头。',
             'tools': ['*'],
-            'engine': 'kiro',
-            'toolEngine': 'rust',
             'model': None,
         }, fh, ensure_ascii=False)
+    bind_dir = os.path.join(cls_tui.tmp, '.kiro')
+    os.makedirs(bind_dir, exist_ok=True)
+    with open(os.path.join(bind_dir, 'agent-engines.json'), 'w', encoding='utf-8') as fh:
+        json.dump({'defaults': {'agent': AGENT}, 'bindings': {AGENT: {'engine': 'kiro', 'toolEngine': 'rust'}}}, fh, ensure_ascii=False)
 
 
 class SwapAppliesEngineTest(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        write_agent()
         cls.tui = Tui(columns=110, lines=40)
         cls.tui.drain(1.5)
+        setup_workspace(cls.tui)
 
     @classmethod
     def tearDownClass(cls):
@@ -79,9 +83,8 @@ class SwapAppliesEngineTest(unittest.TestCase):
         self.tui.drain(0.4)
         self.tui.write(b'\r')
         self.tui.drain(1.5)
-        visible = self.tui.visible()
-        self.assertIn('"engine": "kiro"', visible)
-        self.assertIn('"toolEngine": "rust"', visible)
+        # 引擎绑定不在共享 schema 的文件里（kiro-cli 严格校验未知字段）
+        self.assertFalse(os.path.exists(os.path.expanduser('~/.kiro/agents/engine-e2e.json')))
 
 
 class BootAppliesPresetTest(unittest.TestCase):
@@ -104,12 +107,10 @@ class BootAppliesPresetTest(unittest.TestCase):
                 'description': '引擎绑定测试',
                 'prompt': '你是测试助手：所有回复以「[引擎测试]」开头。',
                 'tools': ['*'],
-                'engine': 'kiro',
-                'toolEngine': 'rust',
                 'model': None,
             }, fh, ensure_ascii=False)
-        with open(os.path.join(ws, '.kiro', 'settings.json'), 'w', encoding='utf-8') as fh:
-            json.dump({'agent': AGENT}, fh)
+        with open(os.path.join(ws, '.kiro', 'agent-engines.json'), 'w', encoding='utf-8') as fh:
+            json.dump({'defaults': {'agent': AGENT}, 'bindings': {AGENT: {'engine': 'kiro', 'toolEngine': 'rust'}}}, fh, ensure_ascii=False)
 
         env = os.environ.copy()
         env['TERM'] = 'xterm-256color'

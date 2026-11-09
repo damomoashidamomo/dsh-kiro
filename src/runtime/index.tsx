@@ -18,7 +18,7 @@ import { SessionId } from '@deepseek-ai/dsh-session'
 import { readFileSync } from 'node:fs'
 import { parseCommand } from '@deepseek-ai/dsh-commands'
 import { applyAgentPreset } from '../utils/agent-apply'
-import { agentDirs, findAgent } from '../utils/agent-store'
+import { agentDirs, findAgent, getEngineBinding } from '../utils/agent-store'
 import { App } from '../ui/App'
 import type { AutocompleteItem } from '../ui/Autocomplete'
 import { SessionController } from './session-controller'
@@ -493,6 +493,12 @@ async function mount(ctx: Context, startup: KiroStartup): Promise<void> {
       // The preset must not fight an explicit --engine flag.
       const effective = { ...preset } as Record<string, unknown>
       if (startup.engine !== undefined) delete effective.engine
+      // 引擎绑定（.kiro/agent-engines.json）叠加到 preset 上。
+      const binding = getEngineBinding(process.cwd(), presetName)
+      if (binding !== undefined) {
+        effective['engine'] = binding.engine
+        if (binding.toolEngine !== undefined) effective['toolEngine'] = binding.toolEngine
+      }
       const applied = await applyAgentPreset(ctx, presetName, effective as never, {
         // setTimeout(0): `submit` is declared later in the module body — a
         // synchronous call from this mount-time IIFE would hit its TDZ.

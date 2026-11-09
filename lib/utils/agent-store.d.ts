@@ -48,3 +48,18 @@ export declare function validateAgentFile(path: string): {
     ok: false;
     reason: string;
 };
+/** 引擎绑定（dsh-kiro 私有，存工作区 `.kiro/agent-engines.json`）。 */
+export interface EngineBinding {
+    readonly engine: 'kiro' | 'dsh';
+    readonly toolEngine?: 'rust' | 'dsh';
+}
+/** 某 agent 的引擎绑定；未绑定返回 undefined（沿用当前引擎）。 */
+export declare function getEngineBinding(cwd: string, name: string): EngineBinding | undefined;
+/** 写入/更新引擎绑定。 */
+export declare function setEngineBinding(cwd: string, name: string, binding: EngineBinding): void;
+/** 清除某 agent 的引擎绑定。 */
+export declare function clearEngineBinding(cwd: string, name: string): boolean;
+/** 启动默认 agent（`defaults.agent`），未设置返回 undefined。 */
+export declare function getDefaultAgent(cwd: string): string | undefined;
+/** 设置启动默认 agent。 */
+export declare function setDefaultAgent(cwd: string, name: string): void;
