@@ -71,6 +71,8 @@ export const COMMAND_PICKERS: Readonly<Record<string, CommandPicker>> = {
       { value: 'delete <name>', hint: '删除 agent', needsArg: true },
       { value: 'rename <旧> <新>', hint: '重命名 agent', needsArg: true },
       { value: 'set-default <name>', hint: '设为默认 agent', needsArg: true },
+      { value: 'set-engine <name> <kiro|dsh>', hint: '绑定 agent 引擎（swap/启动生效）', needsArg: true },
+      { value: 'clear-engine <name>', hint: '清除引擎绑定', needsArg: true },
       { value: 'validate', hint: '校验全部 agent 定义' },
       { value: 'schema', hint: '打印 agent 定义的 JSON Schema' },
       { value: 'migrate', hint: '迁移旧格式定义' },
