@@ -11,7 +11,7 @@
 
 import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import { homedir } from 'node:os'
-import { basename, join } from 'node:path'
+import { basename, dirname, join } from 'node:path'
 
 /** Project dir first, user dir second — lookup order matters. */
 export function agentDirs(cwd = process.cwd(), home = homedir()): { project: string; user: string } {
@@ -142,63 +142,96 @@ interface AgentEnginesFile {
   defaults?: { agent?: string }
 }
 
-function enginesFilePath(cwd: string): string {
-  return join(cwd, '.kiro', 'agent-engines.json')
+function userEnginesFile(): string {
+  return join(homedir(), '.kiro', 'agent-engines.json')
 }
 
-function readEnginesFile(cwd: string): AgentEnginesFile {
+/**
+ * 绑定文件的候选列表（按优先级）：
+ * 1. 用户级 `~/.kiro/agent-engines.json` —— 写入的唯一落点，一处写处处生效；
+ * 2. 从 cwd 逐级向上的 `.kiro/agent-engines.json`（历史/工作区级文件，兼容读取）。
+ * 注意：`agent-engines.json` 是 dsh-kiro 私有文件名，kiro-cli 不读取。
+ */
+function enginesFileCandidates(cwd: string): string[] {
+  const userFile = userEnginesFile()
+  const list: string[] = [userFile]
+  let dir = cwd
+  for (;;) {
+    const candidate = join(dir, '.kiro', 'agent-engines.json')
+    if (candidate !== userFile) list.push(candidate)
+    if (dir === homedir() || dir === '/' || dir.length <= 3) break
+    const parent = dirname(dir)
+    if (parent === dir) break
+    dir = parent
+  }
+  return list
+}
+
+function readEnginesDoc(path: string): AgentEnginesFile {
   try {
-    const parsed = JSON.parse(readFileSync(enginesFilePath(cwd), 'utf8')) as AgentEnginesFile
+    const parsed = JSON.parse(readFileSync(path, 'utf8')) as AgentEnginesFile
     return typeof parsed === 'object' && parsed !== null ? parsed : {}
   } catch {
     return {}
   }
 }
 
-function writeEnginesFile(cwd: string, doc: AgentEnginesFile): void {
-  mkdirSync(join(cwd, '.kiro'), { recursive: true })
-  writeFileSync(enginesFilePath(cwd), `${JSON.stringify(doc, null, 2)}\n`, 'utf8')
+function writeEnginesFile(doc: AgentEnginesFile): void {
+  mkdirSync(dirname(userEnginesFile()), { recursive: true })
+  writeFileSync(userEnginesFile(), `${JSON.stringify(doc, null, 2)}\n`, 'utf8')
 }
 
-/** 某 agent 的引擎绑定；未绑定返回 undefined（沿用当前引擎）。 */
+/** 某 agent 的引擎绑定：用户级优先，其次从 cwd 向上找到的最近一份。 */
 export function getEngineBinding(cwd: string, name: string): EngineBinding | undefined {
-  const binding = readEnginesFile(cwd).bindings?.[name]
-  if (binding === undefined || typeof binding !== 'object') return undefined
-  const engine = binding.engine === 'kiro' || binding.engine === 'dsh' ? binding.engine : undefined
-  if (engine === undefined) return undefined
-  const toolEngine = binding.toolEngine === 'rust' ? 'rust' : binding.toolEngine === 'dsh' ? 'dsh' : undefined
-  return { engine, toolEngine }
+  for (const path of enginesFileCandidates(cwd)) {
+    const binding = readEnginesDoc(path).bindings?.[name]
+    if (binding === undefined || typeof binding !== 'object') continue
+    const engine = binding.engine === 'kiro' || binding.engine === 'dsh' ? binding.engine : undefined
+    if (engine === undefined) continue
+    const toolEngine = binding.toolEngine === 'rust' ? 'rust' : binding.toolEngine === 'dsh' ? 'dsh' : undefined
+    return { engine, toolEngine }
+  }
+  return undefined
 }
 
-/** 写入/更新引擎绑定。 */
+/** 写入/更新引擎绑定（固定写用户级文件）。 */
 export function setEngineBinding(
-  cwd: string,
+  _cwd: string,
   name: string,
   binding: EngineBinding,
 ): void {
-  const doc = readEnginesFile(cwd)
+  const doc = readEnginesDoc(userEnginesFile())
   doc.bindings = { ...(doc.bindings ?? {}), [name]: { engine: binding.engine, ...(binding.toolEngine !== undefined ? { toolEngine: binding.toolEngine } : {}) } }
-  writeEnginesFile(cwd, doc)
+  writeEnginesFile(doc)
 }
 
-/** 清除某 agent 的引擎绑定。 */
+/** 清除某 agent 的引擎绑定（用户级与沿途工作区文件都清）。 */
 export function clearEngineBinding(cwd: string, name: string): boolean {
-  const doc = readEnginesFile(cwd)
-  if (doc.bindings?.[name] === undefined) return false
-  delete doc.bindings[name]
-  writeEnginesFile(cwd, doc)
-  return true
+  let cleared = false
+  for (const path of enginesFileCandidates(cwd)) {
+    const doc = readEnginesDoc(path)
+    if (doc.bindings?.[name] !== undefined) {
+      delete doc.bindings[name]
+      if (path === userEnginesFile()) writeEnginesFile(doc)
+      else writeFileSync(path, `${JSON.stringify(doc, null, 2)}\n`, 'utf8')
+      cleared = true
+    }
+  }
+  return cleared
 }
 
-/** 启动默认 agent（`defaults.agent`），未设置返回 undefined。 */
+/** 启动默认 agent（用户级优先，其次向上遍历），未设置返回 undefined。 */
 export function getDefaultAgent(cwd: string): string | undefined {
-  const agent = readEnginesFile(cwd).defaults?.agent
-  return typeof agent === 'string' && agent.trim() !== '' ? agent : undefined
+  for (const path of enginesFileCandidates(cwd)) {
+    const agent = readEnginesDoc(path).defaults?.agent
+    if (typeof agent === 'string' && agent.trim() !== '') return agent
+  }
+  return undefined
 }
 
-/** 设置启动默认 agent。 */
-export function setDefaultAgent(cwd: string, name: string): void {
-  const doc = readEnginesFile(cwd)
+/** 设置启动默认 agent（固定写用户级文件）。 */
+export function setDefaultAgent(_cwd: string, name: string): void {
+  const doc = readEnginesDoc(userEnginesFile())
   doc.defaults = { ...(doc.defaults ?? {}), agent: name }
-  writeEnginesFile(cwd, doc)
+  writeEnginesFile(doc)
 }

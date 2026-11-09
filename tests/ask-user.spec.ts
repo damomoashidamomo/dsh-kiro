@@ -45,7 +45,7 @@ describe('ask_user tool', () => {
     const { askUser } = makeRegistry()
     const result = (await askUser.execute({})) as { answered: boolean; error?: string }
     expect(result.answered).toBe(false)
-    expect(result.error).toContain('question is required')
+    expect(result.error).toContain('is required')
   })
 
   it('reports when the question service is unavailable', async () => {

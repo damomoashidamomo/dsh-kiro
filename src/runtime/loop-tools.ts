@@ -112,16 +112,41 @@ export function registerLoopTools(ctx: Context, deps: LoopToolDeps): () => void 
   // 通用——kiro loop 的 executeTool 对非引擎工具回落到 tools.execute ✓。
   const askUser = {
     name: 'ask_user',
-    description: 'Ask the user a question and WAIT for their answer (human-in-the-loop). Use it when key information is missing, when several viable options need the user to decide, or before a risky/irreversible action. Do NOT use it for things you can decide yourself. The user sees the question as an interactive panel and answers by picking an option or typing free text.',
+    description: 'Ask the user question(s) and WAIT for their answers (human-in-the-loop). IMPORTANT: when you need MULTIPLE pieces of information, put ALL questions into ONE call (the `questions` array) - the panel walks the user through them page by page. Use it when key information is missing, when several viable options need the user to decide, or before a risky/irreversible action. Do NOT use it for things you can decide yourself.',
     parameters: {
       type: 'object',
       properties: {
-        question: { type: 'string', description: 'The question, phrased so it can be answered directly.' },
-        header: { type: 'string', description: 'Short panel title (optional).' },
-        detail: { type: 'string', description: 'Extra context shown under the question (optional).' },
+        question: { type: 'string', description: 'Single-question form: the question, phrased so it can be answered directly.' },
+        questions: {
+          type: 'array',
+          description: 'Multi-question form (PREFERRED when several clarifications are needed): ALL questions in one call; the user answers them page by page.',
+          items: {
+            type: 'object',
+            properties: {
+              question: { type: 'string', description: 'The question' },
+              header: { type: 'string', description: 'Short panel title' },
+              detail: { type: 'string', description: 'Extra context shown under the question' },
+              options: {
+                type: 'array',
+                description: 'Answer options; omit for free-text-only',
+                items: {
+                  type: 'object',
+                  properties: {
+                    label: { type: 'string', description: 'The answer text' },
+                    description: { type: 'string', description: 'One-line explanation' },
+                  },
+                  required: ['label'],
+                },
+              },
+            },
+            required: ['question'],
+          },
+        },
+        header: { type: 'string', description: 'Single-question form: short panel title (optional).' },
+        detail: { type: 'string', description: 'Single-question form: extra context (optional).' },
         options: {
           type: 'array',
-          description: 'Answer options (optional). Each is one selectable row; omit for free-text-only.',
+          description: 'Single-question form: answer options (omit for free-text-only).',
           items: {
             type: 'object',
             properties: {
@@ -132,21 +157,56 @@ export function registerLoopTools(ctx: Context, deps: LoopToolDeps): () => void 
           },
         },
       },
-      required: ['question'],
     },
     output: {
-      schema: { type: 'object', properties: { answered: { type: 'boolean' } }, required: ['answered'] },
-      render: (): Array<{ type: 'text'; text: string }> => [{ type: 'text', text: 'the user answered' }],
+      schema: { type: 'object', properties: { answered: { type: 'boolean' }, answer: { type: 'string' } }, required: ['answered'] },
+      // render(args, value): value carries the REAL answers - the tool result
+      // the model sees must include what the user actually chose.
+      render(args: unknown, value: unknown) {
+        const result = (value ?? {}) as { answer?: string; error?: string; answered?: boolean }
+        const text = result.answer ?? result.error ?? (result.answered ? 'answered' : 'no answer')
+        return [{ type: 'text', text: `用户回答：${text}` }]
+      },
     },
     async execute(args: unknown): Promise<unknown> {
-      const { question, header, detail, options } = (args ?? {}) as {
+      const a = (args ?? {}) as {
         question?: unknown
+        questions?: unknown
         header?: unknown
         detail?: unknown
         options?: unknown
       }
-      if (typeof question !== 'string' || question.trim() === '') {
-        return { answered: false, error: 'question is required' }
+      type Q = { question: string; header?: string; detail?: string; options?: { label: string; description?: string }[] }
+      const normOptions = (raw: unknown): Q['options'] =>
+        Array.isArray(raw)
+          ? raw
+              .filter((o): o is { label: string; description?: string } => typeof o === 'object' && o !== null && typeof (o as { label?: unknown }).label === 'string')
+              .map((o) => ({ label: o.label, ...(typeof o.description === 'string' && o.description !== '' ? { description: o.description } : {}) }))
+          : undefined
+      const questions: Q[] = []
+      if (Array.isArray(a.questions)) {
+        for (const item of a.questions) {
+          const q = (item ?? {}) as { question?: unknown; header?: unknown; detail?: unknown; options?: unknown }
+          if (typeof q.question === 'string' && q.question.trim() !== '') {
+            questions.push({
+              question: q.question,
+              ...(typeof q.header === 'string' && q.header.trim() !== '' ? { header: q.header } : {}),
+              ...(typeof q.detail === 'string' && q.detail.trim() !== '' ? { detail: q.detail } : {}),
+              ...(normOptions(q.options) !== undefined ? { options: normOptions(q.options) } : {}),
+            })
+          }
+        }
+      }
+      if (questions.length === 0 && typeof a.question === 'string' && a.question.trim() !== '') {
+        questions.push({
+          question: a.question,
+          ...(typeof a.header === 'string' && a.header.trim() !== '' ? { header: a.header } : {}),
+          ...(typeof a.detail === 'string' && a.detail.trim() !== '' ? { detail: a.detail } : {}),
+          ...(normOptions(a.options) !== undefined ? { options: normOptions(a.options) } : {}),
+        })
+      }
+      if (questions.length === 0) {
+        return { answered: false, error: 'question (or questions[]) is required' }
       }
       const userQuestions = (ctx as unknown as { get?: (name: string) => unknown }).get?.('userQuestions') as
         | { ask?: (request: unknown) => Promise<{ answers: { id: string; selected: string[]; custom?: string }[] }> }
@@ -154,26 +214,23 @@ export function registerLoopTools(ctx: Context, deps: LoopToolDeps): () => void 
       if (userQuestions?.ask === undefined) {
         return { answered: false, error: 'question service unavailable (userQuestions)' }
       }
-      const safeOptions = Array.isArray(options)
-        ? options
-            .filter((o): o is { label: string; description?: string } => typeof o === 'object' && o !== null && typeof (o as { label?: unknown }).label === 'string')
-            .map((o) => ({ label: o.label, ...(typeof o.description === 'string' ? { description: o.description } : {}) }))
-        : []
       const request = {
-        questions: [{
-          id: `ask-user-${Date.now()}`,
-          ...(typeof header === 'string' && header.trim() !== '' ? { header } : {}),
-          question,
-          ...(typeof detail === 'string' && detail.trim() !== '' ? { detail } : {}),
-          ...(safeOptions.length > 0 ? { options: safeOptions } : {}),
-        }],
+        questions: questions.map((q, i) => ({
+          id: `ask-user-${Date.now()}-${i}`,
+          ...(q.header !== undefined ? { header: q.header } : {}),
+          question: q.question,
+          ...(q.detail !== undefined ? { detail: q.detail } : {}),
+          ...(q.options !== undefined && q.options.length > 0 ? { options: q.options } : {}),
+        })),
       }
       const answer = await userQuestions.ask(request)
-      const parts = answer.answers.map((entry) => {
-        const chosen = entry.selected.join(' / ')
-        return chosen + (entry.custom !== undefined && entry.custom !== '' ? `（补充：${entry.custom}）` : '')
+      const parts = request.questions.map((q, i) => {
+        const entry = answer.answers.find((a) => a.id === q.id) ?? answer.answers[i]
+        const chosen = entry ? entry.selected.join(' / ') : '（未回答）'
+        const custom = entry?.custom !== undefined && entry.custom !== '' ? `（补充：${entry.custom}）` : ''
+        return `${q.question} → ${chosen}${custom}`
       })
-      return { answered: true, answer: parts.join('；'), }
+      return { answered: true, answer: parts.join('\n') }
     },
   }
   const disposers = [tools?.register(todoTool), tools?.register(thinkTool), tools?.register(askUser)]
