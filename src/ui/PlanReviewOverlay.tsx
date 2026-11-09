@@ -75,9 +75,12 @@ export function PlanReviewOverlay({ request, onResolve }: PlanReviewOverlayProps
         else if (key.delete || key.backspace) setText((prev) => prev.slice(0, -1))
         return
       }
+      // Generic questions get an extra 「自定义输入」 row after the options
+      // (b2): pick it to answer with free text instead of a listed option.
+      const navBounds = isPlanReview ? options.length : options.length + 1
       if (key.return) pick(highlighted)
-      else if (key.upArrow) setHighlighted((prev) => (prev - 1 + options.length) % options.length)
-      else if (key.downArrow) setHighlighted((prev) => (prev + 1) % options.length)
+      else if (key.upArrow) setHighlighted((prev) => (prev - 1 + navBounds) % navBounds)
+      else if (key.downArrow) setHighlighted((prev) => (prev + 1) % navBounds)
       else if (key.escape) onResolve({ kind: 'dismissed' })
       return
     }
@@ -158,6 +161,11 @@ export function PlanReviewOverlay({ request, onResolve }: PlanReviewOverlayProps
               {option.description !== undefined ? <Text dimColor> — {option.description}</Text> : null}
             </Text>
           ))}
+          {!isPlanReview ? (
+            <Text color={highlighted === options.length ? 'yellow' : undefined}>
+              {highlighted === options.length ? '❯ ' : '  '}{options.length + 1} ✏️ 自定义输入…
+            </Text>
+          ) : null}
         </Box>
       ) : null}
       {textMode ? (

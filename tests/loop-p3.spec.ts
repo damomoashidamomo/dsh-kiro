@@ -19,7 +19,7 @@ describe('registerLoopTools', () => {
       controller: { ingestEvent: (event) => { events.push(event) } },
     })
     expect(typeof dispose).toBe('function')
-    expect(registered.map((t) => (t as { name: string }).name)).toEqual(['kiro_todo_write', 'kiro_think'])
+    expect(registered.map((t) => (t as { name: string }).name)).toEqual(['kiro_todo_write', 'kiro_think', 'ask_user'])
 
     const todo = registered[0] as { execute: (args: unknown) => Promise<unknown> }
     await todo.execute({ todos: [{ content: '第一步', status: 'in_progress' }, { content: '第二步', status: 'pending' }] })

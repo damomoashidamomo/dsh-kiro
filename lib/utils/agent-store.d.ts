@@ -53,13 +53,13 @@ export interface EngineBinding {
     readonly engine: 'kiro' | 'dsh';
     readonly toolEngine?: 'rust' | 'dsh';
 }
-/** 某 agent 的引擎绑定；未绑定返回 undefined（沿用当前引擎）。 */
+/** 某 agent 的引擎绑定：用户级优先，其次从 cwd 向上找到的最近一份。 */
 export declare function getEngineBinding(cwd: string, name: string): EngineBinding | undefined;
-/** 写入/更新引擎绑定。 */
-export declare function setEngineBinding(cwd: string, name: string, binding: EngineBinding): void;
-/** 清除某 agent 的引擎绑定。 */
+/** 写入/更新引擎绑定（固定写用户级文件）。 */
+export declare function setEngineBinding(_cwd: string, name: string, binding: EngineBinding): void;
+/** 清除某 agent 的引擎绑定（用户级与沿途工作区文件都清）。 */
 export declare function clearEngineBinding(cwd: string, name: string): boolean;
-/** 启动默认 agent（`defaults.agent`），未设置返回 undefined。 */
+/** 启动默认 agent（用户级优先，其次向上遍历），未设置返回 undefined。 */
 export declare function getDefaultAgent(cwd: string): string | undefined;
-/** 设置启动默认 agent。 */
-export declare function setDefaultAgent(cwd: string, name: string): void;
+/** 设置启动默认 agent（固定写用户级文件）。 */
+export declare function setDefaultAgent(_cwd: string, name: string): void;

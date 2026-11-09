@@ -107,7 +107,76 @@ export function registerLoopTools(ctx: Context, deps: LoopToolDeps): () => void 
     },
   }
 
-  const disposers = [tools?.register(todoTool), tools?.register(thinkTool)]
+  // ask_user (HITL a)：模型主动向用户提问/澄清。工具执行挂在平台的
+  // user-questions 瀑布上（问题面板由 SessionController 驱动），两种引擎
+  // 通用——kiro loop 的 executeTool 对非引擎工具回落到 tools.execute ✓。
+  const askUser = {
+    name: 'ask_user',
+    description: 'Ask the user a question and WAIT for their answer (human-in-the-loop). Use it when key information is missing, when several viable options need the user to decide, or before a risky/irreversible action. Do NOT use it for things you can decide yourself. The user sees the question as an interactive panel and answers by picking an option or typing free text.',
+    parameters: {
+      type: 'object',
+      properties: {
+        question: { type: 'string', description: 'The question, phrased so it can be answered directly.' },
+        header: { type: 'string', description: 'Short panel title (optional).' },
+        detail: { type: 'string', description: 'Extra context shown under the question (optional).' },
+        options: {
+          type: 'array',
+          description: 'Answer options (optional). Each is one selectable row; omit for free-text-only.',
+          items: {
+            type: 'object',
+            properties: {
+              label: { type: 'string', description: 'The answer text' },
+              description: { type: 'string', description: 'One-line explanation' },
+            },
+            required: ['label'],
+          },
+        },
+      },
+      required: ['question'],
+    },
+    output: {
+      schema: { type: 'object', properties: { answered: { type: 'boolean' } }, required: ['answered'] },
+      render: (): Array<{ type: 'text'; text: string }> => [{ type: 'text', text: 'the user answered' }],
+    },
+    async execute(args: unknown): Promise<unknown> {
+      const { question, header, detail, options } = (args ?? {}) as {
+        question?: unknown
+        header?: unknown
+        detail?: unknown
+        options?: unknown
+      }
+      if (typeof question !== 'string' || question.trim() === '') {
+        return { answered: false, error: 'question is required' }
+      }
+      const userQuestions = (ctx as unknown as { get?: (name: string) => unknown }).get?.('userQuestions') as
+        | { ask?: (request: unknown) => Promise<{ answers: { id: string; selected: string[]; custom?: string }[] }> }
+        | undefined
+      if (userQuestions?.ask === undefined) {
+        return { answered: false, error: 'question service unavailable (userQuestions)' }
+      }
+      const safeOptions = Array.isArray(options)
+        ? options
+            .filter((o): o is { label: string; description?: string } => typeof o === 'object' && o !== null && typeof (o as { label?: unknown }).label === 'string')
+            .map((o) => ({ label: o.label, ...(typeof o.description === 'string' ? { description: o.description } : {}) }))
+        : []
+      const request = {
+        questions: [{
+          id: `ask-user-${Date.now()}`,
+          ...(typeof header === 'string' && header.trim() !== '' ? { header } : {}),
+          question,
+          ...(typeof detail === 'string' && detail.trim() !== '' ? { detail } : {}),
+          ...(safeOptions.length > 0 ? { options: safeOptions } : {}),
+        }],
+      }
+      const answer = await userQuestions.ask(request)
+      const parts = answer.answers.map((entry) => {
+        const chosen = entry.selected.join(' / ')
+        return chosen + (entry.custom !== undefined && entry.custom !== '' ? `（补充：${entry.custom}）` : '')
+      })
+      return { answered: true, answer: parts.join('；'), }
+    },
+  }
+  const disposers = [tools?.register(todoTool), tools?.register(thinkTool), tools?.register(askUser)]
   return () => {
     for (const dispose of disposers) dispose?.()
   }
