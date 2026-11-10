@@ -1,7 +1,7 @@
 import type { CommandDefinition } from '@deepseek-ai/dsh-commands';
 /**
  * /hooks — surface the ACTUAL loaded state of the kiro hooks engine: where
- * each config file was sought (`.kiro/hooks.json` workspace + `~/.kiro/`
+ * each config file was sought (`.dsh-kiro/hooks.json` workspace + `~/.dsh-kiro/`
  * user), every configured command hook in run order, and the most recent
  * invocations with their folded decision.
  */

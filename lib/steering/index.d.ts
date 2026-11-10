@@ -1,5 +1,5 @@
 /**
- * kiro-steering — discovers `.kiro/steering/*.md` and `~/.kiro/steering/*.md`,
+ * kiro-steering — discovers `.dsh-kiro/steering/*.md` and `~/.dsh-kiro/steering/*.md`,
  * parses each file's frontmatter, and publishes the resolved list on the
  * Cordis context so the runtime can inject them into the system prompt.
  *

@@ -1,5 +1,5 @@
 /**
- * kiro-agents — discovers `.kiro/agents/*.json` and `~/.kiro/agents/*.json`,
+ * kiro-agents — discovers `.dsh-kiro/agents/*.json` and `~/.dsh-kiro/agents/*.json`,
  * parses each into a typed {@link AgentConfig}, and publishes the list on the
  * Cordis context so the runtime and `/agent` commands can introspect them.
  *

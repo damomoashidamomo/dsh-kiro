@@ -65,7 +65,7 @@ export const COMMAND_PICKERS: Readonly<Record<string, CommandPicker>> = {
       { value: 'list', hint: '列出全部自定义 agent' },
       { value: 'swap <name>', hint: '切换到已存在的 agent（也可直接选下面的预设）', needsArg: true },
       { value: 'show <name>', hint: '查看一个 agent 的定义', needsArg: true },
-      { value: 'create <name>', hint: '新建 agent（写入 .kiro/agents）', needsArg: true },
+      { value: 'create <name>', hint: '新建 agent（写入 .dsh-kiro/agents）', needsArg: true },
       { value: 'edit <name>', hint: '编辑 agent 定义', needsArg: true },
       { value: 'generate <描述>', hint: '用模型生成一个 agent 定义', needsArg: true },
       { value: 'delete <name>', hint: '删除 agent', needsArg: true },

@@ -1,6 +1,6 @@
 /**
  * dsh-kiro tool-trust store — per-tool allow list persisted to
- * `~/.kiro/settings/trusted-tools.json`. Used by the `kiro-trust` plugin to
+ * `~/.dsh-kiro/settings/trusted-tools.json`. Used by the `kiro-trust` plugin to
  * short-circuit tool approval prompts once a tool has been trusted.
  *
  * @module @damomoashidamomo/dsh-kiro/trust/store

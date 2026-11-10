@@ -1,6 +1,6 @@
 /**
- * dsh-kiro custom-agents loader. Reads `.kiro/agents/*.json` and
- * `~/.kiro/agents/*.json`, validates each against the kiro agent schema, and
+ * dsh-kiro custom-agents loader. Reads `.dsh-kiro/agents/*.json` and
+ * `~/.dsh-kiro/agents/*.json`, validates each against the kiro agent schema, and
  * exposes them through a registry the runtime can consult.
  *
  * @module @damomoashidamomo/dsh-kiro/agents/loader

@@ -1,6 +1,6 @@
 /**
  * dsh-kiro tool-trust store — per-tool allow list persisted to
- * `~/.kiro/settings/trusted-tools.json`. Used by the `kiro-trust` plugin to
+ * `~/.dsh-kiro/settings/trusted-tools.json`. Used by the `kiro-trust` plugin to
  * short-circuit tool approval prompts once a tool has been trusted.
  *
  * @module @damomoashidamomo/dsh-kiro/trust/store
@@ -9,6 +9,7 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { homedir } from 'node:os'
+import { dshKiroUserRoot } from '../utils/kiro-home'
 
 /** Whether the trust store is enabled at all. */
 export const TRUST_ALL = 'all' as const
@@ -48,7 +49,7 @@ function emptyDocument(): TrustDocument {
  * throwaway directory (`tests/setup.ts`) as a second safety net.
  */
 export function trustPath(): string {
-  return join(homedir(), '.kiro', 'settings', 'trusted-tools.json')
+  return join(dshKiroUserRoot(), 'settings', 'trusted-tools.json')
 }
 
 /** Read the persisted document; return a fresh one if missing or invalid. */

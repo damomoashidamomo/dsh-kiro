@@ -6,7 +6,7 @@ import { existsSync, readdirSync, rmSync } from 'node:fs'
 import { join } from 'node:path'
 
 describe('Prompt oversized paste spill (P2)', () => {
-  it('a fragmented 10KB paste spills the draft to .kiro/paste', async () => {
+  it('a fragmented 10KB paste spills the draft to .dsh-kiro/paste', async () => {
     const submitted: string[] = []
     const { lastFrame, stdin, unmount } = render(
       <Prompt busy={false} onSubmit={(text) => { submitted.push(text) }} />,
@@ -23,11 +23,11 @@ describe('Prompt oversized paste spill (P2)', () => {
     console.log('submitted count:', submitted.length, '| first:', JSON.stringify(submitted[0]?.slice(0, 40)))
     console.log('frame tail:', JSON.stringify(frame.split('\n').filter(l => l.trim()).slice(-3)))
     expect(frame).toContain('粘贴')
-    expect(frame).toContain('.kiro/paste/')
+    expect(frame).toContain('.dsh-kiro/paste/')
     expect(submitted.length).toBe(0)
-    expect(existsSync(join(process.cwd(), '.kiro', 'paste'))).toBe(true)
-    expect(readdirSync(join(process.cwd(), '.kiro', 'paste')).length).toBe(1)
+    expect(existsSync(join(process.cwd(), '.dsh-kiro', 'paste'))).toBe(true)
+    expect(readdirSync(join(process.cwd(), '.dsh-kiro', 'paste')).length).toBe(1)
     unmount()
-    rmSync(join(process.cwd(), '.kiro', 'paste'), { recursive: true, force: true })
+    rmSync(join(process.cwd(), '.dsh-kiro', 'paste'), { recursive: true, force: true })
   })
 })

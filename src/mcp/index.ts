@@ -1,5 +1,5 @@
 /**
- * kiro-mcp — loads `.kiro/settings/mcp.json` + `~/.kiro/settings/mcp.json`,
+ * kiro-mcp — loads `.dsh-kiro/settings/mcp.json` + `~/.dsh-kiro/settings/mcp.json`,
  * normalizes each entry, and publishes a `McpManager` on the Cordis context
  * so the runtime and `/mcp` command can introspect server status.
  *

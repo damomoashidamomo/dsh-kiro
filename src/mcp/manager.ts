@@ -1,5 +1,5 @@
 /**
- * dsh-kiro MCP manager. Reads `.kiro/settings/mcp.json` + `~/.kiro/settings/mcp.json`,
+ * dsh-kiro MCP manager. Reads `.dsh-kiro/settings/mcp.json` + `~/.dsh-kiro/settings/mcp.json`,
  * normalizes each entry into a typed server config, and exposes a status table
  * the runtime and `/mcp` command surface can render.
  *
@@ -13,6 +13,7 @@
 import { existsSync, readFileSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
+import { dshKiroUserRoot } from '../utils/kiro-home'
 
 /** Connection transport for an MCP server entry. */
 export type McpTransport = 'stdio' | 'sse' | 'http'
@@ -92,8 +93,8 @@ function loadConfigFile(path: string, source: 'project' | 'user'): McpServerConf
 /** Read every MCP server config from the well-known locations. */
 export function loadMcpConfigs(): McpServerConfig[] {
   const candidates: ReadonlyArray<readonly ['project' | 'user', string]> = [
-    ['project', join(process.cwd(), '.kiro', 'settings', 'mcp.json')],
-    ['user', join(homedir(), '.kiro', 'settings', 'mcp.json')],
+    ['project', join(process.cwd(), '.dsh-kiro', 'settings', 'mcp.json')],
+    ['user', join(dshKiroUserRoot(), 'settings', 'mcp.json')],
   ]
   const seen = new Set<string>()
   const out: McpServerConfig[] = []

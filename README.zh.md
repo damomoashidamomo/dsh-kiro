@@ -13,8 +13,8 @@
 | --- | --- |
 | 富终端 UI(markdown + 代码高亮 + 状态栏) | ✅ 阶段 1 |
 | Slash 命令注册中心(25 个命令) | ✅ 阶段 1(3 个真实实现 + 22 个 stub) |
-| `.kiro/agents/` + `~/.kiro/agents/` 自定义 agent | 🟡 阶段 4 |
-| `.kiro/steering/*.md` steering 文件 | 🟡 阶段 4 |
+| `.dsh-kiro/agents/` + `~/.dsh-kiro/agents/` 自定义 agent | 🟡 阶段 4 |
+| `.dsh-kiro/steering/*.md` steering 文件 | 🟡 阶段 4 |
 | MCP server 原生管理 | 🟡 阶段 4 |
 | 子 agent 委托 + plan mode + 模型选择器 | 🟡 阶段 4 |
 | 工具 trust / untrust / `--trust-all-tools` | 🟡 阶段 3 |
@@ -63,7 +63,7 @@ dsh --profile kiro -r
 # 交互式选会话
 dsh --profile kiro --resume-picker
 
-# 用自定义 agent(在 .kiro/agents/ 或 ~/.kiro/agents/ 下)
+# 用自定义 agent(在 .dsh-kiro/agents/ 或 ~/.dsh-kiro/agents/ 下)
 dsh --profile kiro --agent backend-specialist
 
 # 非交互(CI 友好)
@@ -97,24 +97,34 @@ Ink React App (src/ui/App.tsx)
 
 ## 文件布局
 
-```
-~/.kiro/
-├── agents/                       # 自定义 agent(JSON)
-├── settings/
-│   ├── mcp.json                  # MCP server 配置
-│   ├── trusted-tools.json        # 工具 trust 存储
-│   └── settings.json             # chat 默认值
-├── cli-todo-lists/               # TODO 列表持久化
-└── history/                      # prompt 历史
+dsh-kiro 是**独立项目**：所有状态都读写自己的目录，与 kiro-cli 的 `~/.kiro`
+**零关联**（不读、不写、不依赖）。首次启动会把曾散落在 kiro-cli 目录里的
+dsh-kiro 历史数据**只读复制**过来（旧目录原封不动）。
 
-<cwd>/.kiro/
-├── agents/                       # 项目级自定义 agent
-├── steering/                     # 注入系统 prompt 的 markdown 规则
-├── settings/mcp.json             # 项目级 MCP server
-├── knowledge/                    # BM25 索引
-├── checkpoints/                  # git shadow repo
-└── sessions/                     # session 存储覆盖
 ```
+~/.dsh-kiro/                    # 用户级（DSH_KIRO_HOME 可覆盖）
+├── agents/                     # 自定义 agent(JSON)
+├── skills/                     # 用户级技能
+├── steering/                   # 用户级 steering 规则
+├── hooks.json                  # 用户级 hooks
+├── agent-engines.json          # 引擎绑定 / 默认 agent（dsh-kiro 私有）
+└── settings/
+    ├── mcp.json                # MCP server 配置
+    └── trusted-tools.json      # 工具 trust 存储（dsh-kiro 自己的）
+
+<cwd>/.dsh-kiro/                # 项目级
+├── agents/                     # 项目级自定义 agent
+├── steering/                   # 注入系统 prompt 的 markdown 规则
+├── skills/ · skills.json       # 项目技能与开关
+├── approvals.json              # 「本项目始终允许」审批持久化
+├── hooks.json · tools.json     # hooks 与工具白/黑名单
+├── settings/mcp.json           # 项目级 MCP server
+├── loop-log.jsonl              # kiro 引擎回合 sidecar（/chat resume）
+├── knowledge/ · checkpoints/   # BM25 索引 · git shadow repo
+└── specs/ · paste/             # spec 模式 · 巨量粘贴落盘
+```
+
+（DSH 平台自身的会话/配置仍按平台约定放在 `~/.dsh`，与本插件无关。）
 
 ## 开发
 

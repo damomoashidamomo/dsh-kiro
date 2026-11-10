@@ -1,5 +1,5 @@
 /**
- * dsh-kiro MCP manager. Reads `.kiro/settings/mcp.json` + `~/.kiro/settings/mcp.json`,
+ * dsh-kiro MCP manager. Reads `.dsh-kiro/settings/mcp.json` + `~/.dsh-kiro/settings/mcp.json`,
  * normalizes each entry into a typed server config, and exposes a status table
  * the runtime and `/mcp` command surface can render.
  *

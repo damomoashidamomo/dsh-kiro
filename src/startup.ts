@@ -24,6 +24,7 @@ import { readFileSync, statSync } from 'node:fs'
 import { join, resolve } from 'node:path'
 import { banner, resetPalette, colorLevel } from './theme/palette'
 import { splashMark } from './theme/banner'
+import { describeMigration, migrateLegacyKiro } from './migration/legacy-kiro'
 
 declare module '@deepseek-ai/cordis' {
   interface Context {
@@ -112,7 +113,7 @@ function kiroCommand(): Command {
     .option('--session-source <v1|v2>', 'restrict --delete-session lookup to one storage source')
     .option('--list-models', 'list available models and exit')
     .option('--agent <agent>', 'start the TUI with a custom agent by name')
-    .option('--cwd <dir>', 'set the session workspace directory (sandbox + .kiro/ anchor here)')
+    .option('--cwd <dir>', 'set the session workspace directory (sandbox + .dsh-kiro/ anchor here)')
     .option('--model <model>', 'override the model the agent selects')
     .option('--effort <level>', 'reasoning-effort override: low | medium | high | xhigh | max')
     .option('--agent-engine <v2|v1|kas>', 'select the agent engine; default is v2')
@@ -176,15 +177,15 @@ function readStartup(program: Command): KiroStartup {
     ? undefined
     : opts.trustTools.split(',').map(entry => entry.trim()).filter(entry => entry !== '')
 
-  // 默认 agent：优先读 dsh-kiro 私有的 .kiro/agent-engines.json（set-default
+  // 默认 agent：优先读 dsh-kiro 私有的 .dsh-kiro/agent-engines.json（set-default
   // 的落点），兼容回退 settings.json 的 agent 键。显式 --agent 仍然最优先。
   const settingsAgent = readDefaultAgent(opts.cwd ?? process.cwd())
 
 
-/** 默认 agent：.kiro/agent-engines.json 的 defaults.agent，兼容回退 settings.json。 */
+/** 默认 agent：.dsh-kiro/agent-engines.json 的 defaults.agent，兼容回退 settings.json。 */
 function readDefaultAgent(cwd: string): string | undefined {
   try {
-    const raw = readFileSync(join(cwd, '.kiro', 'agent-engines.json'), 'utf8')
+    const raw = readFileSync(join(cwd, '.dsh-kiro', 'agent-engines.json'), 'utf8')
     const parsed = JSON.parse(raw) as { defaults?: { agent?: unknown } }
     const agent = parsed.defaults?.agent
     if (typeof agent === 'string' && agent.trim() !== '') return agent
@@ -192,7 +193,7 @@ function readDefaultAgent(cwd: string): string | undefined {
     // fall through to the legacy settings.json location
   }
   try {
-    const raw = readFileSync(join(cwd, '.kiro', 'settings.json'), 'utf8')
+    const raw = readFileSync(join(cwd, '.dsh-kiro', 'settings.json'), 'utf8')
     const parsed = JSON.parse(raw) as { agent?: unknown }
     return typeof parsed.agent === 'string' && parsed.agent.trim() !== '' ? parsed.agent : undefined
   } catch {
@@ -303,7 +304,7 @@ export function apply(ctx: Context): void {
     const startup = readStartup(program)
     validate(startup, program)
     // --cwd: move to the requested workspace BEFORE any session exists —
-    // agent tools, the sandbox and .kiro/ all anchor to the cwd at session
+    // agent tools, the sandbox and .dsh-kiro/ all anchor to the cwd at session
     // creation. Must be a real, accessible directory (fail loud otherwise).
     if (startup.workspaceDir !== undefined) {
       const target = resolve(startup.workspaceDir)
@@ -313,6 +314,14 @@ export function apply(ctx: Context): void {
         return
       }
       process.chdir(target)
+    }
+    // 一次性迁移：把 dsh-kiro 曾散落在 kiro-cli 目录里的自有数据复制到独立
+    // 目录（对旧目录只读；带标记文件，只跑一次）。此后 dsh-kiro 与 kiro-cli
+    // 零关联。
+    const migration = migrateLegacyKiro()
+    const migrationNote = describeMigration(migration)
+    if (migrationNote !== undefined) {
+      process.stderr.write(`[dsh-kiro] ${migrationNote}\n`)
     }
     const exit = ctx.get('appExit')
     if (exit === undefined) {

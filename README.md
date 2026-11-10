@@ -14,8 +14,8 @@ want the same `dsh` agent in your shell without spinning up the Web UI.
 | --- | --- |
 | Rich terminal UI (markdown, code highlighting, status bar) | ✅ Phase 1 |
 | Slash command registry (25 commands) | ✅ Phase 1 (3 implemented + 22 stubs) |
-| Custom agents from `.kiro/agents/` and `~/.kiro/agents/` | 🟡 Phase 4 |
-| Steering files from `.kiro/steering/*.md` | 🟡 Phase 4 |
+| Custom agents from `.dsh-kiro/agents/` and `~/.dsh-kiro/agents/` | 🟡 Phase 4 |
+| Steering files from `.dsh-kiro/steering/*.md` | 🟡 Phase 4 |
 | Native MCP server management | 🟡 Phase 4 |
 | Subagent delegation, plan mode, model selection | 🟡 Phase 4 |
 | Tool trust / untrust / `--trust-all-tools` | 🟡 Phase 3 |
@@ -64,7 +64,7 @@ dsh --profile kiro -r
 # Pick a session interactively
 dsh --profile kiro --resume-picker
 
-# Use a custom agent (lives under .kiro/agents/ or ~/.kiro/agents/)
+# Use a custom agent (lives under .dsh-kiro/agents/ or ~/.dsh-kiro/agents/)
 dsh --profile kiro --agent backend-specialist
 
 # Run non-interactively (CI-friendly)
@@ -142,24 +142,37 @@ phases.
 
 ## File layout
 
-```
-~/.kiro/
-├── agents/                       # custom agents (JSON)
-├── settings/
-│   ├── mcp.json                  # MCP servers
-│   ├── trusted-tools.json        # tool trust store
-│   └── settings.json             # chat defaults
-├── cli-todo-lists/               # persisted TODO lists
-└── history/                      # prompt history
+dsh-kiro is a **standalone project**: every piece of state it owns lives in its
+own directories and it has **zero association** with kiro-cli's `~/.kiro`
+(never read, never written, never required). On first boot it copies
+(read-only) its own historical data out of the kiro-cli directories; the
+originals stay untouched.
 
-<cwd>/.kiro/
-├── agents/                       # project-scoped custom agents
-├── steering/                     # markdown rules injected into the system prompt
-├── settings/mcp.json             # project-scoped MCP servers
-├── knowledge/                    # BM25 index files
-├── checkpoints/                  # git shadow repo
-└── sessions/                     # session storage override
 ```
+~/.dsh-kiro/                    # user level (override with DSH_KIRO_HOME)
+├── agents/                     # custom agents (JSON)
+├── skills/                     # user-level skills
+├── steering/                   # user-level steering rules
+├── hooks.json                  # user-level hooks
+├── agent-engines.json          # engine bindings / default agent (private)
+└── settings/
+    ├── mcp.json                # MCP servers
+    └── trusted-tools.json      # tool trust store (dsh-kiro's own)
+
+<cwd>/.dsh-kiro/                # workspace level
+├── agents/                     # project-scoped custom agents
+├── steering/                   # markdown rules injected into the system prompt
+├── skills/ · skills.json       # project skills + on/off state
+├── approvals.json              # "always allow in this project" persistence
+├── hooks.json · tools.json     # hooks + tool allow/deny lists
+├── settings/mcp.json           # project-scoped MCP servers
+├── loop-log.jsonl              # kiro-loop turn sidecar (/chat resume)
+├── knowledge/ · checkpoints/   # BM25 index · git shadow repo
+└── specs/ · paste/             # spec mode · oversized-paste spill
+```
+
+(The DSH platform's own sessions/config keep living under `~/.dsh` per the
+platform convention — unrelated to this plugin.)
 
 ## Architecture
 
@@ -193,10 +206,10 @@ plugins: `kiro-startup`, `kiro-runtime`, `kiro-commands`, `kiro-agents`,
   `!` shell escape, ToolCard state machine, ProgressOverlay, Ctrl+K
   slash-command fuzzy palette.
 - **Phase 3 ✅ — commands**: every slash command implemented end-to-end plus
-  tool-trust store at `~/.kiro/settings/trusted-tools.json` with
+  tool-trust store at `~/.dsh-kiro/settings/trusted-tools.json` with
   `/tools list|trust|untrust|trust-all|reset`.
-- **Phase 4 ✅ — agent subsystem**: custom agents loader (`.kiro/agents/`
-  + `~/.kiro/agents/`), steering files loader (frontmatter + glob
+- **Phase 4 ✅ — agent subsystem**: custom agents loader (`.dsh-kiro/agents/`
+  + `~/.dsh-kiro/agents/`), steering files loader (frontmatter + glob
   matching), MCP config manager (status table, transport normalization).
 - **Phase 5 ✅ — advanced**: git-shadow checkpoint manager with snapshot /
   restore / diff / clean, a real BM25 knowledge base behind `/knowledge`

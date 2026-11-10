@@ -37,7 +37,7 @@ export interface ApprovalFeedback {
 export interface ApprovalUi {
     isToolAllowedForSession(toolName: string): boolean;
     allowToolForSession(toolName: string): void;
-    /** Persist a project-wide allowance (.kiro/approvals.json). */
+    /** Persist a project-wide allowance (.dsh-kiro/approvals.json). */
     allowToolForProject(toolName: string): void;
     /** Full argument payload of the pending tool call (for pattern trust). */
     latestToolArgs?(toolName: string): string | undefined;

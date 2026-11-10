@@ -23,7 +23,7 @@ def setup_workspace(cls_tui):
     """项目级 agent 定义 + 绑定文件（绝不写 kiro-cli 的全局 agents 目录，
     也绝不在共享 schema 的文件里放 engine 字段）。"""
     import json
-    agent_dir = os.path.join(cls_tui.tmp, '.kiro', 'agents')
+    agent_dir = os.path.join(cls_tui.tmp, '.dsh-kiro', 'agents')
     os.makedirs(agent_dir, exist_ok=True)
     with open(os.path.join(agent_dir, AGENT + '.json'), 'w', encoding='utf-8') as fh:
         json.dump({
@@ -33,7 +33,7 @@ def setup_workspace(cls_tui):
             'tools': ['*'],
             'model': None,
         }, fh, ensure_ascii=False)
-    bind_dir = os.path.join(cls_tui.tmp, '.kiro')
+    bind_dir = os.path.join(cls_tui.tmp, '.dsh-kiro')
     os.makedirs(bind_dir, exist_ok=True)
     with open(os.path.join(bind_dir, 'agent-engines.json'), 'w', encoding='utf-8') as fh:
         json.dump({'defaults': {'agent': AGENT}, 'bindings': {AGENT: {'engine': 'kiro', 'toolEngine': 'rust'}}}, fh, ensure_ascii=False)
@@ -85,7 +85,7 @@ class SwapAppliesEngineTest(unittest.TestCase):
         self.tui.drain(1.5)
         # 引擎绑定不在共享 schema 的文件里（kiro-cli 严格校验未知字段）；
         # TUI 跑在 hermetic HOME 里，所以这里也不会碰到真实的 ~/.kiro/agents。
-        self.assertFalse(os.path.exists(os.path.join(self.tui.home, '.kiro', 'agents', 'engine-e2e.json')))
+        self.assertFalse(os.path.exists(os.path.join(self.tui.home, '.dsh-kiro', 'agents', 'engine-e2e.json')))
 
 
 class BootAppliesPresetTest(unittest.TestCase):
@@ -101,8 +101,8 @@ class BootAppliesPresetTest(unittest.TestCase):
         import time
         ws = '/tmp/kiro-boot-preset'
         shutil.rmtree(ws, ignore_errors=True)
-        os.makedirs(os.path.join(ws, '.kiro', 'agents'))
-        with open(os.path.join(ws, '.kiro', 'agents', AGENT + '.json'), 'w', encoding='utf-8') as fh:
+        os.makedirs(os.path.join(ws, '.dsh-kiro', 'agents'))
+        with open(os.path.join(ws, '.dsh-kiro', 'agents', AGENT + '.json'), 'w', encoding='utf-8') as fh:
             json.dump({
                 'name': AGENT,
                 'description': '引擎绑定测试',
@@ -110,13 +110,21 @@ class BootAppliesPresetTest(unittest.TestCase):
                 'tools': ['*'],
                 'model': None,
             }, fh, ensure_ascii=False)
-        with open(os.path.join(ws, '.kiro', 'agent-engines.json'), 'w', encoding='utf-8') as fh:
+        with open(os.path.join(ws, '.dsh-kiro', 'agent-engines.json'), 'w', encoding='utf-8') as fh:
             json.dump({'defaults': {'agent': AGENT}, 'bindings': {AGENT: {'engine': 'kiro', 'toolEngine': 'rust'}}}, fh, ensure_ascii=False)
 
+        # Same hermetic contract as harness.Tui: a throwaway HOME with
+        # DSH_KIRO_HOME inside it — this boot must never touch the real
+        # ~/.kiro (kiro-cli's) or the real ~/.dsh-kiro.
+        home = os.path.join(ws, '.home')
+        os.makedirs(os.path.join(home, '.dsh-kiro'), exist_ok=True)
         env = os.environ.copy()
         env['TERM'] = 'xterm-256color'
         env['COLUMNS'] = '110'
         env['LINES'] = '34'
+        env['HOME'] = home
+        env['USERPROFILE'] = home
+        env['DSH_KIRO_HOME'] = os.path.join(home, '.dsh-kiro')
         pid, fd = pty.fork()
         if pid == 0:
             os.chdir(ws)

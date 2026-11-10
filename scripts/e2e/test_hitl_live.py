@@ -40,7 +40,7 @@ PANEL_HINT = '数字直选'  # 问题面板底部提示，出现一次 = 一页
 
 
 def write_skill(workspace: str, name: str, description: str, body: str = 'body') -> None:
-    skill_dir = os.path.join(workspace, '.kiro', 'skills', name)
+    skill_dir = os.path.join(workspace, '.dsh-kiro', 'skills', name)
     os.makedirs(skill_dir, exist_ok=True)
     with open(os.path.join(skill_dir, 'SKILL.md'), 'w', encoding='utf-8') as fh:
         fh.write(f'---\nname: {name}\ndescription: {description}\n---\n\n{body}\n')

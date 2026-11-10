@@ -53,7 +53,7 @@ class PasteCommandTest(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.tui = Tui()
-        paste_dir = os.path.join(cls.tui.tmp, '.kiro', 'paste')
+        paste_dir = os.path.join(cls.tui.tmp, '.dsh-kiro', 'paste')
         os.makedirs(paste_dir, exist_ok=True)
         with open(os.path.join(paste_dir, 'paste-20250101120000.txt'), 'w') as fh:
             fh.write('hello paste 1')
@@ -74,7 +74,7 @@ class PasteCommandTest(unittest.TestCase):
     def test_20_clean_removes_all(self):
         self.tui.write('/paste clean\r')
         self.assertTrue(self.tui.wait_for('已删除 2/2', 20))
-        self.assertFalse(os.path.exists(os.path.join(self.tui.tmp, '.kiro', 'paste')))
+        self.assertFalse(os.path.exists(os.path.join(self.tui.tmp, '.dsh-kiro', 'paste')))
 
 
 if __name__ == '__main__':

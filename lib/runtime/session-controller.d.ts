@@ -105,7 +105,7 @@ export declare class SessionController {
     /** Record first-token latency once per turn (P8). */
     private markFirstToken;
     /**
-     * Project-level approvals (`.kiro/approvals.json` in the workspace):
+     * Project-level approvals (`.dsh-kiro/approvals.json` in the workspace):
      * tools the user marked "always allow for this project" (whole-tool), and
      * command-prefix patterns for finer trust (e.g. every `grep ...` inside
      * bash). Seeded at construction and rewritten on each allow choice.

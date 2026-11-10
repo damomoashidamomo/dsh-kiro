@@ -28,7 +28,7 @@ import type { DiffRow } from './diff'
 const OPTIONS = [
   { key: '1', label: '允许一次' },
   { key: '2', label: '本会话始终允许' },
-  { key: '3', label: '本项目始终允许（写入 .kiro/approvals.json）' },
+  { key: '3', label: '本项目始终允许（写入 .dsh-kiro/approvals.json）' },
   { key: '4', label: '拒绝（可填理由）' },
 ] as const
 

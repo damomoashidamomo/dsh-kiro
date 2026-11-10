@@ -1,6 +1,6 @@
 /**
- * dsh-kiro custom-agents loader. Reads `.kiro/agents/*.json` and
- * `~/.kiro/agents/*.json`, validates each against the kiro agent schema, and
+ * dsh-kiro custom-agents loader. Reads `.dsh-kiro/agents/*.json` and
+ * `~/.dsh-kiro/agents/*.json`, validates each against the kiro agent schema, and
  * exposes them through a registry the runtime can consult.
  *
  * @module @damomoashidamomo/dsh-kiro/agents/loader
@@ -9,6 +9,7 @@
 import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs'
 import { basename, join } from 'node:path'
 import { homedir } from 'node:os'
+import { dshKiroUserRoot } from '../utils/kiro-home'
 
 /** Source location of an agent config. */
 export type AgentSource = 'project' | 'user'
@@ -143,8 +144,8 @@ export function parseAgentConfig(raw: unknown, source: AgentSource, path: string
 /** Walk the well-known agent directories and parse every JSON file. */
 export function loadAgentConfigs(): AgentConfig[] {
   const sources: ReadonlyArray<readonly [AgentSource, string]> = [
-    ['project', join(process.cwd(), '.kiro', 'agents')],
-    ['user', join(homedir(), '.kiro', 'agents')],
+    ['project', join(process.cwd(), '.dsh-kiro', 'agents')],
+    ['user', join(dshKiroUserRoot(), 'agents')],
   ]
   const out: AgentConfig[] = []
   for (const [source, dir] of sources) {

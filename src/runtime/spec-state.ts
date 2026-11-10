@@ -1,7 +1,7 @@
 /**
  * Spec workflow state (P3-S1) — kiro-cli's confirm-first development cycle:
  * requirements → design → tasks → implement, each phase gated by an explicit
- * human `/spec approve`. State lives in `<workspace>/.kiro/specs/<feature>/spec.json`
+ * human `/spec approve`. State lives in `<workspace>/.dsh-kiro/specs/<feature>/spec.json`
  * so a spec survives restarts and can be resumed.
  *
  * @module @damomoashidamomo/dsh-kiro/runtime/spec-state
@@ -20,7 +20,7 @@ export interface SpecState {
 }
 
 export function specDir(workspaceRoot: string, feature: string): string {
-  return join(workspaceRoot, '.kiro', 'specs', feature)
+  return join(workspaceRoot, '.dsh-kiro', 'specs', feature)
 }
 
 export function loadSpec(workspaceRoot: string, feature: string): SpecState | undefined {
@@ -41,10 +41,10 @@ export function saveSpec(workspaceRoot: string, state: SpecState): void {
   writeFileSync(join(dir, 'spec.json'), `${JSON.stringify({ ...state, updatedAt: Date.now() }, null, 2)}\n`, 'utf8')
 }
 
-/** The active spec = the newest non-done spec.json in .kiro/specs/. */
+/** The active spec = the newest non-done spec.json in .dsh-kiro/specs/. */
 export function activeSpec(workspaceRoot: string): SpecState | undefined {
   try {
-    const root = join(workspaceRoot, '.kiro', 'specs')
+    const root = join(workspaceRoot, '.dsh-kiro', 'specs')
     if (!existsSync(root)) return undefined
     let best: SpecState | undefined
     for (const entry of readdirSync(root)) {
@@ -75,7 +75,7 @@ export const PHASE_LABEL: Record<SpecPhase, string> = {
 
 /** The instruction submitted to the model for a phase (confirm-first cycle). */
 export function phaseInstruction(state: SpecState): string {
-  const dir = `.kiro/specs/${state.feature}`
+  const dir = `.dsh-kiro/specs/${state.feature}`
   switch (state.phase) {
     case 'requirements':
       return [

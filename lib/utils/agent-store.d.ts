@@ -1,10 +1,10 @@
 /**
- * Custom-agent store — the `.kiro/agents/*.json` files kiro-cli reads.
+ * Custom-agent store — the `.dsh-kiro/agents/*.json` files kiro-cli reads.
  *
  * Project scope wins over user scope, the same precedence kiro-cli uses. The
  * write operations (create / rename / delete / validate) live here as pure
  * functions over a pair of directories so tests can run against a temp tree
- * instead of the user's `~/.kiro/agents`.
+ * instead of the user's `~/.dsh-kiro/agents`.
  *
  * @module @damomoashidamomo/dsh-kiro/utils/agent-store
  */
@@ -48,7 +48,7 @@ export declare function validateAgentFile(path: string): {
     ok: false;
     reason: string;
 };
-/** 引擎绑定（dsh-kiro 私有，存工作区 `.kiro/agent-engines.json`）。 */
+/** 引擎绑定（dsh-kiro 私有，存工作区 `.dsh-kiro/agent-engines.json`）。 */
 export interface EngineBinding {
     readonly engine: 'kiro' | 'dsh';
     readonly toolEngine?: 'rust' | 'dsh';

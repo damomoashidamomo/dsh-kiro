@@ -1,6 +1,6 @@
 /**
- * dsh-kiro steering files loader. Reads `.kiro/steering/*.md` and
- * `~/.kiro/steering/*.md`, parses simple frontmatter, and groups the result
+ * dsh-kiro steering files loader. Reads `.dsh-kiro/steering/*.md` and
+ * `~/.dsh-kiro/steering/*.md`, parses simple frontmatter, and groups the result
  * by inclusion class so the runtime can mount the right slice.
  *
  * @module @damomoashidamomo/dsh-kiro/steering/loader
@@ -23,7 +23,7 @@ export interface SteeringFile {
 /**
  * Walk the well-known steering directories and parse every `.md` file.
  * kiro-parity additions (P4): the workspace README's head plus skill
- * manifests (.kiro/skills/<name>/SKILL.md at both levels) ride along as
+ * manifests (.dsh-kiro/skills/<name>/SKILL.md at both levels) ride along as
  * 'builtin' entries — kiro loads this set in every conversation.
  */
 export declare function loadSteeringFiles(): SteeringFile[];

@@ -1,7 +1,7 @@
 /**
  * `/skills` — selective skill loading (kiro-cli parity, like /model for
  * models): list every discovered SKILL.md across kiro/dsh/agents roots with
- * its on/off state, toggle per name, persisted in `.kiro/skills.json`.
+ * its on/off state, toggle per name, persisted in `.dsh-kiro/skills.json`.
  * Disabled skills never enter the model-facing catalog (the `skill` tool)
  * because the kiro provider filters at listing time.
  *
@@ -41,7 +41,7 @@ export const skillsCommand: CommandDefinition = {
           kind: 'success',
           text: [
             '未发现任何技能。放入任一目录即可被识别：',
-            '  .kiro/skills/<name>/SKILL.md（项目/用户级）或 .dsh/skills · .agents/skills',
+            '  .dsh-kiro/skills/<name>/SKILL.md（项目/用户级）或 .dsh/skills · .agents/skills',
             'SKILL.md 头部 frontmatter 支持 name / description / when-to-use / disable-model-invocation。',
           ].join('\n'),
         }
@@ -53,7 +53,7 @@ export const skillsCommand: CommandDefinition = {
         lines.push(`  ${mark} ${row.name} [${row.source}]${desc}`)
       }
       lines.push('')
-      lines.push('用 /skills <name> on|off 切换；选择持久化在 .kiro/skills.json。')
+      lines.push('用 /skills <name> on|off 切换；选择持久化在 .dsh-kiro/skills.json。')
       return { kind: 'success', text: lines.join('\n') }
     }
 

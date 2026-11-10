@@ -2,7 +2,7 @@
  * kiro-skills — the dsh-kiro provider for the platform's `ctx.skills`
  * registry: discovers SKILL.md bundles across kiro/dsh/agents roots
  * (project + user level), applies the workspace's selection file
- * (`.kiro/skills.json`, default ALL enabled), and exposes the selection
+ * (`.dsh-kiro/skills.json`, default ALL enabled), and exposes the selection
  * service the `/skills` command drives.
  *
  * Selective loading works at the PROVIDER level: disabled skills are never
@@ -16,6 +16,7 @@ import type { Context } from '@deepseek-ai/cordis'
 import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
+import { dshKiroUserRoot } from '../utils/kiro-home'
 
 /** Service id for the selection surface. */
 export const KIRO_SKILL_SELECTION = 'kiroSkillSelection'
@@ -43,7 +44,7 @@ interface SelectionService {
 }
 
 function selectionPath(): string {
-  return join(process.cwd(), '.kiro', 'skills.json')
+  return join(process.cwd(), '.dsh-kiro', 'skills.json')
 }
 
 function loadDisabled(): Set<string> {
@@ -59,7 +60,7 @@ function loadDisabled(): Set<string> {
 
 function saveDisabled(disabled: ReadonlySet<string>): void {
   try {
-    mkdirSync(join(process.cwd(), '.kiro'), { recursive: true })
+    mkdirSync(join(process.cwd(), '.dsh-kiro'), { recursive: true })
     writeFileSync(selectionPath(), `${JSON.stringify({ disabled: [...disabled].sort() }, null, 2)}\n`, 'utf8')
   } catch {
     // Unwritable workspace: the toggle still holds until restart.
@@ -82,10 +83,10 @@ function parseFrontmatter(text: string): Record<string, string> {
 /** Scan every supported root; lower rank wins duplicate names. */
 function discover(cwd: string): Map<string, DiscoveredSkill> {
   const roots: Array<[string, string, number]> = [
-    [join(cwd, '.kiro', 'skills'), 'project-kiro', 10],
+    [join(cwd, '.dsh-kiro', 'skills'), 'project', 10],
     [join(cwd, '.dsh', 'skills'), 'project-dsh', 11],
     [join(cwd, '.agents', 'skills'), 'project-agents', 12],
-    [join(homedir(), '.kiro', 'skills'), 'user-kiro', 20],
+    [join(dshKiroUserRoot(), 'skills'), 'user', 20],
     [join(homedir(), '.dsh', 'skills'), 'user-dsh', 21],
     [join(homedir(), '.agents', 'skills'), 'user-agents', 22],
   ]

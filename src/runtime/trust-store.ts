@@ -2,7 +2,7 @@
  * Trust store (T-1 split from session-controller): the persistence and
  * matching layer behind the approval panel's finer-grained scopes —
  * project-level whole-tool allowances plus command-prefix patterns in
- * `.kiro/approvals.json` (v2; v1 files contribute their tools array).
+ * `.dsh-kiro/approvals.json` (v2; v1 files contribute their tools array).
  *
  * Pure module: no controller state, fully unit-testable.
  *
@@ -14,7 +14,7 @@ import { join } from 'node:path'
 
 /** Path of the project-level approval store inside the workspace. */
 function projectApprovalsPath(): string {
-  return join(process.cwd(), '.kiro', 'approvals.json')
+  return join(process.cwd(), '.dsh-kiro', 'approvals.json')
 }
 
 /** One finer-grained trust entry: commands of `tool` starting with `prefix`. */
@@ -55,7 +55,7 @@ function loadProjectApprovalStore(): { tools: string[]; patterns: ApprovalPatter
 /** Persist approvals (best effort): tools + command-prefix patterns. */
 export function saveProjectApprovals(tools: readonly string[], patterns: readonly ApprovalPattern[] = []): void {
   try {
-    mkdirSync(join(process.cwd(), '.kiro'), { recursive: true })
+    mkdirSync(join(process.cwd(), '.dsh-kiro'), { recursive: true })
     const payload = { tools: [...tools].sort(), patterns: [...patterns] }
     writeFileSync(projectApprovalsPath(), `${JSON.stringify(payload, null, 2)}\n`, 'utf8')
   } catch {

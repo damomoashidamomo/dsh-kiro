@@ -1,6 +1,6 @@
 /**
  * dsh-kiro checkpoint manager. Maintains a git shadow repository under
- * `.kiro/checkpoints/` whose refs track the working tree state at every
+ * `.dsh-kiro/checkpoints/` whose refs track the working tree state at every
  * `/checkpoint init` and on every turn end.
  *
  * Each checkpoint is a single commit on `refs/kiro/checkpoints/<seq>` so the
@@ -29,13 +29,13 @@ export interface Checkpoint {
   readonly hash: string
 }
 
-/** Cached checkpoint metadata persisted to `.kiro/checkpoints/index.json`. */
+/** Cached checkpoint metadata persisted to `.dsh-kiro/checkpoints/index.json`. */
 interface CheckpointIndex {
   readonly version: 1
   readonly checkpoints: readonly Checkpoint[]
 }
 
-const CHECKPOINT_DIR = '.kiro/checkpoints'
+const CHECKPOINT_DIR = '.dsh-kiro/checkpoints'
 const INDEX_FILE = 'index.json'
 
 function defaultShell(): string {

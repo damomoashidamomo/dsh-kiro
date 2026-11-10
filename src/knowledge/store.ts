@@ -1,5 +1,5 @@
 /**
- * dsh-kiro knowledge base — a tiny BM25 index over `.kiro/knowledge/`. The
+ * dsh-kiro knowledge base — a tiny BM25 index over `.dsh-kiro/knowledge/`. The
  * manager walks the configured include/exclude patterns at `add`-time,
  * stores one file per entry on disk, and answers `query` calls with a
  * ranked list of snippets.
@@ -63,7 +63,7 @@ interface DocModel {
   readonly tf: ReadonlyMap<string, number>
 }
 
-const KB_DIR = '.kiro/knowledge'
+const KB_DIR = '.dsh-kiro/knowledge'
 const KB_FILE = 'index.json'
 const TOKEN_RE = /[a-z0-9_]+/gu
 const CJK_RE = /[\u4e00-\u9fff]/gu
@@ -76,7 +76,7 @@ const DEFAULT_EXTENSIONS = [
   'html', 'vue', 'svelte', 'sql', 'rb', 'java', 'kt',
 ]
 /** Directories always skipped by {@link KnowledgeStore.addDir}. */
-const SKIP_DIRS = new Set(['.git', 'node_modules', '.kiro', '.dsh', 'dist', 'build', '.next'])
+const SKIP_DIRS = new Set(['.git', 'node_modules', '.kiro', '.dsh-kiro', '.dsh', 'dist', 'build', '.next'])
 /** Files larger than this (bytes) are skipped by {@link KnowledgeStore.addDir}. */
 const MAX_FILE_BYTES = 1_048_576
 /** Default snippet window: characters on each side of the first match. */
@@ -231,7 +231,7 @@ export class KnowledgeStore {
 
   /**
    * Recursively index a directory. Hidden directories (`.git`, `node_modules`,
-   * `.kiro`, …) are skipped, as are files above {@link MAX_FILE_BYTES},
+   * `.kiro`(旧 kiro-cli 目录), …) are skipped, as are files above {@link MAX_FILE_BYTES},
    * binary-looking files, and files whose extension is not in `options.extensions`.
    */
   addDir(dir: string, options: AddDirOptions = {}): KnowledgeEntry[] {

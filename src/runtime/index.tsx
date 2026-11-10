@@ -486,7 +486,7 @@ async function mount(ctx: Context, startup: KiroStartup): Promise<void> {
     void (async () => {
       const match = findAgent(agentDirs(), presetName)
       if (match === undefined) {
-        controller.pushSystem(`◇ 注意：agent「${presetName}」不存在（.kiro/agents/ 下没有同名定义），按默认配置启动。`)
+        controller.pushSystem(`◇ 注意：agent「${presetName}」不存在（.dsh-kiro/agents/ 下没有同名定义），按默认配置启动。`)
         return
       }
       let preset: Record<string, unknown> = {}
@@ -504,7 +504,7 @@ async function mount(ctx: Context, startup: KiroStartup): Promise<void> {
       // The preset must not fight an explicit --engine flag.
       const effective = { ...preset } as Record<string, unknown>
       if (startup.engine !== undefined) delete effective.engine
-      // 引擎绑定（.kiro/agent-engines.json）叠加到 preset 上。
+      // 引擎绑定（.dsh-kiro/agent-engines.json）叠加到 preset 上。
       const binding = getEngineBinding(process.cwd(), presetName)
       if (binding !== undefined) {
         effective['engine'] = binding.engine

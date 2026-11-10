@@ -1,9 +1,9 @@
 /**
- * Kiro hooks loader — the B-option self-owned `.kiro/hooks.json` engine.
+ * Kiro hooks loader — the B-option self-owned `.dsh-kiro/hooks.json` engine.
  *
  * Reads Claude-Code-compatible command hooks from (in run order per event):
- *   1. `~/.kiro/hooks.json`  — user level
- *   2. `<workspace>/.kiro/hooks.json` — project level (session cwd)
+ *   1. `~/.dsh-kiro/hooks.json`  — user level
+ *   2. `<workspace>/.dsh-kiro/hooks.json` — project level (session cwd)
  *
  * and wires them onto the harness interception extension points using the
  * platform's `dsh-hook-protocol` (matching, execution via ctx.shell, decision
@@ -41,6 +41,7 @@ import {
 } from '@deepseek-ai/dsh-hook-protocol'
 import type { MatcherGroup } from '@deepseek-ai/dsh-hook-protocol'
 import { createUserMessage } from '@deepseek-ai/dsh-llm'
+import { dshKiroUserRoot } from '../utils/kiro-home'
 
 /** The seven supported hook points. */
 export type HookPoint =
@@ -160,8 +161,8 @@ export function apply(ctx: Context): void {
 
   // User-level config first, then workspace-level (both run; user first).
   const discovered: { path: string; source: 'user' | 'workspace' }[] = [
-    { path: join(homedir(), '.kiro', 'hooks.json'), source: 'user' },
-    { path: join(workspaceDir, '.kiro', 'hooks.json'), source: 'workspace' },
+    { path: join(dshKiroUserRoot(), 'hooks.json'), source: 'user' },
+    { path: join(workspaceDir, '.dsh-kiro', 'hooks.json'), source: 'workspace' },
   ]
 
   /**

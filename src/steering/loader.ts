@@ -1,6 +1,6 @@
 /**
- * dsh-kiro steering files loader. Reads `.kiro/steering/*.md` and
- * `~/.kiro/steering/*.md`, parses simple frontmatter, and groups the result
+ * dsh-kiro steering files loader. Reads `.dsh-kiro/steering/*.md` and
+ * `~/.dsh-kiro/steering/*.md`, parses simple frontmatter, and groups the result
  * by inclusion class so the runtime can mount the right slice.
  *
  * @module @damomoashidamomo/dsh-kiro/steering/loader
@@ -9,6 +9,7 @@
 import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs'
 import { basename, join } from 'node:path'
 import { homedir } from 'node:os'
+import { dshKiroUserRoot } from '../utils/kiro-home'
 
 /** Where a steering file came from. */
 export type SteeringSource = 'builtin' | 'project' | 'user'
@@ -80,7 +81,7 @@ const README_HEAD_CHARS = 4096
 /**
  * Walk the well-known steering directories and parse every `.md` file.
  * kiro-parity additions (P4): the workspace README's head plus skill
- * manifests (.kiro/skills/<name>/SKILL.md at both levels) ride along as
+ * manifests (.dsh-kiro/skills/<name>/SKILL.md at both levels) ride along as
  * 'builtin' entries — kiro loads this set in every conversation.
  */
 export function loadSteeringFiles(): SteeringFile[] {
@@ -103,13 +104,13 @@ export function loadSteeringFiles(): SteeringFile[] {
       // unreadable README: skip
     }
   }
-  // NOTE: .kiro/skills/*/SKILL.md moved OFF the static steering injection —
+  // NOTE: .dsh-kiro/skills/*/SKILL.md moved OFF the static steering injection —
   // skills now flow through the platform ctx.skills registry (dsh-skill +
   // kiro-skills provider + dsh-tool-skill's on-demand `skill` tool), with
   // /skills selection. Static heads here would double every skill.
   const sources: ReadonlyArray<readonly [SteeringSource, string]> = [
-    ['project', join(process.cwd(), '.kiro', 'steering')],
-    ['user', join(homedir(), '.kiro', 'steering')],
+    ['project', join(process.cwd(), '.dsh-kiro', 'steering')],
+    ['user', join(dshKiroUserRoot(), 'steering')],
   ]
   for (const [source, dir] of sources) {
     if (!existsSync(dir)) continue

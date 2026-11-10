@@ -4,7 +4,7 @@
  * regex (kiro-cli semantics: patterns must match the whole command), gitignore-style
  * path globs, and autoAllowReadonly for read-only shell commands.
  *
- * File: `.kiro/tools.json`
+ * File: `.dsh-kiro/tools.json`
  *   { "tools": {
  *       "bash": { "allowedCommands": ["git status"], "deniedCommands": ["rm .*"],
  *                 "autoAllowReadonly": true },
@@ -44,10 +44,10 @@ const READONLY_COMMANDS = new Set([
 
 const READONLY_GIT = new Set(['status', 'log', 'diff', 'show', 'branch', 'remote', 'rev-parse', 'config --get'])
 
-/** Load `.kiro/tools.json` best-effort. */
+/** Load `.dsh-kiro/tools.json` best-effort. */
 export function loadToolsSettings(cwd: string = process.cwd()): ToolsSettings {
   try {
-    const path = join(cwd, '.kiro', 'tools.json')
+    const path = join(cwd, '.dsh-kiro', 'tools.json')
     if (!existsSync(path)) return {}
     return JSON.parse(readFileSync(path, 'utf8')) as ToolsSettings
   } catch {

@@ -3,13 +3,13 @@ import { getKiroHooks } from '../hooks'
 
 /**
  * /hooks — surface the ACTUAL loaded state of the kiro hooks engine: where
- * each config file was sought (`.kiro/hooks.json` workspace + `~/.kiro/`
+ * each config file was sought (`.dsh-kiro/hooks.json` workspace + `~/.dsh-kiro/`
  * user), every configured command hook in run order, and the most recent
  * invocations with their folded decision.
  */
 export const hooksCommand: CommandDefinition = {
   name: 'hooks',
-  description: 'Show configured hooks (.kiro/hooks.json) and recent runs',
+  description: 'Show configured hooks (.dsh-kiro/hooks.json) and recent runs',
   input: { hint: '[reload]' },
   handler: async ({ rawInput }) => {
     if ((rawInput ?? '').trim() === 'reload') {
@@ -44,7 +44,7 @@ export const hooksCommand: CommandDefinition = {
     // Configured hooks in run order (user level first, then workspace).
     if (service.entries.length === 0) {
       lines.push('')
-      lines.push('未配置任何 hook。在工作区 .kiro/hooks.json 或 ~/.kiro/hooks.json 写入')
+      lines.push('未配置任何 hook。在工作区 .dsh-kiro/hooks.json 或 ~/.dsh-kiro/hooks.json 写入')
       lines.push('Claude Code 兼容格式后重启 dsh 生效，例：')
       lines.push('  {"hooks":{"PreToolUse":[{"matcher":"bash","hooks":[{"type":"command","command":"./guard.sh"}]}]}}')
     } else {

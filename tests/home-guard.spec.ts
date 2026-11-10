@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest'
 import { appendFileSync, mkdirSync, mkdtempSync, rmSync, unlinkSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { diffSnapshots, guardRoot, snapshotTree } from './home-guard'
+import { diffSnapshots, guardRoots, snapshotTree } from './home-guard'
 
 /**
  * The guard that keeps unit tests out of the real `~/.kiro`. Its detection
@@ -61,11 +61,23 @@ describe('home guard', () => {
     expect([...snapshotTree(root).keys()]).toEqual([join(root, 'agents', 'nested', 'a.json')])
   })
 
-  it('an override root wins over the real kiro directory', () => {
+  it('by default both real home roots are guarded', () => {
+    const previous = process.env.DSH_KIRO_HOME_GUARD_ROOT
+    delete process.env.DSH_KIRO_HOME_GUARD_ROOT
+    try {
+      const roots = guardRoots()
+      expect(roots.some((r) => r.endsWith('.kiro'))).toBe(true)
+      expect(roots.some((r) => r.endsWith('.dsh-kiro'))).toBe(true)
+    } finally {
+      if (previous !== undefined) process.env.DSH_KIRO_HOME_GUARD_ROOT = previous
+    }
+  })
+
+  it('an override root wins over both real directories', () => {
     const previous = process.env.DSH_KIRO_HOME_GUARD_ROOT
     process.env.DSH_KIRO_HOME_GUARD_ROOT = root
     try {
-      expect(guardRoot()).toBe(root)
+      expect(guardRoots()).toEqual([root])
     } finally {
       if (previous === undefined) delete process.env.DSH_KIRO_HOME_GUARD_ROOT
       else process.env.DSH_KIRO_HOME_GUARD_ROOT = previous

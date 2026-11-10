@@ -25,7 +25,7 @@ let dirs: ReturnType<typeof agentDirs>
 
 beforeEach(() => {
   root = mkdtempSync(join(tmpdir(), 'dsh-agents-'))
-  dirs = { project: join(root, 'proj', '.kiro', 'agents'), user: join(root, 'user', '.kiro', 'agents') }
+  dirs = { project: join(root, 'proj', '.dsh-kiro', 'agents'), user: join(root, 'user', '.dsh-kiro', 'agents') }
 })
 
 afterEach(() => {

@@ -83,17 +83,17 @@ export interface PasteSpill {
 
 /**
  * Decide + persist a large paste: the payload goes to
- * `<cwd>/.kiro/paste/paste-<stamp>.txt` and the caller inserts `note` into
+ * `<cwd>/.dsh-kiro/paste/paste-<stamp>.txt` and the caller inserts `note` into
  * the draft instead of the raw text. Returns undefined below the threshold.
  */
 export function spillPaste(text: string, cwd: string = process.cwd()): PasteSpill | undefined {
   if (text.length < PASTE_SPILL_THRESHOLD) return undefined
-  const dir = join(cwd, '.kiro', 'paste')
+  const dir = join(cwd, '.dsh-kiro', 'paste')
   mkdirSync(dir, { recursive: true })
   const stamp = new Date().toISOString().replace(/[-:T]/g, '').slice(0, 14)
   const name = `paste-${stamp}.txt`
   writeFileSync(join(dir, name), text, 'utf8')
-  return { path: join(dir, name), mention: `.kiro/paste/${name}`, bytes: Buffer.byteLength(text, 'utf8') }
+  return { path: join(dir, name), mention: `.dsh-kiro/paste/${name}`, bytes: Buffer.byteLength(text, 'utf8') }
 }
 
 /**

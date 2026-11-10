@@ -2,7 +2,7 @@
  * `/checkpoint` — workspace snapshots via a git shadow repo.
  *
  * Backed by the `kiroCheckpoint` service (provided by the `kiro-checkpoint`
- * Cordis plugin). The service maintains `.kiro/checkpoints/` as a git
+ * Cordis plugin). The service maintains `.dsh-kiro/checkpoints/` as a git
  * repository with one ref per checkpoint; the user's own git history
  * stays untouched.
  *

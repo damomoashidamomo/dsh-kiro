@@ -85,7 +85,7 @@ export interface PasteSpill {
 }
 /**
  * Decide + persist a large paste: the payload goes to
- * `<cwd>/.kiro/paste/paste-<stamp>.txt` and the caller inserts `note` into
+ * `<cwd>/.dsh-kiro/paste/paste-<stamp>.txt` and the caller inserts `note` into
  * the draft instead of the raw text. Returns undefined below the threshold.
  */
 export declare function spillPaste(text: string, cwd?: string): PasteSpill | undefined;

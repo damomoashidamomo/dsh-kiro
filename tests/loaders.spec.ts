@@ -56,7 +56,7 @@ describe('parseAgentConfig', () => {
 })
 
 describe('steering loader', () => {
-  it('returns an empty list when no .kiro/steering directory exists', () => {
+  it('returns an empty list when no .dsh-kiro/steering directory exists', () => {
     // The cwd may have a project steering dir; load returns at least [] when
     // user-side is empty.
     const files = loadSteeringFiles()

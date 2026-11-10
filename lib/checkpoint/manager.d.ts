@@ -1,6 +1,6 @@
 /**
  * dsh-kiro checkpoint manager. Maintains a git shadow repository under
- * `.kiro/checkpoints/` whose refs track the working tree state at every
+ * `.dsh-kiro/checkpoints/` whose refs track the working tree state at every
  * `/checkpoint init` and on every turn end.
  *
  * Each checkpoint is a single commit on `refs/kiro/checkpoints/<seq>` so the

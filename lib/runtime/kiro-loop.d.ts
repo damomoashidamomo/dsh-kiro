@@ -10,7 +10,7 @@
  * platform loop emits, so the projection and UI render identically.
  *
  * Loop-hardening (P2, per the reviewed architecture):
- * - toolsSettings matrix (`.kiro/tools.json`, kiro-cli-compatible) evaluated
+ * - toolsSettings matrix (`.dsh-kiro/tools.json`, kiro-cli-compatible) evaluated
  *   BEFORE dispatch: deny-first, anchored regex, path globs,
  *   autoAllowReadonly for read-only shell commands.
  * - retry with backoff + stalled-stream protection: transient failures
@@ -91,7 +91,7 @@ export declare class KiroLoopDriver {
     engine: 'dsh' | 'rust';
     workspaceRoot: string;
     constructor(deps: LoopDriverDeps);
-    /** Reload `.kiro/tools.json` (after the user edits the matrix). */
+    /** Reload `.dsh-kiro/tools.json` (after the user edits the matrix). */
     reloadSettings(): void;
     /** Whether the Rust engine binary is available right now. */
     engineAvailable(): boolean;

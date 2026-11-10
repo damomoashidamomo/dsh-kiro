@@ -62,16 +62,19 @@ class Tui:
         self.env['FORCE_COLOR'] = '3'
         self.env['COLUMNS'] = str(columns)
         self.env['LINES'] = str(lines)
-        # HERMETIC HOME: the TUI must never read/write the real ~/.kiro —
-        # that directory belongs to kiro-cli (agents/, settings/trusted-tools
-        # .json, agent-engines.json, skills/). Every test gets its own HOME
-        # inside the /tmp workspace instead. DSH_HOME stays REAL: it is where
+        # HERMETIC HOME: the TUI must never read/write the real ~/.kiro (kiro-cli's)
+        # nor the real ~/.dsh-kiro (dsh-kiro's own user root). Every test gets
+        # its own HOME inside the /tmp workspace instead, with DSH_KIRO_HOME
+        # pointed inside it. DSH_HOME stays REAL: it is where
         # the kiro profile's deployed build is resolved from, and it is the
         # platform's own store, not kiro-cli's.
         self.home = os.path.join(self.tmp, '.home')
         os.makedirs(self.home, exist_ok=True)
         self.env['HOME'] = self.home
         self.env['USERPROFILE'] = self.home
+        # dsh-kiro's own user-level root is redirected too (post-decoupling it
+        # is ~/.dsh-kiro on a real machine — never the tester's real one).
+        self.env['DSH_KIRO_HOME'] = os.path.join(self.home, '.dsh-kiro')
         self.env.setdefault('DSH_HOME', os.path.join(os.path.expanduser('~'), '.dsh'))
         self.columns = columns
         self.buf = b''

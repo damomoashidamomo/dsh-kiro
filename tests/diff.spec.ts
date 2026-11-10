@@ -7,7 +7,7 @@ import { buildEditDiff, isEditableTool } from '../src/ui/diff'
 const dir = mkdtempSync(join(tmpdir(), 'kiro-diff-'))
 
 beforeAll(() => {
-  mkdirSync(join(dir, '.kiro'), { recursive: true })
+  mkdirSync(join(dir, '.dsh-kiro'), { recursive: true })
   writeFileSync(join(dir, 'exists.txt'), 'alpha\nbeta\ngamma\ndelta\nfar1\nfar2\nfar3\nfar4\nfar5\nepsilon\n')
 })
 

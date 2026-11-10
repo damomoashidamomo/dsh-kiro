@@ -7,8 +7,8 @@ import { TrustStore, readTrust, trustPath, writeTrust } from '../src/trust/store
 /**
  * Tool-trust store.
  *
- * IMPORTANT: the production path is `~/.kiro/settings/trusted-tools.json` —
- * inside the directory kiro-cli owns. These tests therefore NEVER use
+ * IMPORTANT: the production path is `~/.dsh-kiro/settings/trusted-tools.json` —
+ * dsh-kiro's own home (no longer inside anything kiro-cli owns). These tests never use
  * `trustPath()` as a write target: every store is constructed with an explicit
  * path under a /tmp sandbox (an earlier version unlinked and rewrote the real
  * file on every run).
@@ -19,7 +19,7 @@ let file = ''
 
 beforeEach(() => {
   dir = mkdtempSync(join(tmpdir(), 'dsh-trust-'))
-  file = join(dir, '.kiro', 'settings', 'trusted-tools.json')
+  file = join(dir, '.dsh-kiro', 'settings', 'trusted-tools.json')
 })
 
 afterEach(() => {
@@ -102,9 +102,8 @@ describe('trust store', () => {
     off()
   })
 
-  it('the production default still points at the kiro-cli-owned file', () => {
-    // Documented on purpose: this is the one path tests must never write to.
-    // The assertion only READS the resolved string (no filesystem access).
-    expect(trustPath().endsWith(join('.kiro', 'settings', 'trusted-tools.json'))).toBe(true)
+  it('the production default points at dsh-kiro\'s own home', () => {
+    // Documented on purpose. The assertion only READS the resolved string (no filesystem access).
+    expect(trustPath().endsWith(join('.dsh-kiro', 'settings', 'trusted-tools.json'))).toBe(true)
   })
 })

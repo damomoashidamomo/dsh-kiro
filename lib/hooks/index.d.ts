@@ -1,9 +1,9 @@
 /**
- * Kiro hooks loader — the B-option self-owned `.kiro/hooks.json` engine.
+ * Kiro hooks loader — the B-option self-owned `.dsh-kiro/hooks.json` engine.
  *
  * Reads Claude-Code-compatible command hooks from (in run order per event):
- *   1. `~/.kiro/hooks.json`  — user level
- *   2. `<workspace>/.kiro/hooks.json` — project level (session cwd)
+ *   1. `~/.dsh-kiro/hooks.json`  — user level
+ *   2. `<workspace>/.dsh-kiro/hooks.json` — project level (session cwd)
  *
  * and wires them onto the harness interception extension points using the
  * platform's `dsh-hook-protocol` (matching, execution via ctx.shell, decision

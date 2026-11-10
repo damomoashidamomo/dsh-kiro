@@ -17,14 +17,14 @@ afterAll(() => {
   rmSync(dir, { recursive: true, force: true })
 })
 
-describe('.kiro/approvals.json store', () => {
+describe('.dsh-kiro/approvals.json store', () => {
   it('allow-project writes the tool list and a fresh controller seeds from it', async () => {
     const { SessionController } = await import('../src/runtime/session-controller')
     const ctrl = new SessionController()
     expect(ctrl.isToolAllowedForSession('edit')).toBe(false)
     ctrl.allowToolForProject('edit')
     expect(ctrl.isToolAllowedForSession('edit')).toBe(true)
-    const file = join(dir, '.kiro', 'approvals.json')
+    const file = join(dir, '.dsh-kiro', 'approvals.json')
     expect(existsSync(file)).toBe(true)
     const parsed = JSON.parse(readFileSync(file, 'utf8')) as { tools: string[] }
     expect(parsed.tools).toEqual(['edit'])
@@ -35,12 +35,12 @@ describe('.kiro/approvals.json store', () => {
   })
 
   it('session-only allowance does not touch the file', async () => {
-    mkdirSync(join(dir, '.kiro'), { recursive: true })
-    writeFileSync(join(dir, '.kiro', 'approvals.json'), JSON.stringify({ tools: ['write'] }))
+    mkdirSync(join(dir, '.dsh-kiro'), { recursive: true })
+    writeFileSync(join(dir, '.dsh-kiro', 'approvals.json'), JSON.stringify({ tools: ['write'] }))
     const { SessionController } = await import('../src/runtime/session-controller')
     const ctrl = new SessionController()
     ctrl.allowToolForSession('bash')
-    const parsed = JSON.parse(readFileSync(join(dir, '.kiro', 'approvals.json'), 'utf8')) as { tools: string[] }
+    const parsed = JSON.parse(readFileSync(join(dir, '.dsh-kiro', 'approvals.json'), 'utf8')) as { tools: string[] }
     expect(parsed.tools).toEqual(['write'])
     expect(ctrl.isToolAllowedForSession('bash')).toBe(true)
   })
@@ -52,7 +52,7 @@ describe('pattern trust (v2 store)', () => {
     const { SessionController } = await import('../src/runtime/session-controller')
     const ctrl: SessionController = new SessionController()
     ctrl.allowPatternForProject({ tool: 'bash', prefix: 'grep ' })
-    const file = join(dir, '.kiro', 'approvals.json')
+    const file = join(dir, '.dsh-kiro', 'approvals.json')
     const parsed = JSON.parse(readFileSync(file, 'utf8')) as { tools: string[]; patterns: { tool: string; prefix: string }[] }
     expect(parsed.patterns).toEqual([{ tool: 'bash', prefix: 'grep ' }])
     // A new boot auto-allows matching commands, not others.

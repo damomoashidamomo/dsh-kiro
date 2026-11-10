@@ -2,7 +2,7 @@
  * Trust store (T-1 split from session-controller): the persistence and
  * matching layer behind the approval panel's finer-grained scopes —
  * project-level whole-tool allowances plus command-prefix patterns in
- * `.kiro/approvals.json` (v2; v1 files contribute their tools array).
+ * `.dsh-kiro/approvals.json` (v2; v1 files contribute their tools array).
  *
  * Pure module: no controller state, fully unit-testable.
  *

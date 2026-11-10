@@ -2,7 +2,7 @@
  * kiro-skills — the dsh-kiro provider for the platform's `ctx.skills`
  * registry: discovers SKILL.md bundles across kiro/dsh/agents roots
  * (project + user level), applies the workspace's selection file
- * (`.kiro/skills.json`, default ALL enabled), and exposes the selection
+ * (`.dsh-kiro/skills.json`, default ALL enabled), and exposes the selection
  * service the `/skills` command drives.
  *
  * Selective loading works at the PROVIDER level: disabled skills are never

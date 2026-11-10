@@ -59,15 +59,15 @@ describe('spillPaste (P2 oversized paste protection)', () => {
   it('below threshold returns undefined and writes nothing', () => {
     rmSync(dir, { recursive: true, force: true })
     expect(spillPaste('x'.repeat(PASTE_SPILL_THRESHOLD - 1), dir)).toBeUndefined()
-    expect(existsSync(join(dir, '.kiro', 'paste'))).toBe(false)
+    expect(existsSync(join(dir, '.dsh-kiro', 'paste'))).toBe(false)
   })
-  it('oversized payload lands in .kiro/paste with a mention path', () => {
+  it('oversized payload lands in .dsh-kiro/paste with a mention path', () => {
     rmSync(dir, { recursive: true, force: true })
     const big = 'log-line\n'.repeat(1500) // ~12KB
     const spill = spillPaste(big, dir)
     expect(spill).toBeDefined()
     expect(spill!.bytes).toBeGreaterThan(8192)
-    expect(spill!.mention).toMatch(/^\.kiro\/paste\/paste-\d{14}\.txt$/)
+    expect(spill!.mention).toMatch(/^\.dsh-kiro\/paste\/paste-\d{14}\.txt$/)
     const written = readFileSync(spill!.path, 'utf8')
     expect(written.length).toBe(big.length)
     rmSync(dir, { recursive: true, force: true })

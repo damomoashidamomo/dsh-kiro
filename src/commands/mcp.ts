@@ -8,6 +8,7 @@
 import type { CommandDefinition } from '@deepseek-ai/dsh-commands'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
+import { dshKiroUserRoot } from '../utils/kiro-home'
 
 interface StatusLike {
   readonly config: { name: string; command?: string; args?: readonly string[]; url?: string }
@@ -18,8 +19,8 @@ interface StatusLike {
 }
 
 const CONFIG_PATHS = [
-  join(process.cwd(), '.kiro', 'settings', 'mcp.json'),
-  join(homedir(), '.kiro', 'settings', 'mcp.json'),
+  join(process.cwd(), '.dsh-kiro', 'settings', 'mcp.json'),
+  join(dshKiroUserRoot(), 'settings', 'mcp.json'),
 ]
 
 const STATE_LABEL: Record<StatusLike['state'], string> = {

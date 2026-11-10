@@ -43,8 +43,8 @@ function withEnv(dir: string, fn: () => void): void {
 }
 
 function writeConfig(dir: string, value: unknown): void {
-  mkdirSync(join(dir, '.kiro'), { recursive: true })
-  writeFileSync(join(dir, '.kiro', 'hooks.json'), JSON.stringify(value))
+  mkdirSync(join(dir, '.dsh-kiro'), { recursive: true })
+  writeFileSync(join(dir, '.dsh-kiro', 'hooks.json'), JSON.stringify(value))
 }
 
 describe('kiro-hooks plugin surface', () => {
@@ -72,7 +72,7 @@ describe('kiro-hooks plugin surface', () => {
 })
 
 describe('kiro-hooks config loading', () => {
-  it('loads workspace .kiro/hooks.json, skips non-command hooks, wires all seven points', () => {
+  it('loads workspace .dsh-kiro/hooks.json, skips non-command hooks, wires all seven points', () => {
     const dir = mkdtempSync(join(tmpdir(), 'kiro-hooks-ws-'))
     writeConfig(dir, {
       hooks: {
@@ -143,13 +143,13 @@ describe('kiro-hooks config loading', () => {
 
   it('a malformed config loads as failed without crashing apply', () => {
     const dir = mkdtempSync(join(tmpdir(), 'kiro-hooks-bad-'))
-    mkdirSync(join(dir, '.kiro'), { recursive: true })
-    writeFileSync(join(dir, '.kiro', 'hooks.json'), '{ not json')
+    mkdirSync(join(dir, '.dsh-kiro'), { recursive: true })
+    writeFileSync(join(dir, '.dsh-kiro', 'hooks.json'), '{ not json')
     withEnv(dir, () => {
       const h = fakeCtx()
       expect(() => apply(h.ctx as never)).not.toThrow()
       const service = getKiroHooks()
-      const ws = service?.sources.find((s) => s.path === join(dir, '.kiro', 'hooks.json'))
+      const ws = service?.sources.find((s) => s.path === join(dir, '.dsh-kiro', 'hooks.json'))
       expect(ws?.loaded).toBe(false)
       expect(ws?.reason).toBeTruthy()
     })
@@ -186,7 +186,7 @@ describe('/hooks command rendering', () => {
     })
     const empty = await hooksCommand.handler({} as never)
     expect((empty as { text: string }).text).toContain('未配置任何 hook')
-    expect((empty as { text: string }).text).toContain('.kiro/hooks.json')
+    expect((empty as { text: string }).text).toContain('.dsh-kiro/hooks.json')
   })
 
   it('reports an error when the engine module was never applied', async () => {

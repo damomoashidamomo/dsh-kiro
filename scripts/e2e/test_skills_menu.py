@@ -55,11 +55,11 @@ class SkillsToggleMenuTest(unittest.TestCase):
         cls.tui = Tui(columns=110, lines=36)
         cls.tui.drain(1.5)
         # Guarantee at least one skill in this workspace.
-        skill_dir = os.path.join(cls.tui.tmp, '.kiro', 'skills', 'probe-skill')
+        skill_dir = os.path.join(cls.tui.tmp, '.dsh-kiro', 'skills', 'probe-skill')
         os.makedirs(skill_dir, exist_ok=True)
         with open(os.path.join(skill_dir, 'SKILL.md'), 'w', encoding='utf-8') as fh:
             fh.write('---\nname: probe-skill\ndescription: 用于测试开关菜单\n---\n\nbody\n')
-        cls.state_path = os.path.join(cls.tui.tmp, '.kiro', 'skills.json')
+        cls.state_path = os.path.join(cls.tui.tmp, '.dsh-kiro', 'skills.json')
         cls.tui.type('/skills', delay=0.02)
         cls.tui.drain(0.4)
         cls.tui.write(b'\r')
@@ -88,7 +88,7 @@ class SkillsToggleMenuTest(unittest.TestCase):
                         'the menu must stay open for more toggles')
         with open(self.state_path, encoding='utf-8') as fh:
             state = json.load(fh)
-        self.assertIn('probe-skill', state.get('disabled', []), 'the choice must persist to .kiro/skills.json')
+        self.assertIn('probe-skill', state.get('disabled', []), 'the choice must persist to .dsh-kiro/skills.json')
 
     def test_30_second_toggle_turns_it_back_on(self):
         self.tui.write(b'1')

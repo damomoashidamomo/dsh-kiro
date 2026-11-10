@@ -1,5 +1,5 @@
 /**
- * `/agent` — manage custom agents against `.kiro/agents/` directories
+ * `/agent` — manage custom agents against `.dsh-kiro/agents/` directories
  * (project first, then the user-global one — the same files kiro-cli reads).
  *
  * create / edit / delete / rename / set-default / validate are implemented

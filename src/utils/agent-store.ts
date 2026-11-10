@@ -1,10 +1,10 @@
 /**
- * Custom-agent store — the `.kiro/agents/*.json` files kiro-cli reads.
+ * Custom-agent store — the `.dsh-kiro/agents/*.json` files kiro-cli reads.
  *
  * Project scope wins over user scope, the same precedence kiro-cli uses. The
  * write operations (create / rename / delete / validate) live here as pure
  * functions over a pair of directories so tests can run against a temp tree
- * instead of the user's `~/.kiro/agents`.
+ * instead of the user's `~/.dsh-kiro/agents`.
  *
  * @module @damomoashidamomo/dsh-kiro/utils/agent-store
  */
@@ -12,10 +12,11 @@
 import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { basename, dirname, join } from 'node:path'
+import { dshKiroUserRoot } from './kiro-home'
 
 /** Project dir first, user dir second — lookup order matters. */
 export function agentDirs(cwd = process.cwd(), home = homedir()): { project: string; user: string } {
-  return { project: join(cwd, '.kiro', 'agents'), user: join(home, '.kiro', 'agents') }
+  return { project: join(cwd, '.dsh-kiro', 'agents'), user: join(dshKiroUserRoot(home), 'agents') }
 }
 
 export interface AgentSummary {
@@ -131,7 +132,7 @@ export function validateAgentFile(path: string): { ok: true; name: string } | { 
   return { ok: true, name: parsed.name }
 }
 
-/** 引擎绑定（dsh-kiro 私有，存工作区 `.kiro/agent-engines.json`）。 */
+/** 引擎绑定（dsh-kiro 私有，存工作区 `.dsh-kiro/agent-engines.json`）。 */
 export interface EngineBinding {
   readonly engine: 'kiro' | 'dsh'
   readonly toolEngine?: 'rust' | 'dsh'
@@ -143,13 +144,13 @@ interface AgentEnginesFile {
 }
 
 function userEnginesFile(): string {
-  return join(homedir(), '.kiro', 'agent-engines.json')
+  return join(dshKiroUserRoot(), 'agent-engines.json')
 }
 
 /**
  * 绑定文件的候选列表（按优先级）：
- * 1. 用户级 `~/.kiro/agent-engines.json` —— 写入的唯一落点，一处写处处生效；
- * 2. 从 cwd 逐级向上的 `.kiro/agent-engines.json`（历史/工作区级文件，兼容读取）。
+ * 1. 用户级 `~/.dsh-kiro/agent-engines.json` —— 写入的唯一落点，一处写处处生效；
+ * 2. 从 cwd 逐级向上的 `.dsh-kiro/agent-engines.json`（历史/工作区级文件，兼容读取）。
  * 注意：`agent-engines.json` 是 dsh-kiro 私有文件名，kiro-cli 不读取。
  */
 function enginesFileCandidates(cwd: string): string[] {
@@ -157,7 +158,7 @@ function enginesFileCandidates(cwd: string): string[] {
   const list: string[] = [userFile]
   let dir = cwd
   for (;;) {
-    const candidate = join(dir, '.kiro', 'agent-engines.json')
+    const candidate = join(dir, '.dsh-kiro', 'agent-engines.json')
     if (candidate !== userFile) list.push(candidate)
     if (dir === homedir() || dir === '/' || dir.length <= 3) break
     const parent = dirname(dir)

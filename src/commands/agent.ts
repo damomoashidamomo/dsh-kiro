@@ -1,5 +1,5 @@
 /**
- * `/agent` — manage custom agents against `.kiro/agents/` directories
+ * `/agent` — manage custom agents against `.dsh-kiro/agents/` directories
  * (project first, then the user-global one — the same files kiro-cli reads).
  *
  * create / edit / delete / rename / set-default / validate are implemented
@@ -132,7 +132,7 @@ export const agentCommand: CommandDefinition = {
           return { kind: 'error', text: `${match.path} 不是有效 JSON` }
         }
         const ctx = (agent as { ctx?: unknown }).ctx
-        // 引擎绑定来自 dsh-kiro 私有的 .kiro/agent-engines.json（kiro-cli 的
+        // 引擎绑定来自 dsh-kiro 私有的 .dsh-kiro/agent-engines.json（kiro-cli 的
         // schema 不认识引擎字段，绝不能写进共享的 agent 定义文件）。
         const binding = getEngineBinding(process.cwd(), target)
         const effective = {
@@ -157,7 +157,7 @@ export const agentCommand: CommandDefinition = {
         const lines = [`已切换到 agent「${target}」（${match.source} 级）：`]
         lines.push(applied.length > 0 ? `  ${applied.join(' · ')}` : '  未声明模型/档位，保持现状。')
         if (typeof preset.prompt === 'string' && preset.prompt !== '') {
-          lines.push('  人设长期生效建议：内容放入 .kiro/steering/ 后 /steering reload（工作区级）。')
+          lines.push('  人设长期生效建议：内容放入 .dsh-kiro/steering/ 后 /steering reload（工作区级）。')
         }
         return { kind: 'success', text: lines.join('\n') }
       }
@@ -233,10 +233,10 @@ export const agentCommand: CommandDefinition = {
         const target = args.filter((arg) => !arg.startsWith('-'))[0]
         if (target === undefined) return { kind: 'error', text: 'usage: /agent set-default <name>' }
         if (findAgent(dirs(), target) === undefined) return { kind: 'error', text: `no agent named "${target}"` }
-        // 写入 dsh-kiro 私有的 .kiro/agent-engines.json —— 绝不写 kiro-cli 可能
+        // 写入 dsh-kiro 私有的 .dsh-kiro/agent-engines.json —— 绝不写 kiro-cli 可能
         // 读取的共享文件（它的 schema 校验是严格的，未知字段会让它启动报错）。
         setDefaultAgent(process.cwd(), target)
-        return { kind: 'success', text: `✔ 默认 agent → ${target}（写入 .kiro/agent-engines.json，下次启动生效）` }
+        return { kind: 'success', text: `✔ 默认 agent → ${target}（写入 .dsh-kiro/agent-engines.json，下次启动生效）` }
       }
       case 'validate': {
         const target = flagValue(args, 'path') ?? args.filter((arg) => !arg.startsWith('-'))[0]
@@ -260,7 +260,7 @@ export const agentCommand: CommandDefinition = {
         }
         const rust = args.includes('--rust') && unit === 'kiro'
         setEngineBinding(process.cwd(), engineName, { engine: unit, toolEngine: rust ? 'rust' : 'dsh' })
-        return { kind: 'success', text: `✔ ${engineName} 引擎绑定 → ${unit}${rust ? ' + Rust 沙箱' : ''}（写入 .kiro/agent-engines.json，swap/启动时生效）` }
+        return { kind: 'success', text: `✔ ${engineName} 引擎绑定 → ${unit}${rust ? ' + Rust 沙箱' : ''}（写入 .dsh-kiro/agent-engines.json，swap/启动时生效）` }
       }
       case 'clear-engine': {
         const target = args.filter((arg) => !arg.startsWith('-'))[0]
@@ -336,7 +336,7 @@ export const agentCommand: CommandDefinition = {
           ].join('\n'),
         }
       case 'help':
-        return { kind: 'success', text: '/agent <list|show|swap|create|edit|delete|rename|set-default|set-engine|clear-engine|validate|generate|schema|help> [name]\n  支持中文别名：生成/列表/切换/新建/编辑/删除/重命名/校验/查看\n  引擎绑定存于 .kiro/agent-engines.json（与 kiro-cli 完全隔离）' }
+        return { kind: 'success', text: '/agent <list|show|swap|create|edit|delete|rename|set-default|set-engine|clear-engine|validate|generate|schema|help> [name]\n  支持中文别名：生成/列表/切换/新建/编辑/删除/重命名/校验/查看\n  引擎绑定存于 .dsh-kiro/agent-engines.json（与 kiro-cli 完全隔离）' }
       default:
         return { kind: 'success', text: `unknown subcommand: ${sub}. Try /agent help.` }
     }

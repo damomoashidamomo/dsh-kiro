@@ -55,7 +55,7 @@ export const specCommand: CommandDefinition = {
         kind: 'success',
         text: [
           `Spec「${active.feature}」当前阶段：${(PHASE_LABEL as Record<string, string>)[active.phase]}`,
-          `  目录：.kiro/specs/${active.feature}/`,
+          `  目录：.dsh-kiro/specs/${active.feature}/`,
           '  /spec approve  确认本阶段，进入下一阶段',
           '  /spec revise <意见>  打回本阶段修改',
           '  /spec abort  放弃',

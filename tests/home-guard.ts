@@ -1,5 +1,6 @@
 /**
- * Global guard for the unit suite: **the real `~/.kiro` must not change**.
+ * Global guard for the unit suite: **the real `~/.kiro` AND `~/.dsh-kiro`
+ * must not change**.
  *
  * `~/.kiro` is kiro-cli's own directory. A test once deleted and rewrote
  * `~/.kiro/settings/trusted-tools.json` on every run because the trust store
@@ -21,11 +22,11 @@ import { join } from 'node:path'
 /** Snapshot of one tree: absolute path → "size:mtimeMs". */
 export type TreeSnapshot = Map<string, string>
 
-/** Real kiro-cli directory the guard protects (or the override). */
-export function guardRoot(): string {
+/** Directories the guard protects (or the single override). */
+export function guardRoots(): string[] {
   const override = process.env.DSH_KIRO_HOME_GUARD_ROOT
-  if (override !== undefined && override !== '') return override
-  return join(homedir(), '.kiro')
+  if (override !== undefined && override !== '') return [override]
+  return [join(homedir(), '.kiro'), join(homedir(), '.dsh-kiro')]
 }
 
 /** Walk `dir` and fingerprint every regular file; a missing dir is empty. */
@@ -70,27 +71,28 @@ export function diffSnapshots(before: TreeSnapshot, after: TreeSnapshot): string
   return changes
 }
 
-let before: TreeSnapshot | undefined
-let guardedRoot = ''
+let before: Array<{ root: string; snapshot: TreeSnapshot }> = []
 
 export function setup(): void {
   if (process.env.DSH_KIRO_HOME_GUARD === '0') return
-  guardedRoot = guardRoot()
-  before = snapshotTree(guardedRoot)
+  before = guardRoots().map((root) => ({ root, snapshot: snapshotTree(root) }))
 }
 
 export function teardown(): void {
-  if (before === undefined) return
-  const after = snapshotTree(guardedRoot)
-  const changes = diffSnapshots(before, after)
-  before = undefined
+  if (before.length === 0) return
+  const changes: string[] = []
+  for (const entry of before) {
+    changes.push(...diffSnapshots(entry.snapshot, snapshotTree(entry.root)))
+  }
+  before = []
   if (changes.length === 0) return
   throw new Error(
     [
-      `unit tests changed the real kiro directory (${guardedRoot}):`,
+      `unit tests changed a real home directory (one of: ${guardRoots().join(', ')}):`,
       ...changes.map((line) => `  ${line}`),
-      'A test reached a homedir()-based default. Pass an explicit /tmp path instead',
-      '(TrustStore(path), agentDirs({user}), …). Set DSH_KIRO_HOME_GUARD=0 to skip this guard.',
+      'A test reached a real-home default. Aim it at a /tmp path instead',
+      '(TrustStore(path), agentDirs({user}), DSH_KIRO_HOME, …).',
+      'Set DSH_KIRO_HOME_GUARD=0 to skip this guard.',
     ].join('\n'),
   )
 }

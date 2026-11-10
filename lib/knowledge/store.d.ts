@@ -1,5 +1,5 @@
 /**
- * dsh-kiro knowledge base — a tiny BM25 index over `.kiro/knowledge/`. The
+ * dsh-kiro knowledge base — a tiny BM25 index over `.dsh-kiro/knowledge/`. The
  * manager walks the configured include/exclude patterns at `add`-time,
  * stores one file per entry on disk, and answers `query` calls with a
  * ranked list of snippets.
@@ -80,7 +80,7 @@ export declare class KnowledgeStore {
     addFile(path: string, label?: string): KnowledgeEntry;
     /**
      * Recursively index a directory. Hidden directories (`.git`, `node_modules`,
-     * `.kiro`, …) are skipped, as are files above {@link MAX_FILE_BYTES},
+     * `.kiro`(旧 kiro-cli 目录), …) are skipped, as are files above {@link MAX_FILE_BYTES},
      * binary-looking files, and files whose extension is not in `options.extensions`.
      */
     addDir(dir: string, options?: AddDirOptions): KnowledgeEntry[];

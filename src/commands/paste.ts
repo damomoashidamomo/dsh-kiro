@@ -3,7 +3,7 @@ import { join } from 'node:path'
 import type { CommandDefinition } from '@deepseek-ai/dsh-commands'
 
 /** Workspace-relative directory the oversized-paste spill writes into. */
-const PASTE_DIR = join('.kiro', 'paste')
+const PASTE_DIR = join('.dsh-kiro', 'paste')
 
 interface PasteFile {
   readonly name: string
@@ -50,13 +50,13 @@ function formatTime(ms: number): string {
 function usage(): { kind: 'error'; text: string } {
   return {
     kind: 'error',
-    text: 'usage: /paste list   列出 .kiro/paste/ 落盘的粘贴文件\n       /paste clean  删除全部落盘粘贴文件',
+    text: 'usage: /paste list   列出 .dsh-kiro/paste/ 落盘的粘贴文件\n       /paste clean  删除全部落盘粘贴文件',
   }
 }
 
 /**
  * /paste — manage the oversized-paste spill files that Prompt writes into
- * `<workspace>/.kiro/paste/paste-<stamp>.txt` (see `spillPaste`).
+ * `<workspace>/.dsh-kiro/paste/paste-<stamp>.txt` (see `spillPaste`).
  *
  *   /paste          list the spilled files (same as `/paste list`)
  *   /paste list     list them: name, size, modification time, newest first
@@ -64,7 +64,7 @@ function usage(): { kind: 'error'; text: string } {
  *                   directory are left alone); removes the directory when it
  *                   ends up empty
  *
- * The draft's `@.kiro/paste/…` mentions are only path references — cleaning
+ * The draft's `@.dsh-kiro/paste/…` mentions are only path references — cleaning
  * the files means a draft that still references one must be re-pasted.
  */
 export const pasteCommand: CommandDefinition = {
@@ -88,7 +88,7 @@ export const pasteCommand: CommandDefinition = {
         lines.push(`  ${i + 1}. ${f.name} · ${formatBytes(f.bytes)} · ${formatTime(f.mtimeMs)}`)
       })
       lines.push('')
-      lines.push('用 /paste clean 删除全部；编辑草稿里的 @.kiro/paste/… 引用需要重新粘贴内容。')
+      lines.push('用 /paste clean 删除全部；编辑草稿里的 @.dsh-kiro/paste/… 引用需要重新粘贴内容。')
       return { kind: 'success', text: lines.join('\n') }
     }
 

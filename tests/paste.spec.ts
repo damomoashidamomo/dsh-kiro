@@ -11,7 +11,7 @@ const run = (rawInput: string) => pasteCommand.handler({
   rawInput,
 } as never)
 
-const pasteDir = (): string => join(root, '.kiro', 'paste')
+const pasteDir = (): string => join(root, '.dsh-kiro', 'paste')
 
 beforeEach(() => {
   root = mkdtempSync(join(tmpdir(), 'kiro-paste-'))
