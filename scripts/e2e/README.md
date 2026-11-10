@@ -50,5 +50,14 @@ KIRO_E2E_LIVE=1 python3 -m unittest discover -s scripts/e2e -p 'test_hitl_live.p
 ## 约定
 
 - 工作区一律 `/tmp/kiro-e2e-*`（安全规则：不碰其它目录）。
+- **HERMETIC HOME**：每个用例的 TUI 都有一个自己的 `/tmp/.../.home` 作为 `HOME`
+  （`harness.py` 里设置）。`~/.kiro` 是 kiro-cli 自己的目录（agents/、settings/
+  trusted-tools.json、agent-engines.json、skills/），用例**绝不能**往里写——
+  历史事故：`test_audit_fixes.py` 曾把 `audit-broken.json` 写进真实
+  `~/.kiro/agents`。要造"用户级"文件时请用 `tui.home`（如
+  `os.path.join(tui.home, '.kiro', 'agents', ...)`）。`DSH_HOME` 保持真实：
+  profile 里的构建从那里解析。
 - harness 强制 `COLORTERM=truecolor FORCE_COLOR=3`——多项历史 bug 只在
   真彩色下暴露。
+- 单元测试那侧还有一道硬护栏：`vitest` 跑前/跑后给真实 `~/.kiro` 做指纹快照，
+  有任何改动就让整套单测失败（见 `tests/home-guard.ts`）。

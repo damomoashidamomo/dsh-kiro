@@ -25,17 +25,28 @@ export interface TrustDocument {
     /** Document schema version — bumped on breaking changes. */
     readonly version: 1;
 }
-/** Resolve the path to the trust document. */
+/**
+ * Resolve the path to the trust document.
+ *
+ * The real file lives in the directory kiro-cli owns, so **tests must never
+ * reach it through this default**: every reader/writer below takes an explicit
+ * path argument (`readTrust(path)`, `writeTrust(doc, path)`, `new
+ * TrustStore(path)`), and the unit suite runs with `HOME` redirected to a
+ * throwaway directory (`tests/setup.ts`) as a second safety net.
+ */
 export declare function trustPath(): string;
 /** Read the persisted document; return a fresh one if missing or invalid. */
-export declare function readTrust(): TrustDocument;
+export declare function readTrust(path?: string): TrustDocument;
 /** Persist the trust document to disk (atomic write via tmp+rename). */
-export declare function writeTrust(doc: TrustDocument): void;
+export declare function writeTrust(doc: TrustDocument, path?: string): void;
 /** In-memory trust manager that the runtime consults before invoking a tool. */
 export declare class TrustStore {
     private document;
     /** Listeners notified after every mutation. */
     private readonly listeners;
+    /** Where this store persists; defaults to the kiro-cli-owned file. */
+    private readonly path;
+    constructor(path?: string);
     /** Snapshot the current document. */
     snapshot(): TrustDocument;
     /** Subscribe to changes; returns the disposer. */

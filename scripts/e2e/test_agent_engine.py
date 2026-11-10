@@ -83,8 +83,9 @@ class SwapAppliesEngineTest(unittest.TestCase):
         self.tui.drain(0.4)
         self.tui.write(b'\r')
         self.tui.drain(1.5)
-        # 引擎绑定不在共享 schema 的文件里（kiro-cli 严格校验未知字段）
-        self.assertFalse(os.path.exists(os.path.expanduser('~/.kiro/agents/engine-e2e.json')))
+        # 引擎绑定不在共享 schema 的文件里（kiro-cli 严格校验未知字段）；
+        # TUI 跑在 hermetic HOME 里，所以这里也不会碰到真实的 ~/.kiro/agents。
+        self.assertFalse(os.path.exists(os.path.join(self.tui.home, '.kiro', 'agents', 'engine-e2e.json')))
 
 
 class BootAppliesPresetTest(unittest.TestCase):

@@ -23,7 +23,10 @@ class SwapBrokenFileTest(unittest.TestCase):
     def setUpClass(cls):
         cls.tui = Tui(columns=110, lines=36)
         cls.tui.drain(1.5)
-        cls.bad = os.path.expanduser('~/.kiro/agents/audit-broken.json')
+        # The TUI runs with a HERMETIC HOME (harness.py): write the broken
+        # definition there, never into the real ~/.kiro/agents that kiro-cli
+        # owns (this test used to leave a file in it on every run).
+        cls.bad = os.path.join(cls.tui.home, '.kiro', 'agents', 'audit-broken.json')
         os.makedirs(os.path.dirname(cls.bad), exist_ok=True)
         with open(cls.bad, 'w', encoding='utf-8') as fh:
             fh.write('null')
@@ -63,7 +66,7 @@ class CreateFlagValueTest(unittest.TestCase):
         self.tui.write(b'\r')
         self.tui.drain(1.8)
         self.assertIn('usage: /agent create', self.tui.visible())
-        self.assertFalse(os.path.exists(os.path.expanduser('~/.kiro/agents/hello.json')),
+        self.assertFalse(os.path.exists(os.path.join(self.tui.home, '.kiro', 'agents', 'hello.json')),
                          'the flag value must not become an agent named hello')
 
 

@@ -38,14 +38,21 @@ function emptyDocument(): TrustDocument {
   return { trustAll: false, entries: {}, version: 1 }
 }
 
-/** Resolve the path to the trust document. */
+/**
+ * Resolve the path to the trust document.
+ *
+ * The real file lives in the directory kiro-cli owns, so **tests must never
+ * reach it through this default**: every reader/writer below takes an explicit
+ * path argument (`readTrust(path)`, `writeTrust(doc, path)`, `new
+ * TrustStore(path)`), and the unit suite runs with `HOME` redirected to a
+ * throwaway directory (`tests/setup.ts`) as a second safety net.
+ */
 export function trustPath(): string {
   return join(homedir(), '.kiro', 'settings', 'trusted-tools.json')
 }
 
 /** Read the persisted document; return a fresh one if missing or invalid. */
-export function readTrust(): TrustDocument {
-  const path = trustPath()
+export function readTrust(path = trustPath()): TrustDocument {
   if (!existsSync(path)) return emptyDocument()
   try {
     const raw = JSON.parse(readFileSync(path, 'utf8')) as Partial<TrustDocument>
@@ -63,17 +70,23 @@ export function readTrust(): TrustDocument {
 }
 
 /** Persist the trust document to disk (atomic write via tmp+rename). */
-export function writeTrust(doc: TrustDocument): void {
-  const path = trustPath()
+export function writeTrust(doc: TrustDocument, path = trustPath()): void {
   mkdirSync(dirname(path), { recursive: true })
   writeFileSync(path, `${JSON.stringify(doc, null, 2)}\n`, 'utf8')
 }
 
 /** In-memory trust manager that the runtime consults before invoking a tool. */
 export class TrustStore {
-  private document: TrustDocument = readTrust()
+  private document: TrustDocument
   /** Listeners notified after every mutation. */
   private readonly listeners = new Set<(doc: TrustDocument) => void>()
+  /** Where this store persists; defaults to the kiro-cli-owned file. */
+  private readonly path: string
+
+  constructor(path = trustPath()) {
+    this.path = path
+    this.document = readTrust(path)
+  }
 
   /** Snapshot the current document. */
   snapshot(): TrustDocument {
@@ -133,7 +146,7 @@ export class TrustStore {
 
   /** Persist + notify. */
   private persist(): void {
-    writeTrust(this.document)
+    writeTrust(this.document, this.path)
     for (const listener of this.listeners) listener(this.document)
   }
 }
