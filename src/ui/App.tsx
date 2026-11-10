@@ -247,7 +247,7 @@ export function App({ controller, seedTask, activeAgentName, onSubmit, fileSearc
   // when the identity diverges or a decision is pending — so at rest the last
   // transcript row (an echoed `0% >`) sits directly above the prompt.
   const bootIdentity = useRef<string | undefined>(undefined)
-  const identity = identityText(state.agent, activeAgentName)
+  const identity = identityText(state.agent, state.agent.activeAgent ?? activeAgentName)
   useEffect(() => {
     if (bootIdentity.current !== undefined) return
     // The splash must be frozen into <Static> FIRST: it becomes staticItems[0],
@@ -507,7 +507,7 @@ export function App({ controller, seedTask, activeAgentName, onSubmit, fileSearc
         bootIdentity: bootIdentity.current,
         awaitingDecision: state.approval !== undefined || state.question !== undefined,
       })
-        ? <StatusBar agent={state.agent} prefix={prefix} activeAgentName={activeAgentName} />
+        ? <StatusBar agent={state.agent} prefix={prefix} activeAgentName={state.agent.activeAgent ?? activeAgentName} />
         : null}
       {optionMenu !== undefined ? (
         <OptionMenu

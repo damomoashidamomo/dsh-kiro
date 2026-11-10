@@ -93,3 +93,23 @@ describe('agent store', () => {
     expect(validateAgentFile(nameless)).toMatchObject({ ok: false })
   })
 })
+
+describe('renderAgentList', () => {
+  it('marks the active preset and shows it in the header', async () => {
+    const { renderAgentList } = await import('../src/commands/agent')
+    const text = renderAgentList([
+      { name: 'gary-test261104', description: 'test', source: 'project' },
+      { name: 'testgary261106', description: '通用编码助手', source: 'user' },
+    ], 'testgary261106')
+    expect(text).toContain('2 custom agent(s)（当前：testgary261106）:')
+    expect(text).toContain('[user] testgary261106 ◀ 当前  通用编码助手')
+    expect(text).not.toContain('gary-test261104 ◀ 当前')
+  })
+
+  it('default (no preset) shows in the header without any marker', async () => {
+    const { renderAgentList } = await import('../src/commands/agent')
+    const text = renderAgentList([{ name: 'x', description: '', source: 'project' }], 'default')
+    expect(text).toContain('（当前：default）')
+    expect(text).not.toContain('◀ 当前')
+  })
+})

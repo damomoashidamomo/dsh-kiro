@@ -80,6 +80,24 @@ export function agentListBridge(): readonly { name: string; description: string 
   return listAgents().map((a) => ({ name: a.name, description: a.description }))
 }
 
+export interface AgentListRow {
+  readonly name: string
+  readonly description: string
+  readonly source: 'project' | 'user'
+}
+
+/** Render `/agent list` output; the active preset gets a ◀ 当前 marker. */
+export function renderAgentList(agents: readonly AgentListRow[], current: string): string {
+  const lines = [`${agents.length.toString()} custom agent(s)（当前：${current}）:`]
+  for (const a of agents) {
+    const tag = a.source === 'project' ? 'project' : 'user'
+    const mark = a.name === current ? ' ◀ 当前' : ''
+    const desc = a.description !== '' ? `  ${a.description}` : ''
+    lines.push(`  [${tag}] ${a.name}${mark}${desc}`)
+  }
+  return lines.join('\n')
+}
+
 export const agentCommand: CommandDefinition = {
   name: 'agent',
   description: 'Manage custom agents: list, swap, create, edit, delete, show',
@@ -93,13 +111,10 @@ export const agentCommand: CommandDefinition = {
         if (agents.length === 0) {
           return { kind: 'success', text: '（还没有自定义 agent — /agent create <name> 创建一个）' }
         }
-        const lines = [`${agents.length.toString()} custom agent(s):`]
-        for (const a of agents) {
-          const tag = a.source === 'project' ? 'project' : 'user'
-          const desc = a.description !== '' ? `  ${a.description}` : ''
-          lines.push(`  [${tag}] ${a.name}${desc}`)
-        }
-        return { kind: 'success', text: lines.join('\n') }
+        // 当前激活的 agent（状态栏方括号同款数据源）：default = 未套用预设。
+        const current = (globalThis as { __kiroControllerState?: () => { agent?: { activeAgent?: string } } })
+          .__kiroControllerState?.()?.agent?.activeAgent ?? 'default'
+        return { kind: 'success', text: renderAgentList(agents, current) }
       }
       case 'show': {
         const target = args[0]

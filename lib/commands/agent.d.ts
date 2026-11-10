@@ -14,4 +14,11 @@ export declare function agentListBridge(): readonly {
     name: string;
     description: string;
 }[];
+export interface AgentListRow {
+    readonly name: string;
+    readonly description: string;
+    readonly source: 'project' | 'user';
+}
+/** Render `/agent list` output; the active preset gets a ◀ 当前 marker. */
+export declare function renderAgentList(agents: readonly AgentListRow[], current: string): string;
 export declare const agentCommand: CommandDefinition;
