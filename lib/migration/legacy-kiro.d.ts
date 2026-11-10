@@ -25,8 +25,13 @@ export interface MigrationResult {
 /**
  * Migrate one pair (legacy dir -> owned root). Idempotent via the marker file;
  * a missing legacy dir is a no-op.
+ *
+ * `skipAgentsAlsoIn`: when migrating the WORKSPACE level, an agent whose name
+ * already exists (with identical content) in the USER legacy directory is
+ * skipped — findAgent prefers the workspace copy anyway, and copying it to
+ * both scopes would put duplicate rows into the /agent menu.
  */
-export declare function migrateLegacyRoot(legacyDir: string, root: string): MigrationResult;
+export declare function migrateLegacyRoot(legacyDir: string, root: string, skipAgentsAlsoIn?: string): MigrationResult;
 /** Migrate both levels (user + workspace). Returns the two reports. */
 export declare function migrateLegacyKiro(options?: {
     userRoot?: string;

@@ -140,7 +140,10 @@ export function OptionMenu({ title, options, onPick, onCancel }: OptionMenuProps
           const hint = clipColumns(opt.hint, hintBudget)
           const hintStyled = selected ? hint : palette.dim(hint)
           return (
-            <Text key={opt.value}>
+            // key is index-qualified: the same value CAN legitimately appear twice
+            // (e.g. an agent defined in both the workspace and the user root) and a
+            // bare-value key makes React drop/duplicate rows + warn.
+            <Text key={`${idx}:${opt.value}`}>
               <Text>{marker}</Text>
               <Text>{num}</Text>
               <Text>{label} — </Text>

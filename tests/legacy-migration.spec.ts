@@ -124,6 +124,31 @@ describe('legacy kiro migration', () => {
     expect(existsSync(userRoot)).toBe(false)
   })
 
+  it('workspace agents identical to a user-level one are not copied twice', () => {
+    // Same name + same content in both legacy levels: copying to both scopes
+    // would list the agent twice in the /agent menu (and collide React keys).
+    mkdirSync(join(legacyUser, 'agents'), { recursive: true })
+    mkdirSync(join(legacyProject, 'agents'), { recursive: true })
+    writeFileSync(join(legacyUser, 'agents', 'backend.json'), '{"name":"backend"}')
+    writeFileSync(join(legacyProject, 'agents', 'backend.json'), '{"name":"backend"}')
+    writeFileSync(join(legacyProject, 'agents', 'frontend.json'), '{"name":"frontend"}')
+
+    migrateLegacyKiro({ userRoot, projectRoot, legacyUserRoot: legacyUser, legacyProjectRoot: legacyProject })
+    expect(existsSync(join(userRoot, 'agents', 'backend.json'))).toBe(true)
+    expect(existsSync(join(projectRoot, 'agents', 'backend.json'))).toBe(false, 'identical duplicate must be skipped')
+    expect(existsSync(join(projectRoot, 'agents', 'frontend.json'))).toBe(true, 'workspace-only agent is kept')
+  })
+
+  it('workspace agent with DIFFERENT content than the user copy is kept (workspace wins)', () => {
+    mkdirSync(join(legacyUser, 'agents'), { recursive: true })
+    mkdirSync(join(legacyProject, 'agents'), { recursive: true })
+    writeFileSync(join(legacyUser, 'agents', 'backend.json'), '{"name":"backend","prompt":"user version"}')
+    writeFileSync(join(legacyProject, 'agents', 'backend.json'), '{"name":"backend","prompt":"workspace version"}')
+    migrateLegacyKiro({ userRoot, projectRoot, legacyUserRoot: legacyUser, legacyProjectRoot: legacyProject })
+    expect(existsSync(join(projectRoot, 'agents', 'backend.json'))).toBe(true)
+    expect(readFileSync(join(projectRoot, 'agents', 'backend.json'), 'utf8')).toContain('workspace version')
+  })
+
   it('runtime artifacts (loop-log, paste) are not migrated', () => {
     writeFileSync(join(legacyProject, 'loop-log.jsonl'), '{"event":{}}')
     mkdirSync(join(legacyProject, 'paste'), { recursive: true })

@@ -396,7 +396,14 @@ export function App({ controller, seedTask, activeAgentName, onSubmit, fileSearc
       const presetNames = new Set(presets.map((preset) => preset.name))
       // Agent rows are SINGLE-SELECT: picking one swaps IMMEDIATELY (like a
       // radio list), no second Enter on a prefilled draft.
+      // The same name can exist in BOTH scopes (workspace + user root, e.g.
+      // after the 0.7.0 migration copied each level's legacy data). findAgent
+      // prefers the workspace copy, so the menu shows it once — first
+      // occurrence wins (listAgents orders workspace before user).
+      const menuSeen = new Set<string>()
       for (const preset of presets) {
+        if (menuSeen.has(preset.name)) continue
+        menuSeen.add(preset.name)
         rows.splice(rows.length - 1, 0, {
           value: preset.name,
           label: clipColumnsForMenu(preset.name, 20),
