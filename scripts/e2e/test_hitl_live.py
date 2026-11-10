@@ -20,6 +20,7 @@ import time
 import unittest
 
 from harness import Tui
+from screen import Screen
 
 LIVE = os.environ.get('KIRO_E2E_LIVE') == '1'
 SKIP = 'live 用例需要真实模型调用：KIRO_E2E_LIVE=1 才跑'
@@ -135,6 +136,47 @@ class BatchedAskUserLiveTest(unittest.TestCase):
         self.assertIn('PIN-B1', line[-1], '第二页的答案没回到模型')
         self.assertIn('PIN-C1', line[-1], '第三页的答案没回到模型')
 
+
+@unittest.skipUnless(LIVE, SKIP)
+class SkillLoadLiveTest(unittest.TestCase):
+    """真实调用 skill 工具加载技能——0.7.1 曾在真实会话里报
+    "loaded skill \"x\" description must be a string"（provider get() 少了
+    description 字段），这个用例保证加载路径端到端可用。"""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.tui = Tui(columns=110, lines=40, boot_timeout=150, argv=['--engine', 'kiro'])
+        cls.probe = f'probe-load-{str(int(time.time()))[-6:]}'
+        write_skill(cls.tui.tmp, cls.probe, '技能加载链路验证探针', body='这个技能的用途：验证 skill 工具能完整加载并返回正文。')
+        cls.tui.drain(0.5)
+        # 强指令措辞：弱请求（"请先加载…"）下模型可能直接凭目录描述回答、
+        # 不调用工具——那测不到加载链路。
+        cls.tui.type(f'你必须先调用 skill 工具（工具名就是 skill，参数 name 填 "{cls.probe}"）加载这个技能，然后才能回答它的用途是什么。现在就调用。', delay=0.01)
+        cls.tui.drain(0.3)
+        cls.tui.write(b'\r')
+        # Raw bytes have ANSI codes between "✓" and "skill · done" — a literal
+        # wait_for never matches. Poll the STRIPPED screen instead.
+        cls.done = False
+        deadline = time.time() + 240
+        while time.time() < deadline:
+            cls.tui.drain(0.4)
+            screen = Screen(110, 40)
+            screen.feed(cls.tui.raw)
+            if any('skill · done' in row for row in screen.rows()):
+                cls.done = True
+                break
+        cls.tui.drain(4.0)
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.tui.quit()
+
+    def test_10_skill_tool_loaded_without_shape_error(self):
+        visible = self.tui.visible()
+        self.assertTrue(self.done, 'skill 工具没有被调用')
+        self.assertNotIn('must be a string', visible, '加载结果不能缺字段（description/source）')
+        self.assertNotIn('技能加载失败', visible)
+        self.assertIn(self.probe, visible)
 
 if __name__ == '__main__':
     unittest.main()

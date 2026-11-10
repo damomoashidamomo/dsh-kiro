@@ -164,11 +164,27 @@ export function apply(ctx: Context): void {
         const raw = readFileSync(candidate.locator.path, 'utf8')
         const end = raw.startsWith('---') ? raw.indexOf('\n---', 3) : -1
         const body = end >= 0 ? raw.slice(raw.indexOf('\n', end + 1) + 1) : raw
+        // The platform validates EVERY loaded skill (name/description/source/
+        // provider/content must be strings — packages/skill validateDefinition).
+        // A bare {name, provider, content, path} used to pass list() but blew up
+        // on load with "loaded skill \"x\" description must be a string".
+        const meta = parseFrontmatter(raw)
+        const description = typeof meta['description'] === 'string' && meta['description'] !== ''
+          ? meta['description']
+          : candidate.name
         return {
           name: candidate.name,
           provider: candidate.provider,
           content: body.trim(),
           path: candidate.locator.path,
+          description,
+          source: 'kiro',
+          ...(typeof meta['when-to-use'] === 'string' && meta['when-to-use'] !== '' ? { whenToUse: meta['when-to-use'] } : {}),
+          invocation: {
+            modelInvocable: meta['disable-model-invocation'] !== 'true',
+            userInvocable: true,
+          },
+          metadata: meta,
         }
       },
     }
