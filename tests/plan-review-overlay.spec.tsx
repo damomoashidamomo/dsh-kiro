@@ -64,6 +64,76 @@ describe('PlanReviewOverlay', () => {
     unmount()
   })
 
+  it('Enter on the ✏️ custom row submits ONLY the typed text (regression 0.7.3)', async () => {
+    // Exact user flow: ↓ to the custom row, Enter (opens text mode), type the
+    // answer, Enter. Used to swallow the text and bounce back to the menu.
+    const q: QuestionRequestUi = {
+      id: 'q1',
+      question: '你想要哪种类型的打火机？',
+      options: [
+        { label: '煤油防风' },
+        { label: '明火复古' },
+        { label: '充气蓝焰' },
+        { label: '户外战术' },
+      ],
+    }
+    const onResolve = vi.fn()
+    const { stdin, unmount } = render(<PlanReviewOverlay request={q} onResolve={onResolve} />)
+    await settle()
+    for (const _ of [1, 2, 3, 4]) { // ↓ ×4, ONE key per write: ink parses a
+      stdin.write('\x1b[B')         // concatenated run as a single arrow
+      await settle()
+    }
+    stdin.write('\r')               // Enter → text mode
+    await settle()
+    stdin.write('双电弧打火机,充电的')
+    await settle()
+    stdin.write('\r')                           // Enter → must submit the text
+    await settle()
+    expect(onResolve).toHaveBeenCalledWith({ kind: 'answer', selected: [], custom: '双电弧打火机,充电的' })
+    unmount()
+  })
+
+  it('plan review: digit on a non-approve option + feedback text keeps both', async () => {
+    const q: QuestionRequestUi = {
+      id: 'q2',
+      question: '批准这个计划？',
+      options: [{ label: '批准' }, { label: '继续规划' }],
+      approveLabel: '批准',
+    }
+    const onResolve = vi.fn()
+    const { stdin, unmount } = render(<PlanReviewOverlay request={q} onResolve={onResolve} />)
+    await settle()
+    stdin.write('2')          // non-approve digit → feedback mode, 乙 highlighted
+    await settle()
+    stdin.write('预算一千内')  // optional feedback text
+    await settle()
+    stdin.write('\r')
+    await settle()
+    expect(onResolve).toHaveBeenCalledWith({ kind: 'answer', selected: ['继续规划'], custom: '预算一千内' })
+    unmount()
+  })
+
+  it('digit-selecting the ✏️ custom row opens text mode directly', async () => {
+    const q: QuestionRequestUi = {
+      id: 'q3',
+      question: '选一个',
+      options: [{ label: '甲' }, { label: '乙' }],
+    }
+    const onResolve = vi.fn()
+    const { stdin, lastFrame, unmount } = render(<PlanReviewOverlay request={q} onResolve={onResolve} />)
+    await settle()
+    stdin.write('3') // = options.length + 1 → the custom row
+    await settle()
+    expect(lastFrame()).toContain('反馈（可选）')
+    stdin.write('我的自定义答案')
+    await settle()
+    stdin.write('\r')
+    await settle()
+    expect(onResolve).toHaveBeenCalledWith({ kind: 'answer', selected: [], custom: '我的自定义答案' })
+    unmount()
+  })
+
   it('Esc dismisses the panel', async () => {
     const onResolve = vi.fn()
     const { stdin, unmount } = render(<PlanReviewOverlay request={request} onResolve={onResolve} />)

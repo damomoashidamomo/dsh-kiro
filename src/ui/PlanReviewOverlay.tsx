@@ -52,6 +52,11 @@ export function PlanReviewOverlay({ request, onResolve }: PlanReviewOverlayProps
       }
       const chosen = options[index]?.label
       if (chosen !== undefined) submit([chosen], trimmed === '' ? undefined : trimmed)
+      else submit([], trimmed === '' ? undefined : trimmed)
+      // ^ index sits on the ✏️ 自定义输入 row (or out of range): the typed text
+      //   IS the answer. It used to be swallowed silently here — the user typed
+      //   a custom answer, pressed Enter, and the panel just bounced back to
+      //   the option menu with the text lost.
     }
     const pick = (index: number): void => {
       const chosen = options[index]?.label
@@ -114,6 +119,14 @@ export function PlanReviewOverlay({ request, onResolve }: PlanReviewOverlayProps
         return
       }
       const direct = Number.parseInt(ch, 10)
+      if (!isPlanReview && direct === options.length + 1 && options.length > 0) {
+        // 「✏️ 自定义输入」 row: jump straight into the free-text field.
+        index = options.length
+        setHighlighted(index)
+        mode = true
+        buffer = ''
+        continue
+      }
       if (Number.isInteger(direct) && direct >= 1 && direct <= options.length) {
         const label = options[direct - 1]?.label
         if (label !== undefined && isPlanReview && label !== request.approveLabel) {
