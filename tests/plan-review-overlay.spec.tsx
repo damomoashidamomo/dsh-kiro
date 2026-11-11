@@ -2,6 +2,7 @@ import { describe, it, expect, vi } from 'vitest'
 import { render } from 'ink-testing-library'
 import React from 'react'
 import { PlanReviewOverlay } from '../src/ui/PlanReviewOverlay'
+import { displayWidth } from '../src/markdown/render'
 import type { QuestionRequestUi } from '../src/runtime/types'
 
 const request: QuestionRequestUi = {
@@ -210,5 +211,40 @@ describe('PlanReviewOverlay', () => {
     expect(frame).toContain('Confirm')
     expect(frame).not.toContain('计划评审')
     unmount()
+  })
+})
+
+describe('PlanReviewOverlay caret publishing', () => {
+  it('publishes __kiroCaret while typing free text and clears on unmount', async () => {
+    const q: QuestionRequestUi = { id: 'q', question: '和谁一起去？', options: [] }
+    const onResolve = vi.fn()
+    const g = globalThis as { __kiroCaret?: { up: number; col: number } }
+    g.__kiroCaret = undefined
+    const { stdin, unmount } = render(<PlanReviewOverlay request={q} onResolve={onResolve} />)
+    await settle()
+    // no options → starts in text mode; caret must be at end of 「回答：」
+    expect(g.__kiroCaret).toBeDefined()
+    expect(g.__kiroCaret?.col).toBe(displayWidth('回答：'))
+    stdin.write('独自出行')
+    await settle()
+    expect(g.__kiroCaret?.col).toBe(displayWidth('回答：独自出行'))
+    unmount()
+    await settle()
+    expect(g.__kiroCaret).toBeUndefined()
+  })
+
+  it('no caret in option-menu mode; typing there still publishes', async () => {
+    const q: QuestionRequestUi = { id: 'q', question: '选一个', options: [{ label: '甲' }, { label: '乙' }] }
+    const g = globalThis as { __kiroCaret?: { up: number; col: number } }
+    g.__kiroCaret = undefined
+    const { stdin, unmount } = render(<PlanReviewOverlay request={q} onResolve={vi.fn()} />)
+    await settle()
+    expect(g.__kiroCaret).toBeUndefined()
+    stdin.write('3') // digit = 自定义输入行（选项数+1）→ text mode
+    await settle()
+    expect(g.__kiroCaret).toBeDefined()
+    unmount()
+    await settle()
+    expect(g.__kiroCaret).toBeUndefined()
   })
 })

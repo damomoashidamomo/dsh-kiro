@@ -13,9 +13,10 @@
  * @module @damomoashidamomo/dsh-kiro/ui/plan-review-overlay
  */
 
-import React, { useState } from 'react'
+import React, { useEffect, useState } from 'react'
 import { Box, Text, useInput } from 'ink'
 import { palette } from '../theme/palette'
+import { displayWidth, wrapAnsi } from '../markdown/render'
 import type { QuestionChoice, QuestionRequestUi } from '../runtime/types'
 
 /** Cap on rendered detail (plan markdown) lines before an ellipsis marker. */
@@ -146,6 +147,26 @@ export function PlanReviewOverlay({ request, onResolve }: PlanReviewOverlayProps
     setText(buffer)
   })
 
+  // Publish the REAL terminal caret while the panel is in text mode (same
+  // contract as Prompt → ink patch reads globalThis.__kiroCaret). Without this
+  // the cursor fell below the panel, onto the prompt line — typing LOOKED like
+  // it went to the wrong place.
+  useEffect(() => {
+    const g = globalThis as { __kiroCaret?: { up: number; col: number } }
+    if (!textMode) {
+      g.__kiroCaret = undefined
+      return
+    }
+    const prefix = options.length === 0 ? '回答：' : '反馈（可选）：'
+    const innerWidth = Math.max(12, (process.stdout.columns ?? 80) - 4)
+    const lines = wrapAnsi(prefix + text, innerWidth)
+    const last = lines[lines.length - 1] ?? ''
+    g.__kiroCaret = { up: 1 + (lines.length - 1), col: displayWidth(last) }
+    return () => {
+      g.__kiroCaret = undefined
+    }
+  }, [textMode, text, options.length])
+
   const detailLines = (request.detail ?? '').split('\n')
   const detailShown = detailLines.slice(0, DETAIL_LINE_CAP)
   const detailEllipsized = detailLines.length > DETAIL_LINE_CAP
@@ -186,7 +207,6 @@ export function PlanReviewOverlay({ request, onResolve }: PlanReviewOverlayProps
           <Text>
             {options.length === 0 ? '回答：' : '反馈（可选）：'}
             <Text color="green">{text}</Text>
-            <Text dimColor>|</Text>
           </Text>
         </Box>
       ) : (
