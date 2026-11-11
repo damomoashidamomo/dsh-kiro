@@ -129,6 +129,17 @@ export const agentCommand: CommandDefinition = {
         }
       }
       case 'swap': {
+        // swap default = 回到「无预设」：清人设/工具过滤，引擎保持现状。
+        if ((args[0] ?? '').toLowerCase() === 'default') {
+          const directSet = (globalThis as { __kiroPersonaSet?: (n: { prompt?: string; tools?: readonly string[]; name?: string }) => void }).__kiroPersonaSet
+          const personaSvc = directSet !== undefined
+            ? { set: directSet }
+            : serviceOf<{ set?: (next: { prompt?: string; tools?: readonly string[]; name?: string }) => void }>(agent, 'kiroPersona')
+          personaSvc?.set?.({ name: undefined, prompt: undefined, tools: undefined })
+          const controller = serviceOf<{ patchAgent?: (patch: Record<string, unknown>) => void }>(agent, 'kiroController')
+          controller?.patchAgent?.({ activeAgent: 'default' })
+          return { kind: 'success', text: '✔ 已切回 default（无预设：人设/工具过滤已清除，引擎保持现状）' }
+        }
         // Honest subset: apply the preset's declared provider/model/effort to
         // the CURRENT session via the live model-switch machinery — the same
         // core the boot-time --agent / set-default activation uses.

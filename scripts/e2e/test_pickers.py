@@ -156,6 +156,7 @@ class PickerTest(unittest.TestCase):
         try:
             fresh.drain(1.5)
             made = make_sessions(fresh.tmp, [
+                # home: sandbox DSH home — real ~/.dsh stays clean (0.7.5)
                 {'id': 'session-fake1111-0000-0000-0000-000000000000',
                  'title': '重构登录流程', 'firstUser': '帮我重构登录流程'},
                 {'id': 'session-fake2222-0000-0000-0000-000000000000',
@@ -164,7 +165,7 @@ class PickerTest(unittest.TestCase):
                 # a bare timestamp in the report.
                 {'id': 'session-fake3333-0000-0000-0000-000000000000',
                  'commands': ['chat list', 'model']},
-            ])
+             ], home=fresh.dsh_home)
             fresh.type('/chat', delay=0.02)
             fresh.drain(0.4)
             fresh.write(b'\r')

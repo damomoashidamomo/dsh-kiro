@@ -75,7 +75,25 @@ class Tui:
         # dsh-kiro's own user-level root is redirected too (post-decoupling it
         # is ~/.dsh-kiro on a real machine — never the tester's real one).
         self.env['DSH_KIRO_HOME'] = os.path.join(self.home, '.dsh-kiro')
-        self.env.setdefault('DSH_HOME', os.path.join(os.path.expanduser('~'), '.dsh'))
+        # HERMETIC DSH_HOME: the platform session store lands in the sandbox
+        # too, so /chat list on the real machine stays clean. Profile builds
+        # still resolve: <sandbox>/.dsh/profiles is a symlink to the real one.
+        self.real_dsh = real_dsh = os.environ.get('DSH_HOME') or os.path.join(os.path.expanduser('~'), '.dsh')
+        sandbox_dsh = self.dsh_home = os.path.join(self.tmp, '.dsh')
+        os.makedirs(sandbox_dsh, exist_ok=True)
+        profiles_link = os.path.join(sandbox_dsh, 'profiles')
+        if not os.path.exists(profiles_link):
+            os.symlink(os.path.join(real_dsh, 'profiles'), profiles_link)
+        # Model selection + credentials live at the DSH root: link them through,
+        # otherwise the sandbox boots with the catalog default and no API key
+        # (llm auth failure — every model call dies).
+        for entry in ('.credentials.yaml', 'settings.yaml', 'llm-deepseek'):
+            source = os.path.join(real_dsh, entry)
+            if os.path.exists(source):
+                target = os.path.join(sandbox_dsh, entry)
+                if not os.path.exists(target):
+                    os.symlink(source, target)
+        self.env['DSH_HOME'] = sandbox_dsh
         self.columns = columns
         self.buf = b''
         self.dead = False

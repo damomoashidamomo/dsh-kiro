@@ -125,6 +125,23 @@ class BootAppliesPresetTest(unittest.TestCase):
         env['HOME'] = home
         env['USERPROFILE'] = home
         env['DSH_KIRO_HOME'] = os.path.join(home, '.dsh-kiro')
+        # Session store in the sandbox as well; profiles resolve via symlink.
+        real_dsh = os.environ.get('DSH_HOME') or os.path.join(os.path.expanduser('~'), '.dsh')
+        sandbox_dsh = os.path.join(ws, '.dsh')
+        os.makedirs(sandbox_dsh, exist_ok=True)
+        profiles_link = os.path.join(sandbox_dsh, 'profiles')
+        if not os.path.exists(profiles_link):
+            os.symlink(os.path.join(real_dsh, 'profiles'), profiles_link)
+        # Model selection + credentials live at the DSH root: link them through,
+        # otherwise the sandbox boots with the catalog default and no API key
+        # (llm auth failure — every model call dies).
+        for entry in ('.credentials.yaml', 'settings.yaml', 'llm-deepseek'):
+            source = os.path.join(real_dsh, entry)
+            if os.path.exists(source):
+                target = os.path.join(sandbox_dsh, entry)
+                if not os.path.exists(target):
+                    os.symlink(source, target)
+        env['DSH_HOME'] = sandbox_dsh
         pid, fd = pty.fork()
         if pid == 0:
             os.chdir(ws)

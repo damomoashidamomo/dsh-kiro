@@ -400,6 +400,12 @@ export function App({ controller, seedTask, activeAgentName, onSubmit, fileSearc
       // after the 0.7.0 migration copied each level's legacy data). findAgent
       // prefers the workspace copy, so the menu shows it once — first
       // occurrence wins (listAgents orders workspace before user).
+      // 「无预设」永远可选：swap default 是回 default 的唯一路径。
+      rows.splice(rows.length - 1, 0, {
+        value: 'default',
+        label: 'default（无预设）',
+        hint: '回到内置默认行为，清除人设/工具过滤（回车直接切换）',
+      })
       const menuSeen = new Set<string>()
       for (const preset of presets) {
         if (menuSeen.has(preset.name)) continue

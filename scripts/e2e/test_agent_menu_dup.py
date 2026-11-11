@@ -108,6 +108,19 @@ class AgentListShowsCurrentTest(unittest.TestCase):
         self.assertIn(f'{AGENT} ◀ 当前', visible2, '对应行必须带 ◀ 当前 标记')
         # 状态栏方括号同样要跟着换（0.7.4 之前 swap 后一直停留在 [default]）
         self.assertIn(f'[{AGENT}] ·', visible2, '状态栏标签必须反映 swap 后的 agent')
+        # swap default：切回无预设，三处一致回 default
+        self.tui.type('/agent swap default', delay=0.02)
+        self.tui.drain(0.4)
+        self.tui.write(b'\r')
+        self.tui.drain(1.5)
+        self.tui.type('/agent list', delay=0.02)
+        self.tui.drain(0.4)
+        self.tui.write(b'\r')
+        self.tui.drain(2.0)
+        visible3 = self.tui.visible()
+        self.assertIn('已切回 default', visible3)
+        self.assertIn('（当前：default）', visible3, 'swap default 后标题回 default')
+        self.assertIn('[default] ·', visible3, '状态栏也回 default')
 
 if __name__ == '__main__':
     unittest.main()

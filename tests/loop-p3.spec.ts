@@ -3,7 +3,12 @@
  * kiro_think) registration and controller wiring.
  */
 
-import { describe, it, expect } from 'vitest'
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+import { afterAll, describe, it, expect } from 'vitest'
+const tmpRoot = mkdtempSync(join(tmpdir(), 'dsh-loop-p3-'))
+mkdirSync(join(tmpRoot, '.dsh-kiro'), { recursive: true })
 import { registerLoopTools } from '../src/runtime/loop-tools'
 import { KiroLoopDriver } from '../src/runtime/kiro-loop'
 
@@ -61,6 +66,8 @@ describe('parallel dispatch (read-only rounds overlap)', () => {
       controller: { ingestEvent: (event) => { events.push(event) } },
       systemPrompt: () => 'sys',
       selection: () => ({ provider: 'p', model: 'm' }),
+      // The sidecar loop-log must land in a sandbox, never in the repo cwd.
+      workspaceRoot: tmpRoot,
     })
 
     // Parallel: the second read starts BEFORE the first resolves.
@@ -94,10 +101,13 @@ describe('parallel dispatch (read-only rounds overlap)', () => {
     }
     const events: unknown[] = []
     const driver = new KiroLoopDriver({
+      workspaceRoot: tmpRoot,
       ctx: { llm: llmScript([['bash', 'bash']]), tools } as never,
       controller: { ingestEvent: (event) => { events.push(event) } },
       systemPrompt: () => 'sys',
       selection: () => ({ provider: 'p', model: 'm' }),
+      // The sidecar loop-log must land in a sandbox, never in the repo cwd.
+      workspaceRoot: tmpRoot,
     })
     await driver.runTurn('two bashes')
     expect(maxInFlight).toBe(1)
@@ -122,3 +132,4 @@ function llmScript(rounds: readonly (readonly string[])[]): unknown {
     },
   }
 }
+afterAll(() => { rmSync(tmpRoot, { recursive: true, force: true }) })

@@ -11,3 +11,8 @@ coverage/
 *.swo
 .tmp/
 *.tgz
+
+# dsh-kiro runtime state — never commit (decoupled from kiro-cli too)
+.kiro/
+.dsh-kiro/
+__pycache__/
