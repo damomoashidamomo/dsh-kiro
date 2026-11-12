@@ -1,10 +1,10 @@
-# dsh-kiro 开箱验收清单（0.6.13）
+# dsh-kiro 开箱验收清单（0.8.0）
 
-在任意工作目录启动：`dsh --profile kiro`（自研全套：`--engine kiro`）
+在任意工作目录启动：`dsh --profile kiro`——**默认即自研全套（kiro 循环 + Rust 引擎）**，状态栏应显示 `[kiro/rust]`；`--engine dsh` 可显式切回平台循环
 
 ## 引擎与模式
 - [ ] `/engine` → 状态页：loop/tools/rust 可用性 + 能力清单
-- [ ] `/engine kiro` → 一键切换，状态栏出现 `[kiro/rust]` 徽章
+- [ ] 启动无参数 → 状态栏直接 `[kiro/rust]`（0.8.0 默认引擎）；`/engine dsh` 再 `/engine kiro` 往返切换
 - [ ] `/engine dsh` → 切回平台，徽章消失
 - [ ] `/loop`、`/tools` → 细粒度覆盖仍可用
 - [ ] `/agent swap <预设>`（若配置了 engine 字段）→ 引擎随预设切换
@@ -13,8 +13,9 @@
 - [ ] `/spec start <feature>` → 模型起草 requirements.md → 只停在需求阶段
 - [ ] `/spec approve` → 逐相推进 design → tasks → implement
 - [ ] `/spec show` / `/spec revise <意见>` / `/spec abort`
-- [ ] 工具审批：任何 prompt 级工具执行前弹面板（1/2/3/4 + 信任范围二级选择）
-- [ ] `.kiro/tools.json`：allowedCommands/deniedCommands/autoAllowReadonly 生效
+- [ ] 工具审批（写/bash）：面板 1/2/3/4 + 信任范围二级选择；拒绝可填理由且理由回到模型
+- [ ] `.dsh-kiro/tools.json`：allowedCommands/deniedCommands/autoAllowReadonly 生效
+- [ ] 只读工具（read/grep/skill）不弹审批；写/bash 弹；「本会话始终允许」后同类不再弹
 - [ ] 越界写入（rust 引擎）：工具结果显示 Permission denied，文件不存在
 
 ## Checkpoint / Undo
@@ -24,9 +25,10 @@
 
 ## 透明与工具
 - [ ] `/loop trace` → 每步可见（请求/工具/重试/压缩/插话）
-- [ ] `/skills` → 列表 + on/off 切换（web-search-recency 应为 ◉）
+- [ ] `/skills` → 菜单切换 on/off（持久化 .dsh-kiro/skills.json）；模型经 skill 工具加载技能正文无报错
+- [ ] `/agent list` → 标题（当前：X）+ ◀ 当前标记；`/agent swap default` 可回无预设
 - [ ] `/loop kiro` + `@文件` → 文件内容注入模型（能读出标记字样）
-- [ ] 回合进行中提交 → 「已插话（下一步生效）」
+- [ ] 回合进行中输入文字+**回车** → 「↪ 已插话（下一步生效）」；ask_user 面板 ↓→✏️自定义输入→打字→回车，答案回到模型
 - [ ] 子代理委派：让模型用 subagent 工具 → 审批面板 → 放行 → 完成
 
 ## 诊断与检索

@@ -95,6 +95,15 @@ Ink React App (src/ui/App.tsx)
 `kiro-commands`、`kiro-agents`、`kiro-steering`、`kiro-mcp`、`kiro-trust`、
 `kiro-lsp`、`kiro-checkpoint`、`kiro-knowledge`、`kiro-tangent`。
 
+## 架构方向（2026-11 定稿）
+
+**自研内核 + 五口适配层外接 DSH**：回合循环 / Rust Landlock 工具引擎 /
+审批与问答 / 全部 TUI / 自有数据家（`~/.dsh-kiro`）都是 dsh-kiro 自己的；
+DSH 只通过 5 个窄接口接入（LlmPort / ToolsPort / DialogPort / SessionPort /
+CommandPort，`src/dsh-adapter/`），配契约测试 + DSH 版本门禁 + headless 备用
+适配器，追求**跨 DSH 版本免疫**。默认引擎 kiro/rust（`--engine dsh`、
+`/loop dsh` 为逃生口）。方向全文：`docs/design/kernel-adapter.zh.md`。
+
 ## 文件布局
 
 dsh-kiro 是**独立项目**：所有状态都读写自己的目录，与 kiro-cli 的 `~/.kiro`

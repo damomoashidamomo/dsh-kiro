@@ -1,9 +1,37 @@
 # dsh-kiro 架构与平台对接清单
 
-> dsh-kiro 是 DeepSeek Harness (DSH) 平台之上的 **TUI 壳**：执行逻辑（agent loop、工具、
-> 会话持久化、凭据）全部调用平台本体，本包只负责终端交互与渲染。
+> **⚠️ 定位已升级（2026-11，v0.8 方向定稿）**：dsh-kiro 不再是"平台之上的
+> TUI 壳"。现行定位：**自研内核**（回合循环 / Rust Landlock 工具引擎 / 审批
+> 与问答 / 全部 TUI / 自有数据家）+ 通过**五口适配层**（LlmPort / ToolsPort /
+> DialogPort / SessionPort / CommandPort）外接 DSH，追求跨 DSH 版本免疫。
+> 方向全文见 `docs/design/kernel-adapter.zh.md`（北极星，冲突以其为准）。
+> 下文第一部分为**现行目标架构**；"八个对接缝"及其后为**历史演进的缝清单**
+> （0.1-0.6 时代记录，其中缝 ①-⑧ 将收敛为五口；路径如 `.kiro/*` 均已迁移
+> 至 `.dsh-kiro/*`，见文末 2026-11 增量）。
 
-## 分层总览
+## 现行目标架构（v0.8+）
+
+```
+┌─ dsh-kiro 内核（平台无关）──────────────────────────────┐
+│ kiro-loop（默认引擎，0.8.0 起 kiro/rust + 缺二进制自动回落）│
+│ Rust 引擎桥（Landlock）· 审批/提问面板 · agent/技能/       │
+│ steering/hooks/trust/knowledge/checkpoint · 30 命令 · TUI │
+│ 数据家 ~/.dsh-kiro + <ws>/.dsh-kiro（与 kiro-cli 零关联）  │
+└───────────────┬──────────────────────────────────────────┘
+                │ 只依赖 5 个 Port（src/dsh-adapter/，内核禁 import @deepseek-ai/*）
+┌───────────────▼──────────────────────────────────────────┐
+│ dsh-adapter：LlmPort · ToolsPort · DialogPort ·           │
+│ SessionPort · CommandPort（契约测试 + DSH 版本门禁 + 容错）│
+│ 双实现：in-process（主）/ headless-subprocess（降级逃生舱） │
+└───────────────┬──────────────────────────────────────────┘
+                ▼
+        DeepSeek Harness 平台
+```
+
+跨版本兼容 = 契约测试（管协议结构）+ 行为审计（管语义漂移，PTY E2E + LIVE
+长期保留）+ 版本门禁（已知不兼容版本 fail-closed）。
+
+## 分层总览（历史基线，缝清单索引）
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────┐
@@ -60,10 +88,16 @@
 | Agent API 变更（SEAM 5） | 提交/状态失效 | devDeps 精确锁版 0.1.2-rc.1，tsc 编译期拦截 | 编译失败（升级时暴露） |
 | 平台大版本升级 | 多缝同时动 | 119 测试 + PTY 实测网 | 测试红灯，修复面清晰 |
 
-### 结论
+### 结论（历史结论，已被 v0.8 方向修订）
 
-1. **不应该也不可能"完全解耦"** —— dsh-kiro 的定位就是平台的 TUI 壳，agent loop/todo/子代理/
-   持久化是平台能力，重写等于另做一个 harness。
+> 原结论"不应该也不可能完全解耦"针对的是**当时**（壳定位）的语境。
+> 2026-11 起的修订：**内核必须解耦**（自研循环/引擎/审批/数据家，0.7.0-0.8.0
+> 已完成），与 DSH 的关系收敛为五口适配层 + 契约测试 + 版本门禁；"完全脱离
+> DSH"仍然不做——外部能力（多模型路由、web_search 等）继续走平台。
+> 详见 `docs/design/kernel-adapter.zh.md` §2。
+
+1. **不应该也不可能"完全解耦"**（历史结论，见上方修订说明）——当时的定位是
+   平台的 TUI 壳；loop/引擎/审批/数据家如今已自研，与 DSH 的耦合收敛为五口。
 2. **耦合面已经收窄且集中**：全部 8 条缝集中在 `src/runtime/`、`src/commands/`（经 `serviceOf()`
    包装）与 `cordis.patch.yml`；`src/ui/`（9 组件）、theme、markdown 渲染**零平台依赖**。
 3. **平台升级的现实风险可控**：rc 版本 API 可能变动，但 (a) devDeps 锁版使类型漂移在编译期暴露；
@@ -227,3 +261,49 @@ steering 装载器来源扩展：`README.md` 头 4KB（builtin 级）+
   沙箱（硬）→ 审批/信任（人）→ 护栏（提示词）。
 
 **测试基线 252。**
+
+---
+
+## 2026-11 增量：定位升级——独立内核 + 适配层方向（0.7.0 → 0.8.0）
+
+本轮为**架构级转向**，逐项落地了"独立外接 agent"的初衷（方向定稿全文见
+`docs/design/kernel-adapter.zh.md`）：
+
+### A. 与 kiro-cli 彻底解耦（0.7.0，破坏性）
+
+- 数据家迁至 `~/.dsh-kiro`（`DSH_KIRO_HOME` 可覆盖）+ `<工作区>/.dsh-kiro`；
+  38 个文件的手写 `~/.kiro`/`<cwd>/.kiro` 路径清零，统一走 `kiro-home.ts`；
+- 一次性只读迁移（对旧目录零写入、排除 kiro-cli 的 cli.json、标记文件幂等）；
+- 对 `~/.kiro` **零读取零写入零依赖**；测试三护栏：hermetic
+  HOME/DSH_KIRO_HOME/DSH_HOME + vitest 前后指纹硬护栏（动即整套失败）+
+  真实家目录零接触验证。
+
+### B. 交互层修复（0.6.60-0.7.6，全部真实使用暴露）
+
+ask_user 答案回传模型 / 多问题逐页 / 自定义输入行 / 技能目录注入系统提示 /
+技能加载缺 description 崩 / 菜单 React key 撞名 / 自定义答案被吞 / 面板真实
+光标定位 / swap 后状态栏标签不更新 / `/agent swap default` 回无预设。
+
+### C. 引擎定稿（0.7.7 + 0.8.0）
+
+- 修 `--engine kiro` 启动竞态（状态栏说谎、实际跑平台循环、审批从不弹）；
+- 修 Rust 引擎写路径键（`file_path`→`path`，此前经批准的写 100% 失败）；
+- 审批降噪：只读/模型辅助工具（read/grep/glob/skill/todo/think）静默放行；
+- **默认引擎改为 kiro/rust**（缺二进制自动回落 + 如实提示）；`--engine dsh`
+  与 `/loop dsh` 保留为逃生口。动机：双循环并存 = 行为不一致的 bug 温床。
+
+### D. 交互审计体系（新增，长期保留）
+
+`scripts/e2e/test_interaction_audit.py`（LIVE 门控，真实按键 + 真实模型）：
+审批允许一次/拒绝+理由回执/本会话信任链、多页问答含自由输入、Esc 打断、
+运行中插话回执。**语义漂移只能靠行为审计发现**——适配层防不住，此套件
+与契约测试互补。
+
+### E. 缝清单的走向
+
+历史缝 ①-⑧（装载/插件协议/服务注入/Agent API/事件流/命令）+ ⑨-㉑ 将收敛为
+五口（LlmPort 吸收 llm 流协议；ToolsPort 吸收工具注册与执行；DialogPort 吸收
+user-questions/approval 瀑布；SessionPort 吸收会话事件与存储；CommandPort 吸收
+命令注册）。收敛工作 = 路线 P1-P3（见 `docs/design/kernel-adapter.zh.md` §6）。
+
+**测试基线：vitest 424 · PTY E2E 64 · LIVE 审计 6+。**

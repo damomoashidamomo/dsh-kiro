@@ -9,8 +9,17 @@
 
 ## 待开发（已确认方向，待排期）
 
+### 适配层路线（2026-11 方向定稿，详见 docs/design/kernel-adapter.zh.md）
+
 | # | 项 | 备注 |
 |---|---|---|
+| P1 | 五口立桩 | LlmPort/ToolsPort/DialogPort/SessionPort/CommandPort 接口定义 + 现有代码改依赖接口（行为零变化）+ 内核禁 import @deepseek-ai/* 的 lint |
+| P2a | **faux 假模型供应商** | pi 模式：PTY 层确定性全链路测试，根除 LIVE 限流抖动——**最优先** |
+| P2b | 协议容错 + 契约测试 | 各 Port 防御解析 + 未知块可见化 + session v3/v4 双读 + DSH 协议假设显式化为契约套件 |
+| P2c | DSH 版本门禁 | openagents 模式：启动检测版本，已知不兼容 fail-closed 拒绝 |
+| P3a | 升级破坏演练 | mock 改协议 → 验证优雅降级不崩 |
+| P3b | headless 备用适配器 | 子进程驱动 dsh headless 的降级逃生舱（无流式/无审批面板）+ 自动降级切换 |
+| P4 | 现代化（择机） | TypeBox+AJV 工具 schema / 缓冲工具输出折叠 / 分段输入模型（文本+文件 chip+粘贴 chip） |
 | B-2 | Checkpoint 面板 | /checkpoint 命令存在，overlay 占位；**依据使用数据你不用 checkpoint，优先级最低** |
 | B-5 | 图像生成插件修复 | settings 里 `Qwen-Image-2.0` 是无效模型名（正确为 `Qwen-Image-2512`），且插件发的 OpenAI 格式与网关要求的 `input.prompt` schema 不符——后者是 harness 侧代码，本仓库修不了 |
 
@@ -21,6 +30,23 @@
 | T-3 | 依赖可移植性 | 两个 file: 依赖指向本机全局树，clone 后无法构建 |
 
 ## 归档（已完成或放弃）
+
+- ✅ **与 kiro-cli 彻底解耦（0.7.0，破坏性）**：数据家迁 ~/.dsh-kiro +
+      <ws>/.dsh-kiro（DSH_KIRO_HOME 可覆盖）；38 文件路径清零统一 kiro-home；
+      一次性只读迁移（旧目录零写入、排除 cli.json、幂等）；hermetic 测试
+      三护栏（HOME/DSH_KIRO_HOME/DSH_HOME 全沙箱 + 指纹硬护栏）
+- ✅ **HITL 交互链修复（0.6.60-0.7.6）**：ask_user 答案回传 / 多问题逐页 /
+      ✏️ 自定义输入行（被吞 bug）/ 面板真实光标定位 / 技能目录注入系统提示
+      （LIVE 实证）/ 技能加载 description 崩修 / 菜单 React key 撞名 /
+      swap 后状态栏标签不更新 + /agent swap default
+- ✅ **引擎定稿（0.7.7 + 0.8.0）**：--engine kiro 启动竞态（标签说谎）修复；
+      Rust 写路径键归一（此前经批准的写必失败）；只读工具审批静默；
+      **默认引擎 kiro/rust** + 缺二进制自动回落；--engine dsh、/loop dsh 保留
+- ✅ **交互审计体系（长期资产）**：test_interaction_audit.py（LIVE 门控，
+      真实按键+真实模型）：审批三决策路径 / 多页问答 / Esc 打断 / 插话回执；
+      测试基建修正（面板等待区域隔离、插话=回车非 Esc）
+- ✅ **整洁专项（0.7.5）**：E2E 会话沙箱化（真实 ~/.dsh/sessions 零新增）、
+      仓库噪声出库+gitignore、单测 sidecar 不再写仓库 cwd
 
 - ✅ @文件补全 / steering 注入 / 审批 diff / todo 清单 / 热重载 / 审批项目级持久化（0.3.x）
 - ✅ 习惯驱动五项：粘贴落盘 / 上下文提醒 / README+skills 常载 / 首字延迟 / 变更护栏（0.4.x）

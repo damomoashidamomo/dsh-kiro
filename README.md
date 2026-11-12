@@ -140,6 +140,17 @@ phases.
 | Knowledge | `/knowledge` `/usage` |
 | Meta | `/issue` `/changelog` `/experiment` |
 
+## Architecture direction (settled 2026-11)
+
+**Own kernel + five-port adapter onto DSH**: the turn loop, the Rust Landlock
+tool engine, approvals/questions, the whole TUI and the data home
+(`~/.dsh-kiro`) belong to dsh-kiro; DSH is reached only through five narrow
+ports (LlmPort / ToolsPort / DialogPort / SessionPort / CommandPort in
+`src/dsh-adapter/`), backed by contract tests, a DSH version gate and a
+headless fallback adapter — aiming for immunity across DSH releases. Default
+engine is kiro/rust (`--engine dsh` and `/loop dsh` remain escape hatches).
+Full direction: `docs/design/kernel-adapter.zh.md`.
+
 ## File layout
 
 dsh-kiro is a **standalone project**: every piece of state it owns lives in its
