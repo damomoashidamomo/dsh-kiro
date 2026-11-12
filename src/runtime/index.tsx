@@ -456,7 +456,7 @@ async function mount(ctx: Context, startup: KiroStartup): Promise<void> {
           engineNote = ' + Rust 工具引擎（Landlock）'
         } else {
           loopDriver.engine = 'dsh'
-          engineNote = ' + 平台工具管线'
+          engineNote = ' + ⚠ Rust 引擎不可用（未构建），已回落 DSH 工具管线'
         }
         controller.patchAgent({ loopDriver: 'kiro', toolEngine: loopDriver.engine } as never)
         return `${switchMsg}${engineNote}`
@@ -489,12 +489,16 @@ async function mount(ctx: Context, startup: KiroStartup): Promise<void> {
     },
   })
 
-  if (startup.engine !== undefined) {
-    const svc = { set: async (unit: 'kiro' | 'dsh', opts?: { rust?: boolean }) => {
+  // 0.8.0: kiro/rust is the DEFAULT engine. The switch always runs at boot;
+  // `--engine dsh` is the explicit override, and a missing Rust binary makes
+  // kiroEngineSwitch fall back to the platform pipeline with an honest note.
+  {
+    const unit = startup.engine ?? 'kiro'
+    const svc = { set: async (u: 'kiro' | 'dsh', opts?: { rust?: boolean }) => {
       const engineSvc = (ctx as unknown as { get?: <T>(k: string) => T }).get?.('kiroEngineSwitch') as { set?: (u: 'kiro' | 'dsh', o?: { rust?: boolean }) => Promise<string> } | undefined
-      return engineSvc?.set?.(unit, opts) ?? ''
+      return engineSvc?.set?.(u, opts) ?? ''
     } }
-    void svc.set(startup.engine, { rust: startup.engine === 'kiro' }).then((msg) => { if (msg !== '') controller.pushSystem(`◇ ${msg}`) })
+    void svc.set(unit, { rust: unit === 'kiro' }).then((msg) => { if (msg !== '') controller.pushSystem(`◇ ${msg}`) })
   }
 
   // Boot-time agent preset: --agent / set-default used to set a LABEL only —

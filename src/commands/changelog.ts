@@ -8,6 +8,12 @@ export const changelogCommand: CommandDefinition = {
       kind: 'success',
       text: [
         'dsh-kiro changelog:',
+        '  0.8.0 默认引擎改为 kiro/rust（行为变更）：',
+        '        - 启动即 kiro 循环 + Rust 工具引擎（Landlock 沙箱），不再需要 --engine kiro',
+        '        - Rust 引擎二进制缺失时自动回落 DSH 工具管线，并如实提示（不再静默）',
+        '        - --engine dsh 与 /loop dsh 保留：显式切回平台循环的逃生口',
+        '        - 动机：双循环并存导致审批策略/状态标签不一致（0.7.7 的标签说谎 bug',
+        '          即源于此）；统一默认后行为可预期',
         '  0.7.7 交互审计挖出并修复两个严重 bug + 审批降噪：',
         '        - 修「--engine kiro 启动竞态」：boot 切换在 kiroLoopMode 服务注册之前',
         '          同步执行，set("kiro") 静默跳过 → 状态栏显示 [kiro/rust]，回合实际',
