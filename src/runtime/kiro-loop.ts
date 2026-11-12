@@ -94,6 +94,11 @@ export interface LoopDriverDeps {
 
 const MAX_STEPS = 24
 const SIDECAR_ROTATE_BYTES = 5 * 1024 * 1024
+/** Tools that cannot mutate the workspace: silent in the approval gate. */
+const READ_ONLY_TOOLS = new Set([
+  'read', 'fs_read', 'read_file', 'grep', 'glob', 'glob_tree', 'list_files',
+  'skill', 'kiro_todo_write', 'kiro_think',
+])
 const MAX_RETRIES = 2
 const STALL_MS = 25000
 const COMPACT_AT = 0.8
@@ -357,7 +362,11 @@ export class KiroLoopDriver {
     // 'allow' already carries the workspace's consent; everything else goes
     // through the approval panel (trust patterns auto-allow inside the gate)
     // unless the session preset is danger-full-access.
-    if (verdict === 'prompt' && this.deps.approvalGate !== undefined) {
+    if (verdict === 'prompt' && this.deps.approvalGate !== undefined && !READ_ONLY_TOOLS.has(call.name)) {
+      // Read-only / model-support tools never prompt (kiro-cli parity): they
+      // cannot mutate the workspace, and prompting on every `skill`/`read`
+      // turned the approval gate into noise. writes/bash/anything else still
+      // goes through the panel.
       const preset = this.deps.permissionPreset?.()
       if (preset !== 'danger-full-access') {
         const outcome = await this.deps.approvalGate({ toolName: call.name, signal: this.abort!.signal })

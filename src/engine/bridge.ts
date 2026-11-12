@@ -57,10 +57,16 @@ export function toEngineCall(name: string, args: unknown): EngineCall | undefine
     return { tool: 'execute_bash', args: record }
   }
   if (name === 'read' || name === 'read_file' || name === 'fs_read') {
-    return { tool: 'fs_read', args: record }
+    return { tool: 'fs_read', args: { ...record, path: record['path'] ?? record['file_path'] ?? record['filePath'] } }
   }
   if (name === 'write' || name === 'write_file' || name === 'fs_write') {
-    return { tool: 'fs_write', args: record }
+    // 0.7.7: normalize the path key — the model-facing schema says file_path
+    // (Claude/kiro spellings vary), the engine wants `path`. Passing the raw
+    // record through made every approved write fail with "missing path".
+    return { tool: 'fs_write', args: {
+      ...record,
+      path: record['path'] ?? record['file_path'] ?? record['filePath'],
+    } }
   }
   if (name === 'edit' || name === 'str_replace' || name === 'str_replace_editor' || name === 'fs_edit') {
     return { tool: 'fs_edit', args: {

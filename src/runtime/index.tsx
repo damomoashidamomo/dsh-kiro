@@ -469,6 +469,26 @@ async function mount(ctx: Context, startup: KiroStartup): Promise<void> {
     },
   })
 
+  // 0.7.7 FIX: this provide MUST precede the boot --engine switch below.
+  // The switch reads ctx.get('kiroLoopMode') synchronously; registered
+  // after it (the old order) the get returned undefined, set('kiro') was
+  // silently skipped, and turns ran on the PLATFORM loop while the status
+  // bar still claimed [kiro/rust] — approvals never fired.
+  ctx.provide('kiroLoopMode', {
+    get(): 'dsh' | 'kiro' { return loopMode },
+    set(next: 'dsh' | 'kiro'): string {
+      if (next === loopMode) return `当前已是 ${next} loop。`
+      loopMode = next
+      if (next === 'kiro') {
+        // Continue the conversation: seed the driver from the transcript.
+        loopDriver.seed(controller.getState().messages.map((m) => ({ kind: m.kind as string, text: m.text })))
+      }
+      return next === 'kiro'
+        ? '已切换到 kiro-loop（dsh-kiro 自研驱动，完整工具循环）。'
+        : '已切换回 DSH 平台 loop。'
+    },
+  })
+
   if (startup.engine !== undefined) {
     const svc = { set: async (unit: 'kiro' | 'dsh', opts?: { rust?: boolean }) => {
       const engineSvc = (ctx as unknown as { get?: <T>(k: string) => T }).get?.('kiroEngineSwitch') as { set?: (u: 'kiro' | 'dsh', o?: { rust?: boolean }) => Promise<string> } | undefined
@@ -542,20 +562,6 @@ async function mount(ctx: Context, startup: KiroStartup): Promise<void> {
     available(): boolean { return loopDriver.engineAvailable() },
   })
 
-  ctx.provide('kiroLoopMode', {
-    get(): 'dsh' | 'kiro' { return loopMode },
-    set(next: 'dsh' | 'kiro'): string {
-      if (next === loopMode) return `当前已是 ${next} loop。`
-      loopMode = next
-      if (next === 'kiro') {
-        // Continue the conversation: seed the driver from the transcript.
-        loopDriver.seed(controller.getState().messages.map((m) => ({ kind: m.kind as string, text: m.text })))
-      }
-      return next === 'kiro'
-        ? '已切换到 kiro-loop（dsh-kiro 自研驱动，完整工具循环）。'
-        : '已切换回 DSH 平台 loop。'
-    },
-  })
 
   // Bridge to sessionQuery.readSession for slash commands: calling the
   // engine through an agent-scoped ctx.get goes through a cordis shadow
