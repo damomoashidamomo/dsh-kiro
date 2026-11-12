@@ -31,6 +31,7 @@ import { routeTurnInput } from './turn-input'
 import { detectEffortHint, resolveAutoEffort } from './effort-keywords'
 import { KiroLoopDriver, readSidecarEvents } from './kiro-loop'
 import { registerLoopTools } from './loop-tools'
+import { adapterHealthProbe, createInProcessAdapter, detectPlatformVersion, evaluateGate, fauxLlmFromEnv, type LlmPort } from '../dsh-adapter'
 import { composeSteeringPrompt } from '../steering/index'
 import type { SteeringFile } from '../steering/loader'
 import { contextWindowOf } from './model-catalog'
@@ -301,6 +302,34 @@ async function mount(ctx: Context, startup: KiroStartup): Promise<void> {
   // selection) without needing a back-reference to this closure.
   ctx.provide('kiroController', controller)
 
+  // P2.5 版本门禁：已知不兼容 → fail-closed（阻塞新回合，如实说明原因）。
+  const gate = evaluateGate(detectPlatformVersion())
+  if (!gate.ok) {
+    controller.pushSystem(`⛔ DSH 版本不兼容：${gate.reason}。回合已阻塞——请升级/降级 DSH 或更新 dsh-kiro（/doctor 可看版本）。`)
+  }
+
+  // P1.2: dsh-adapter —— 内核与 DSH 的唯一接触面。
+  const fauxLlm = fauxLlmFromEnv()
+  const platformLLm = (ctx as unknown as { llm?: { stream(options: unknown): AsyncIterable<unknown> } }).llm
+  const adapter = createInProcessAdapter({
+    llm: platformLLm,
+    tools: (ctx as unknown as { tools?: never }).tools,
+    userQuestions: { ask: (request) => createQuestionAnswerer(controller)(request as never) },
+    approval: (request) => loopApprovalGate({ toolName: request.toolName, reason: request.reason ?? 'kiro-loop 工具执行确认', signal: request.signal }),
+    onSessionEvent: (handler) => ctx.on('session/event' as never, ((_session: unknown, event: unknown) => { handler(event) }) as never),
+    onCommand: (command) => { void command; throw new Error('commands registration goes through createCommandPort') },
+  })
+  // faux 供应商产的是**内核块**（LlmPort 契约），必须绕过翻译层——否则
+  // tool-call 会被当未知块吃掉（双重翻译 bug）。faux 直接顶替整个 llmPort。
+  const llmPort: LlmPort = fauxLlm ?? adapter.llm
+  // P3.2 启动契约探针：适配器不健康时如实降级提示（不静默）。
+  {
+    const probe = adapterHealthProbe({ llm: fauxLlm ?? (ctx as unknown as { llm?: never }).llm, tools: (ctx as unknown as { tools?: never }).tools })
+    if (!probe.ok) {
+      controller.pushSystem(`⚠ DSH 适配器健康检查未通过：${probe.problems.join('；')}。模型回合可能失败——可先跑 /doctor；应急通道：scripts/headless-fallback.mjs。`)
+    }
+  }
+
   // kiro-loop: dsh-kiro's own turn driver, selectable per session with
   // /loop kiro|dsh. Text-only for now; the platform ctx.tools seam verified
   // by the P0 probe lands in P2/P3 behind the same driver.
@@ -312,6 +341,8 @@ async function mount(ctx: Context, startup: KiroStartup): Promise<void> {
 
   const loopDriver = new KiroLoopDriver({
     ctx,
+    llmPort,
+    toolsPort: adapter.tools,
     controller: { ingestEvent: (event: never) => controller.ingestEvent(event) },
     systemPrompt: () => {
       const steering = (ctx as unknown as { get?: <T>(key: string) => T | undefined }).get?.('kiroSteering') as
@@ -821,6 +852,11 @@ async function mount(ctx: Context, startup: KiroStartup): Promise<void> {
           source: { kind: 'plugin', plugin: 'kiro-knowledge' },
         }))
       }
+    }
+    // P2.5 版本门禁 fail-closed：不兼容版本上不允许开新回合。
+    if (!gate.ok) {
+      controller.pushSystem(`⛔ 已阻塞：${gate.reason}`)
+      return
     }
     // kiro-loop mode: the turn runs through our own driver (P1 text-only).
     if (loopMode === 'kiro') {

@@ -37,8 +37,13 @@ export interface LoopMessage {
         isError: boolean;
     }[];
 }
+import type { LlmPort, ToolsPort } from '../dsh-adapter/ports';
 export interface LoopDriverDeps {
     readonly ctx: Context;
+    /** P1.2: kernel-owned LLM port (adapter translates platform chunks). */
+    readonly llmPort: LlmPort;
+    /** P1.2: kernel-owned tools port for schema listing + platform execution. */
+    readonly toolsPort?: ToolsPort;
     readonly controller: {
         ingestEvent(event: unknown): void;
     };

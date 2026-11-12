@@ -18,6 +18,7 @@ export interface SplashItem {
 }
 
 export interface TranscriptProps {
+  readonly expandTools?: boolean
   /** All rendered messages. */
   messages: readonly MessageRecord[]
   /** Optional sticky header rendered once above the messages (e.g. the splash banner). */
@@ -36,7 +37,7 @@ type StaticItem = SplashItem | (MessageRecord & { key: string })
  * app may only mount ONE `<Static>` subtree. The splash banner is therefore
  * passed in as a `header` item here instead of rendering its own `<Static>`.
  */
-export function Transcript({ messages, header }: TranscriptProps): JSX.Element {
+export function Transcript({ messages, header, expandTools = false }: TranscriptProps): JSX.Element {
   // Stable partition: a message is finished only once `streaming` clears.
   // Static takes the all-finished PREFIX — everything up to (exclusive) the
   // FIRST still-streaming message. Parallel calls mean an early streaming
@@ -63,13 +64,13 @@ export function Transcript({ messages, header }: TranscriptProps): JSX.Element {
           </Box>
         ) : (
           <Box key={item.key} flexDirection="column">
-            <Message message={item} />
+            <Message message={item} expandTools={expandTools} />
           </Box>
         )}
       </Static>
       {live.map((message) => (
         <Box key={`live-${message.id}`} flexDirection="column">
-          <Message message={message} />
+          <Message message={message} expandTools={expandTools} />
         </Box>
       ))}
       {messages.length === 0 ? (

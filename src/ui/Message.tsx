@@ -16,11 +16,13 @@ import { STRINGS } from './strings'
 import type { Message as MessageRecord, TodoItem } from '../runtime/types'
 
 export interface MessageProps {
+  /** P4: 展开工具完整输出（Ctrl+O 全局切换）。 */
+  readonly expandTools?: boolean
   message: MessageRecord
 }
 
 /** Render one message — the unit of transcript rendering. */
-export function Message({ message }: MessageProps): JSX.Element {
+export function Message({ message, expandTools = false }: MessageProps): JSX.Element {
   switch (message.kind) {
     case 'user':
       return <UserMessage text={message.text} />
@@ -36,7 +38,7 @@ export function Message({ message }: MessageProps): JSX.Element {
     case 'reasoning':
       return <ReasoningMessage text={message.text} streaming={message.streaming} createdAt={message.createdAt} />
     case 'tool-call':
-      return <ToolMessage message={message} />
+      return <ToolMessage message={message} expandTools={expandTools} />
     case 'todo':
       return <TodoMessage todos={message.todos ?? []} />
     case 'system':
@@ -201,8 +203,17 @@ function outcomeLine(output: string): string {
   return '(no output)'
 }
 
+/** Expanded output view: up to 40 lines, honest about the rest. */
+function expandOutput(output: string): string {
+  const lines = output.split('\n')
+  const shown = lines.slice(0, 40)
+  const rest = lines.length - shown.length
+  const text = shown.join('\n  ')
+  return rest > 0 ? `${text}\n  …（还有 ${rest} 行未显示）` : text
+}
+
 /** Render a tool call + (eventually) result. */
-function ToolMessage({ message }: { message: MessageRecord }): JSX.Element {
+function ToolMessage({ message, expandTools }: { message: MessageRecord; expandTools: boolean }): JSX.Element {
   const tool = message.tool
   if (tool === undefined) {
     return <SystemMessage text="(orphan tool event)" />
@@ -230,8 +241,11 @@ function ToolMessage({ message }: { message: MessageRecord }): JSX.Element {
   const argsPreview = tool.argsPreview.length > 0
     ? palette.dim(`  ${tool.argsPreview.split('\n').join('\n  ')}`)
     : null
+  // P4 输出折叠：默认一行摘要；Ctrl+O 全局展开后显示完整输出（上限 40 行）。
   const output = tool.output.length > 0
-    ? palette.muted(`  → ${outcomeLine(tool.output)}`)
+    ? expandTools
+      ? palette.muted(`  → ${expandOutput(tool.output)}`)
+      : palette.muted(`  → ${outcomeLine(tool.output)}`)
     : null
   return (
     <Box flexDirection="column" marginTop={1}>

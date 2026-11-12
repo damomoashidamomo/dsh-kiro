@@ -9,7 +9,9 @@
  */
 import type { Message as MessageRecord } from '../runtime/types';
 export interface MessageProps {
+    /** P4: 展开工具完整输出（Ctrl+O 全局切换）。 */
+    readonly expandTools?: boolean;
     message: MessageRecord;
 }
 /** Render one message — the unit of transcript rendering. */
-export declare function Message({ message }: MessageProps): JSX.Element;
+export declare function Message({ message, expandTools }: MessageProps): JSX.Element;

@@ -52,6 +52,12 @@ export interface SessionTitle {
  * ever see the header. Split on the magic and decode frame by frame; `maxBytes`
  * bounds the work on logs that ran for hours.
  */
+/**
+ * P2.3 双读：会话日志文件名自带版本（session.v3.jsonl.zstd）。平台升级到
+ * v4 时旧 dsh-kiro 仍能读：优先精确 v3，其次目录里任何 session.v*.jsonl.zstd
+ * （取最高版本）。找不到返回 undefined（调用方按现状处理缺失）。
+ */
+export declare function resolveSessionLog(dir: string): string | undefined;
 export declare function readSessionTitle(dir: string, maxBytes?: number): SessionTitle;
 /**
  * Async twin of {@link readSessionTitle}. Summaries are read while the /chat

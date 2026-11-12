@@ -37,24 +37,15 @@ export interface LoopMessage {
   readonly toolResults?: readonly { toolCallId: string; content: string; isError: boolean }[]
 }
 
-/** Structural slice of ctx.llm the driver uses. */
-interface LlmLike {
-  stream(options: unknown): AsyncIterable<LoopChunk>
-}
-
-type LoopChunk =
-  | { type: 'text-delta'; text: string }
-  | { type: 'reasoning-delta'; text: string }
-  | { type: 'block-end'; block: { type: string; id?: string; name?: string; arguments?: string } & Record<string, unknown> }
-  | { type: 'usage'; usage?: { inputTokens?: number; outputTokens?: number; totalTokens?: number } }
-  | { type: 'finish'; reason: { kind: string } }
-  | { type: string; [key: string]: unknown }
+// P1.2: the loop speaks ONLY kernel-owned port types (src/dsh-adapter).
+// Platform protocol shapes live exclusively inside the adapter.
+import type { LlmChunk, LlmPort, ToolsPort } from '../dsh-adapter/ports'
 
 interface ToolsLike {
   schemas(): { name: string }[]
   execute(exec: { callId: string; name: string; arguments: unknown; agent?: unknown; signal: AbortSignal }): Promise<{
     isError: boolean
-    content: { type: string; text?: string }[]
+    content: readonly { type: string; text?: string }[]
     value?: unknown
     error?: { message?: string }
   }>
@@ -62,6 +53,10 @@ interface ToolsLike {
 
 export interface LoopDriverDeps {
   readonly ctx: Context
+  /** P1.2: kernel-owned LLM port (adapter translates platform chunks). */
+  readonly llmPort: LlmPort
+  /** P1.2: kernel-owned tools port for schema listing + platform execution. */
+  readonly toolsPort?: ToolsPort
   readonly controller: { ingestEvent(event: unknown): void }
   readonly systemPrompt: () => string
   readonly selection: () => { provider: string; model: string; reasoningEffort?: string }
@@ -98,6 +93,9 @@ const SIDECAR_ROTATE_BYTES = 5 * 1024 * 1024
 const READ_ONLY_TOOLS = new Set([
   'read', 'fs_read', 'read_file', 'grep', 'glob', 'glob_tree', 'list_files',
   'skill', 'kiro_todo_write', 'kiro_think',
+  // ask_user 是「用户交互」工具（不能改任何东西），弹审批只会挡住它要开的
+  // 问答面板——0.7.7 漏了它，导致 ask_user 先弹审批、问题面板出不来。
+  'ask_user',
 ])
 const MAX_RETRIES = 2
 const STALL_MS = 25000
@@ -160,13 +158,14 @@ export class KiroLoopDriver {
     this.abort?.abort()
   }
 
-  private get llm(): LlmLike | undefined {
-    return (this.deps.ctx as unknown as { llm?: LlmLike }).llm
+  private get llm(): LlmPort {
+    return this.deps.llmPort
   }
 
   private get tools(): ToolsLike | undefined {
-    // Prefer the agent-scoped view (approval waterfall routing); fall back
-    // to the runtime scope for the no-agent edge cases.
+    // P1.2: kernel tools port first (the adapter wires the agent-scoped view
+    // where approvals route); legacy ctx.tools remains as the fallback.
+    if (this.deps.toolsPort !== undefined) return this.deps.toolsPort
     const agentCtx = this.deps.agentCtx?.() as { tools?: ToolsLike } | undefined
     return agentCtx?.tools ?? (this.deps.ctx as unknown as { tools?: ToolsLike }).tools
   }
@@ -175,6 +174,7 @@ export class KiroLoopDriver {
    *  rides the shadow proxy and glm rejects its tool shapes with an EMPTY
    *  response (usage+finish, no content) — A1's regression, isolated here. */
   private get schemaSource(): ToolsLike | undefined {
+    if (this.deps.toolsPort !== undefined) return this.deps.toolsPort
     return (this.deps.ctx as unknown as { tools?: ToolsLike }).tools
   }
 
@@ -241,7 +241,7 @@ export class KiroLoopDriver {
   }
 
   /** One model request with backoff retry and stalled-stream protection. */
-  private async streamWithRetry(llm: LlmLike, emit: (event: unknown) => void): Promise<{
+  private async streamWithRetry(llm: LlmPort, emit: (event: unknown) => void): Promise<{
     text: string
     toolCalls: { id: string; name: string; arguments: string }[]
     finish: string
@@ -284,7 +284,7 @@ export class KiroLoopDriver {
   }
 
   /** One streaming pass; a silent stream for STALL_MS aborts as a timeout. */
-  private async streamOnce(llm: LlmLike, options: unknown, emit: (event: unknown) => void): Promise<{
+  private async streamOnce(llm: LlmPort, options: import('../dsh-adapter/ports').LlmRequest, emit: (event: unknown) => void): Promise<{
     text: string
     toolCalls: { id: string; name: string; arguments: string }[]
     finish: string
@@ -301,28 +301,20 @@ export class KiroLoopDriver {
           new Promise<never>((_, reject) => setTimeout(() => reject(new Error('Request timed out: stream stalled')), STALL_MS)),
         ])
         if (next.done === true) break
-        const chunk = next.value as LoopChunk
-        if (chunk.type === 'text-delta' && typeof chunk.text === 'string') {
+        const chunk = next.value as LlmChunk
+        if (chunk.type === 'text-delta') {
           text += chunk.text
           emit({ type: 'assistant/chunk', seq: 0, data: { chunk: { type: 'text-delta', text: chunk.text } } })
-        } else if (chunk.type === 'reasoning-delta' && typeof chunk.text === 'string') {
+        } else if (chunk.type === 'reasoning-delta') {
           emit({ type: 'assistant/chunk', seq: 0, data: { chunk: { type: 'reasoning-delta', text: chunk.text } } })
-        } else if (chunk.type === 'block-end') {
-          const block = (chunk as { block?: { type?: string; id?: string; name?: string; arguments?: string } }).block
-          if (block?.type === 'tool-call') {
-            toolCalls.push({
-              id: String(block.id ?? ''),
-              name: String(block.name ?? ''),
-              arguments: String(block.arguments ?? '{}'),
-            })
-          }
+        } else if (chunk.type === 'tool-call') {
+          toolCalls.push({ id: chunk.id, name: chunk.name, arguments: chunk.arguments || '{}' })
         } else if (chunk.type === 'usage') {
-          emit({ type: 'assistant/chunk', seq: 0, data: { chunk: { type: 'usage', usage: (chunk as { usage?: unknown }).usage } } })
+          emit({ type: 'assistant/chunk', seq: 0, data: { chunk: { type: 'usage', usage: { inputTokens: chunk.inputTokens, outputTokens: chunk.outputTokens, totalTokens: chunk.totalTokens } } } })
         } else if (chunk.type === 'finish') {
-          const reasonChunk = chunk as { reason?: { kind?: string; failure?: { message?: string } } }
-          const kind = reasonChunk.reason?.kind ?? 'stop'
+          const kind = chunk.reason
           if (kind === 'error' || kind === 'aborted') {
-            finishErrorMessage = reasonChunk.reason?.failure?.message ?? kind
+            finishErrorMessage = chunk.failureMessage ?? kind
           }
           // Some adapters emit a trailing second finish after the real one;
           // the first reason wins (a later 'stop' must not clobber
@@ -468,7 +460,7 @@ export class KiroLoopDriver {
   }
 
   /** Compact history when usage exceeds COMPACT_AT of the declared window. */
-  private async maybeCompact(llm: LlmLike, emit: (event: unknown) => void): Promise<void> {
+  private async maybeCompact(llm: LlmPort, emit: (event: unknown) => void): Promise<void> {
     const window = this.deps.contextWindow?.()
     if (window === undefined || window <= 0 || this.history.length < 6) return
     const chars = this.history.reduce((sum, m) => sum + m.text.length, 0)
@@ -490,7 +482,7 @@ export class KiroLoopDriver {
   }
 
   /** One extra LLM call that summarizes the head of the history. */
-  private async summarize(llm: LlmLike, head: readonly LoopMessage[]): Promise<string> {
+  private async summarize(llm: LlmPort, head: readonly LoopMessage[]): Promise<string> {
     const { provider, model } = this.deps.selection()
     const transcript = head.map((m) => `${m.role === 'user' ? '用户' : '助手'}: ${m.text.slice(0, 4000)}`).join('\n')
     let text = ''
@@ -499,14 +491,13 @@ export class KiroLoopDriver {
       model,
       system: '把以下对话压缩成要点摘要，保留任务目标、已做决定与关键文件/命令名，直接输出摘要。',
       messages: [{ role: 'user', source: { kind: 'user' }, content: [{ type: 'text', text: transcript }] }],
-      maxTokens: 512,
       signal: this.abort!.signal,
     })[Symbol.asyncIterator]()
     while (true) {
       const next = await iterator.next()
       if (next.done === true) break
-      const chunk = next.value as LoopChunk
-      if (chunk.type === 'text-delta' && typeof chunk.text === 'string') text += chunk.text
+      const chunk = next.value as LlmChunk
+      if (chunk.type === 'text-delta') text += chunk.text
     }
     return text.trim()
   }

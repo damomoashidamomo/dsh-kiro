@@ -197,10 +197,32 @@ function foldFrame(
  * ever see the header. Split on the magic and decode frame by frame; `maxBytes`
  * bounds the work on logs that ran for hours.
  */
+/**
+ * P2.3 双读：会话日志文件名自带版本（session.v3.jsonl.zstd）。平台升级到
+ * v4 时旧 dsh-kiro 仍能读：优先精确 v3，其次目录里任何 session.v*.jsonl.zstd
+ * （取最高版本）。找不到返回 undefined（调用方按现状处理缺失）。
+ */
+export function resolveSessionLog(dir: string): string | undefined {
+  const v3 = join(dir, 'session.v3.jsonl.zstd')
+  if (existsSync(v3)) return v3
+  try {
+    const candidates = readdirSync(dir)
+      .map((name) => /^session\.v(\d+)\.jsonl\.zstd$/u.exec(name))
+      .filter((m): m is RegExpExecArray => m !== null)
+      .sort((a, b) => Number(b[1]) - Number(a[1]))
+    if (candidates.length === 0) return undefined
+    return join(dir, candidates[0]![0] as string)
+  } catch {
+    return undefined
+  }
+}
+
 export function readSessionTitle(dir: string, maxBytes = 2_000_000): SessionTitle {
+  const logPath = resolveSessionLog(dir)
+  if (logPath === undefined) return emptyTitle()
   let raw: Buffer
   try {
-    raw = readFileSync(join(dir, 'session.v3.jsonl.zstd'))
+    raw = readFileSync(logPath)
   } catch {
     return emptyTitle()
   }
@@ -233,7 +255,9 @@ export function readSessionTitle(dir: string, maxBytes = 2_000_000): SessionTitl
 export async function readSessionTitleAsync(dir: string, maxBytes = 2_000_000): Promise<SessionTitle> {
   let raw: Buffer
   try {
-    raw = await readFile(join(dir, 'session.v3.jsonl.zstd'))
+    const logPath = resolveSessionLog(dir)
+    if (logPath === undefined) throw new Error('session log missing')
+    raw = await readFile(logPath)
   } catch {
     return emptyTitle()
   }

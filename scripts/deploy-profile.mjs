@@ -18,7 +18,7 @@
  */
 
 import { execFileSync } from 'node:child_process'
-import { existsSync, linkSync, mkdirSync, readdirSync, statSync } from 'node:fs'
+import { existsSync, linkSync, mkdirSync, readdirSync, rmSync, statSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -60,23 +60,34 @@ function* walk(path) {
 
 let linked = 0
 let present = 0
+let refreshed = 0
 for (const entry of PAYLOAD) {
   const source = join(repo, entry)
   if (!existsSync(source)) continue // e.g. the engine not built on this machine
   for (const file of walk(source)) {
     const relative = file.slice(repo.length + 1)
     const target = join(packageDir, relative)
+    // A file "already present" is NOT automatically current: tsc can replace
+    // the repo file (unlink + recreate), which BREAKS the hard link and leaves
+    // the profile running STALE code (bit us with an old PlanReviewOverlay —
+    // the panel kept running pre-fix code while everything else updated).
+    // Diverged inode + differing size ⇒ re-link; same inode ⇒ genuinely current.
     try {
-      statSync(target)
-      present += 1
-      continue
+      const targetStat = statSync(target)
+      const sourceStat = statSync(file)
+      if (targetStat.ino === sourceStat.ino) {
+        present += 1
+        continue
+      }
+      rmSync(target)
+      refreshed += 1
     } catch {
-      // missing → link it
+      // missing → link it below
     }
     try {
       mkdirSync(dirname(target), { recursive: true })
       linkSync(file, target)
-      linked += 1
+      if (target !== undefined) linked += 1
     } catch (error) {
       console.error(`deploy-profile: could not link ${relative}: ${error.message}`)
       process.exitCode = 1
@@ -89,4 +100,4 @@ if (force || process.exitCode === 1) {
   execFileSync('pnpm', ['install', '--ignore-scripts', '--force'], { cwd: profileDir, stdio: 'inherit' })
 }
 
-console.log(`deploy-profile: ${profile} → ${linked} new file(s) linked, ${present} already present`)
+console.log(`deploy-profile: ${profile} → ${linked} new file(s) linked, ${refreshed} refreshed, ${present} already present`)

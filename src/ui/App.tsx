@@ -85,6 +85,8 @@ export interface AppProps {
 
 /** Render the TUI. */
 export function App({ controller, seedTask, activeAgentName, onSubmit, fileSearch }: AppProps): JSX.Element {
+  // P4 工具输出折叠：Ctrl+O 全局切换「单行摘要 ⇄ 完整输出」。
+  const [expandTools, setExpandTools] = useState(false)
   const { exit } = useApp()
   const [state, setState] = useState<SessionRenderState>(() => controller.getState())
   const [prefix, setPrefix] = useState<'/' | '@' | '!' | undefined>(undefined)
@@ -155,6 +157,7 @@ export function App({ controller, seedTask, activeAgentName, onSubmit, fileSearc
   // Top-level keybindings dispatch on top of the Prompt's own useInput. Ink
   // routes key events to all `useInput` subscribers in registration order.
   useInput((input, key) => {
+    if (key.ctrl && input === 'o') { setExpandTools((v) => !v); return }
     if (slashMenuOpen) return
     if (state.picker !== undefined) return
     if (state.overlay.kind !== 'none') return
@@ -498,6 +501,7 @@ export function App({ controller, seedTask, activeAgentName, onSubmit, fileSearc
         </Box>
       )}
       <Transcript
+        expandTools={expandTools}
         messages={state.messages}
         header={splashSettled ? { kind: 'splash', key: 'splash', content: splash } : undefined}
       />
@@ -525,6 +529,7 @@ export function App({ controller, seedTask, activeAgentName, onSubmit, fileSearc
       ) : null}
       {state.question !== undefined ? (
         <PlanReviewOverlay
+          key={`${state.question.id}:${state.question.options?.length ?? 0}`}
           request={state.question}
           onResolve={(choice) => controller.resolveQuestion(choice)}
         />

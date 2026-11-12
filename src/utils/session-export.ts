@@ -13,6 +13,7 @@
  * @module @damomoashidamomo/dsh-kiro/utils/session-export
  */
 
+import { resolveSessionLog } from './sessions'
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { dirname, isAbsolute, join, resolve } from 'node:path'
@@ -77,7 +78,7 @@ export function resolveUserPath(input: string, base = process.cwd()): string {
 export function readLogEvents(dir: string): SessionEvent[] {
   let raw: Buffer
   try {
-    raw = readFileSync(join(dir, 'session.v3.jsonl.zstd'))
+    raw = readFileSync(resolveSessionLog(dir) ?? join(dir, 'session.v3.jsonl.zstd'))
   } catch {
     return []
   }

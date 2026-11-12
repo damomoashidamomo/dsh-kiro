@@ -9,6 +9,7 @@ import { join } from 'node:path'
 import { afterAll, describe, it, expect } from 'vitest'
 const tmpRoot = mkdtempSync(join(tmpdir(), 'dsh-loop-p3-'))
 mkdirSync(join(tmpRoot, '.dsh-kiro'), { recursive: true })
+import type { LlmChunk, LlmPort } from '../src/dsh-adapter'
 import { registerLoopTools } from '../src/runtime/loop-tools'
 import { KiroLoopDriver } from '../src/runtime/kiro-loop'
 
@@ -62,7 +63,9 @@ describe('parallel dispatch (read-only rounds overlap)', () => {
     })
     const events: unknown[] = []
     const makeDriver = (tools: unknown): KiroLoopDriver => new KiroLoopDriver({
-      ctx: { llm: llmScript([['read', 'read'], ['bash']]), tools } as never,
+      ctx: {} as never,
+      llmPort: llmScript([['read', 'read'], ['bash']]),
+      toolsPort: tools as never,
       controller: { ingestEvent: (event) => { events.push(event) } },
       systemPrompt: () => 'sys',
       selection: () => ({ provider: 'p', model: 'm' }),
@@ -102,7 +105,9 @@ describe('parallel dispatch (read-only rounds overlap)', () => {
     const events: unknown[] = []
     const driver = new KiroLoopDriver({
       workspaceRoot: tmpRoot,
-      ctx: { llm: llmScript([['bash', 'bash']]), tools } as never,
+      ctx: {} as never,
+      llmPort: llmScript([['bash', 'bash']]),
+      toolsPort: tools as never,
       controller: { ingestEvent: (event) => { events.push(event) } },
       systemPrompt: () => 'sys',
       selection: () => ({ provider: 'p', model: 'm' }),
@@ -119,16 +124,20 @@ describe('parallel dispatch (read-only rounds overlap)', () => {
  * Fake llm.stream that emits one round of tool calls per script entry,
  * then a final text-only round.
  */
-function llmScript(rounds: readonly (readonly string[])[]): unknown {
+// P1.2: the driver consumes kernel LlmPort chunks — feed translated shapes.
+function llmScript(rounds: readonly (readonly string[])[]): LlmPort {
   let round = -1
   return {
-    async *stream(): AsyncGenerator<Record<string, unknown>> {
-      round += 1
-      const names = rounds[Math.min(round, rounds.length - 1)] ?? []
-      for (const name of names) {
-        yield { type: 'block-end', block: { type: 'tool-call', id: `c-${round}-${name}`, name, arguments: '{}' } }
+    stream(): AsyncIterable<LlmChunk> {
+      async function* replay(): AsyncGenerator<LlmChunk> {
+        round += 1
+        const names = rounds[Math.min(round, rounds.length - 1)] ?? []
+        for (const name of names) {
+          yield { type: 'tool-call', id: `c-${round}-${name}`, name, arguments: '{}' }
+        }
+        yield { type: 'finish', reason: 'stop' }
       }
-      yield { type: 'finish', reason: { kind: names.length > 0 ? 'tool-calls' : 'stop' } }
+      return replay()
     },
   }
 }
