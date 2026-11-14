@@ -402,6 +402,8 @@ async function mount(ctx: Context, startup: KiroStartup): Promise<void> {
     },
   })
   let loopMode: 'dsh' | 'kiro' = 'dsh'
+  // 0.9.2: 当前会话是否已写入自动标题（会话切换时重置）
+  let titleEmitted = false
   if (startup.engine === 'kiro') {
     // Boot-time whole-unit switch (--engine kiro): applied after the driver
     // and services exist — see the post-mount block below.
@@ -725,6 +727,7 @@ async function mount(ctx: Context, startup: KiroStartup): Promise<void> {
           activeProvider: selection.provider,
           contextLimitTokens: bootModelWindow ?? undefined,
         })
+        titleEmitted = false
         if (target === undefined) {
           controller.pushSystem('◇ 已开启新会话（原会话已存盘）。')
           return { ok: true, message: '已开启新会话。' }
@@ -754,6 +757,7 @@ async function mount(ctx: Context, startup: KiroStartup): Promise<void> {
             activeProvider: selection.provider,
             contextLimitTokens: bootModelWindow ?? undefined,
           })
+          titleEmitted = false
           controller.pushSystem(`✗ 会话切换失败：${message}\n◇ 已开启新会话保底，TUI 保持可用。`)
           return { ok: false, message: `切换失败（已开新会话保底）：${message}` }
         } catch (recoveryError) {
@@ -859,6 +863,21 @@ async function mount(ctx: Context, startup: KiroStartup): Promise<void> {
     if (!gate.ok) {
       controller.pushSystem(`⛔ 已阻塞：${gate.reason}`)
       return
+    }
+    // 0.9.2: kiro 会话自动标题——首条真实用户消息截断后落平台会话库
+    //（session/title 事件）。kiro 循环的用户消息不进平台日志，没有这一步
+    // /chat list 只能退化成命令列表回退。
+    if (loopMode === 'kiro' && !trimmed.startsWith('/') && !titleEmitted) {
+      const session = (agentRef.current as unknown as { session?: { append?: (type: string, data: unknown) => unknown } } | undefined)?.session
+      if (session?.append !== undefined) {
+        const clipped = trimmed.replace(/\s+/gu, ' ').trim().slice(0, 30)
+        try {
+          session.append('session/title', { title: clipped })
+          titleEmitted = true
+        } catch {
+          // 标题是锦上添花：append 失败（类型校策/会话状态）绝不挡回合
+        }
+      }
     }
     // kiro-loop mode: the turn runs through our own driver (P1 text-only).
     if (loopMode === 'kiro') {

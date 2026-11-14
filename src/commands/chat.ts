@@ -101,7 +101,7 @@ function clipTitle(title: string, maxUnits = 48): string {
 export function summaryOf(session: { title: string; firstUser: string; commands: readonly string[] }): string {
   if (session.title !== '') return clipTitle(session.title)
   if (session.firstUser !== '') return clipTitle(session.firstUser)
-  if (session.commands.length > 0) return clipTitle(`命令 ${session.commands.join(' · ')}`)
+  if (session.commands.length > 0) return `（无对话）· ${session.commands.length} 条命令`
   return ''
 }
 

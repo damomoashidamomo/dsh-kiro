@@ -59,11 +59,11 @@ export function shouldShowStatusBar(input: {
   readonly bootIdentity?: string | undefined
   readonly awaitingDecision?: boolean
 }): boolean {
-  if (input.prefix !== undefined) return true
-  if (input.awaitingDecision === true) return true
-  const identity = identityText(input.agent, input.activeAgentName)
-  if (input.bootIdentity === undefined) return true
-  return identity !== input.bootIdentity
+  // 0.9.2: 常驻显示（用户反馈：极简"有新闻才显示"在空闲/恢复会话后失去
+  // 模型/agent/引擎锚点，logo 滚出视口后界面无归属感）。参数保留以兼容
+  // 既有调用点与测试形状。
+  void input
+  return true
 }
 
 /** Render the StatusBar. */

@@ -10,6 +10,12 @@ fixture writes one frame per event and a header with every required field.
 
 The tests use this to get real session rows (with titles and timestamps) into
 the ``/chat`` picker without waiting for a live turn.
+
+LIMITATION (0.9.2): the platform's resume path validates every event against
+the current format schema and REJECTS these synthetic logs ("corrupt Zstandard
+session log"). Listing tests are unaffected (dsh-kiro's own tolerant reader);
+any test that needs an actual RESUME must create a REAL session first (boot a
+Tui, run one faux turn — see probe pattern in the 0.9.2 fix verification).
 """
 
 from __future__ import annotations

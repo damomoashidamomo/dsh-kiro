@@ -264,7 +264,6 @@ export function App({ controller, seedTask, activeAgentName, onSubmit, fileSearc
     const printBoot = (): void => {
       if (bootIdentity.current !== undefined) return
       bootIdentity.current = identity
-      controller.appendBootInfo(identity)
     }
     if (known) {
       printBoot()

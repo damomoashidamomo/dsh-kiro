@@ -37,14 +37,16 @@ class EchoLayoutTest(unittest.TestCase):
         screen.feed(self.tui.raw)
         return screen.rows()
 
-    def test_10_boot_line_is_printed_once(self):
+    def test_10_identity_appears_exactly_once(self):
+        # 0.9.2: 启动身份行退役，身份信息由常驻状态栏独占承载。
         rows = self.screen_rows()
         hits = [row for row in rows if '工作区:' in row]
         self.assertEqual(len(hits), 1, f'identity line duplicated on screen: {hits}')
 
-    def test_20_no_status_bar_at_idle(self):
+    def test_20_status_bar_is_always_visible_at_idle(self):
+        # 0.9.2 设计变更：状态栏常驻（模型·agent·引擎锚点不再消失）。
         rows = self.screen_rows()
-        self.assertFalse(any('· idle' in row for row in rows), 'the status bar should stay hidden at idle')
+        self.assertTrue(any('· 工作区' in row for row in rows), 'persistent status bar must be visible at idle')
 
     def test_30_echo_sits_directly_above_the_prompt(self):
         self.tui.write(b'\r')
@@ -53,9 +55,11 @@ class EchoLayoutTest(unittest.TestCase):
         prompt_index = next((i for i in range(len(rows) - 1, -1, -1) if PROMPT_RE.match(rows[i])), None)
         self.assertIsNotNone(prompt_index, f'no prompt row in frame: {rows}')
         above = rows[prompt_index - 1] if prompt_index > 0 else ''
+        if '· 工作区' in above:
+            # 0.9.2: 常驻状态栏垫在 echo 与提示行之间——回声应在状态栏上一行。
+            above = rows[prompt_index - 2] if prompt_index > 1 else ''
         self.assertRegex(above, GUTTER_RE, f'row above the prompt is not an echo gutter: {rows}')
-        # And no status bar snuck in between.
-        self.assertFalse(any('· idle' in row for row in rows), 'status bar between echo and prompt')
+        self.assertTrue(any('· 工作区' in row for row in rows), 'persistent bar expected between echo and prompt')
 
 
 if __name__ == '__main__':

@@ -17,7 +17,7 @@ describe('session row summary', () => {
   })
 
   it('names the commands when the session never got a message', () => {
-    expect(summaryOf({ title: '', firstUser: '', commands: ['/chat list', '/model'] })).toBe('命令 /chat list · /model')
+    expect(summaryOf({ title: '', firstUser: '', commands: ['/chat list', '/model'] })).toBe('（无对话）· 2 条命令')
   })
 
   it('is empty when the session has nothing to say', () => {

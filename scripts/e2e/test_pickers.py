@@ -175,7 +175,7 @@ class PickerTest(unittest.TestCase):
             joined = '\n'.join(screen.rows())
             self.assertIn('重构登录流程', joined, 'the durable session title never reached the menu')
             self.assertIn('这条会话没有标题', joined, 'the first-user-message fallback never reached the menu')
-            self.assertIn('命令 /chat list', joined, 'a command-only session did not name its commands')
+            self.assertIn('（无对话）· 2 条命令', joined, 'command-only fallback text (0.9.2)')
         finally:
             for path in made:
                 shutil.rmtree(path, ignore_errors=True)

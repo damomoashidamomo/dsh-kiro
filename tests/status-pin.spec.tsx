@@ -373,23 +373,14 @@ describe('transient status bar (kiro-cli layout)', () => {
     expect(identityText(snap({ activeModel: undefined, activeProvider: undefined }), undefined)).toContain('model: pending')
   })
 
-  it('hides the bar while nothing changed, shows it when it has news', () => {
-    const boot = identityText(snap(), undefined)
-    // Unchanged identity at idle: no bar, so an echoed prompt line sits
-    // directly above the prompt (kiro-cli has no permanent bar either).
-    expect(shouldShowStatusBar({ agent: snap(), bootIdentity: boot })).toBe(false)
-    // Model switched since boot.
-    expect(shouldShowStatusBar({ agent: snap({ activeModel: 'm2' }), bootIdentity: boot })).toBe(true)
-    // Agent switched.
-    expect(shouldShowStatusBar({ agent: snap(), activeAgentName: 'backend', bootIdentity: boot })).toBe(true)
-    // Plan mode toggled.
-    expect(shouldShowStatusBar({ agent: snap({ planMode: true }), bootIdentity: boot })).toBe(true)
-    // Prefix being typed, or a decision waiting.
-    expect(shouldShowStatusBar({ agent: snap(), bootIdentity: boot, prefix: '/' })).toBe(true)
-    expect(shouldShowStatusBar({ agent: snap(), bootIdentity: boot, awaitingDecision: true })).toBe(true)
-    // Before the boot line exists there is nothing to compare against.
-    expect(shouldShowStatusBar({ agent: snap(), bootIdentity: undefined })).toBe(true)
+  it('0.9.2: the bar is ALWAYS visible (persistent identity anchor)', () => {
+    // 设计变更（用户反馈）：空闲/恢复会话后模型·agent·引擎锚点常驻，
+    // 不再"有新闻才显示"。旧断言（空闲隐藏）已废止。
+    expect(shouldShowStatusBar({ agent: snap(), prefix: undefined, bootIdentity: identityText(snap(), undefined), awaitingDecision: false })).toBe(true)
+    expect(shouldShowStatusBar({ agent: snap(), prefix: '/', awaitingDecision: false })).toBe(true)
+    expect(shouldShowStatusBar({ agent: snap(), awaitingDecision: true })).toBe(true)
   })
+
 
   it('prints the boot line once and ignores repeats', () => {
     const ctrl = new SessionController()
