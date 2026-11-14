@@ -140,6 +140,22 @@ phases.
 | Knowledge | `/knowledge` `/usage` |
 | Meta | `/issue` `/changelog` `/experiment` |
 
+## Quick start (any machine)
+
+```bash
+git clone <this repo> && cd dsh-kiro
+pnpm install && pnpm build          # full experience: pnpm build:engine (needs cargo)
+node scripts/install.mjs            # installs into ~/.dsh/profiles/kiro (--dsh-home to relocate)
+dsh --profile kiro                  # launch
+```
+
+Requires Node ≥22, pnpm and a working `dsh`. Works without Rust/cargo too
+(runs on the DSH platform pipeline — no Landlock sandbox; stated honestly at
+boot). A `engine-prebuilt/kiro-toold` release artifact is picked up
+automatically. Re-run install.mjs to upgrade; `--uninstall` removes. For DSH
+upgrades follow docs/upgrade-runbook.zh.md (contracts → adapter-only fixes →
+full regression).
+
 ## Architecture direction (settled 2026-11)
 
 **Own kernel + five-port adapter onto DSH**: the turn loop, the Rust Landlock

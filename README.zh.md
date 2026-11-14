@@ -95,6 +95,21 @@ Ink React App (src/ui/App.tsx)
 `kiro-commands`、`kiro-agents`、`kiro-steering`、`kiro-mcp`、`kiro-trust`、
 `kiro-lsp`、`kiro-checkpoint`、`kiro-knowledge`、`kiro-tangent`。
 
+## 快速开始（任何机器）
+
+```bash
+git clone <本仓库> && cd dsh-kiro
+pnpm install && pnpm build          # 可选完整体验：pnpm build:engine（需 cargo）
+node scripts/install.mjs            # 装进 ~/.dsh/profiles/kiro（--dsh-home 可改位置）
+dsh --profile kiro                  # 启动
+```
+
+要求：Node ≥22、pnpm、已安装 dsh。无 Rust/cargo 也能跑（自动以 DSH 平台
+管线运行，仅少 Landlock 沙箱，启动时会如实提示）；`engine-prebuilt/kiro-toold`
+存在时（如发布产物）安装器自动采用。升级 = 重复运行 install.mjs；卸载 =
+`node scripts/install.mjs --uninstall`。DSH 升级流程见
+`docs/upgrade-runbook.zh.md`（契约测试 → 只改适配层 → 全量回归）。
+
 ## 架构方向（2026-11 定稿）
 
 **自研内核 + 五口适配层外接 DSH**：回合循环 / Rust Landlock 工具引擎 /

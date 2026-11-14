@@ -16,3 +16,6 @@ coverage/
 .kiro/
 .dsh-kiro/
 __pycache__/
+
+# B3: 预编译 engine 二进制（发布产物放这里；不入库）
+engine-prebuilt/kiro-toold

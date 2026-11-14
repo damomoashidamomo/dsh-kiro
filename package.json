@@ -1,7 +1,7 @@
 {
   "name": "@damomoashidamomo/dsh-kiro",
-  "version": "0.9.0",
-  "description": "Kiro-CLI equivalent TUI bundle for DeepSeek Harness \u2014 rich terminal UI with markdown rendering, slash commands, custom agents, MCP, LSP, checkpointing and knowledge base. Dark-green themed.",
+  "version": "0.9.1",
+  "description": "Kiro-CLI equivalent TUI bundle for DeepSeek Harness — rich terminal UI with markdown rendering, slash commands, custom agents, MCP, LSP, checkpointing and knowledge base. Dark-green themed.",
   "type": "module",
   "main": "lib/index.js",
   "types": "lib/index.d.ts",
@@ -76,11 +76,9 @@
     "build:engine": "cargo build --release --manifest-path engine/Cargo.toml"
   },
   "dependencies": {
-    "@damomoashidamomo/dsh-kiro": "file:/home/gary/deepseek harness work zone/dsh-kiro",
-    "@deepseek-ai/dsh-file-reference": "file:/home/gary/.npm-global/lib/node_modules/@deepseek-ai/dsh/node_modules/@deepseek-ai/dsh-file-reference",
-    "@deepseek-ai/dsh-file-reference-local": "file:/home/gary/.npm-global/lib/node_modules/@deepseek-ai/dsh/node_modules/@deepseek-ai/dsh-file-reference-local",
+    "@deepseek-ai/dsh-file-reference": "0.1.2-rc.1",
+    "@deepseek-ai/dsh-file-reference-local": "0.1.2-rc.1",
     "@deepseek-ai/dsh-hook-protocol": "0.1.2-rc.1",
-    "@deepseek-ai/dsh-tool-skill": "0.1.5-rc.2",
     "@deepseek-ai/dsh-user-questions": "0.1.2-rc.1",
     "chalk": "^5.3.0",
     "cli-highlight": "^2.1.11",
