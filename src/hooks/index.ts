@@ -38,9 +38,9 @@ import {
   createDetachedRuns,
   DEFAULT_HOOK_TIMEOUT_MS,
   DEFAULT_STDERR_SUMMARY_MAX_CHARS,
-} from '@deepseek-ai/dsh-hook-protocol'
+} from '../dsh-adapter/platform'
 import type { MatcherGroup } from '@deepseek-ai/dsh-hook-protocol'
-import { createUserMessage } from '@deepseek-ai/dsh-llm'
+import { createUserMessage } from '../dsh-adapter/platform'
 import { dshKiroUserRoot } from '../utils/kiro-home'
 
 /** The seven supported hook points. */

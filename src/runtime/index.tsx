@@ -10,13 +10,11 @@ import { randomUUID } from 'node:crypto'
 import { Worker } from 'node:worker_threads'
 import { render } from 'ink'
 import type { Context } from '@deepseek-ai/cordis'
-import { brandString } from '@deepseek-ai/dsh-brand'
-import { installModelSelection } from '@deepseek-ai/dsh-agent'
+import { brandString, installModelSelection } from '../dsh-adapter/platform'
 import type { Agent, AgentHandle, AgentSetup, ModelSelection, ModelSelectionRef } from '@deepseek-ai/dsh-agent'
-import { createUserMessage } from '@deepseek-ai/dsh-llm'
-import { SessionId } from '@deepseek-ai/dsh-session'
+import { createUserMessage, SessionId } from '../dsh-adapter/platform'
 import { readFileSync } from 'node:fs'
-import { parseCommand } from '@deepseek-ai/dsh-commands'
+import { parseCommand } from '../dsh-adapter/platform'
 import { applyAgentPreset } from '../utils/agent-apply'
 import { agentDirs, findAgent, getEngineBinding } from '../utils/agent-store'
 import { App } from '../ui/App'
@@ -31,7 +29,7 @@ import { routeTurnInput } from './turn-input'
 import { detectEffortHint, resolveAutoEffort } from './effort-keywords'
 import { KiroLoopDriver, readSidecarEvents } from './kiro-loop'
 import { registerLoopTools } from './loop-tools'
-import { adapterHealthProbe, createInProcessAdapter, detectPlatformVersion, evaluateGate, fauxLlmFromEnv, type LlmPort } from '../dsh-adapter'
+import { adapterHealthProbe, createHeadlessLlmPort, createInProcessAdapter, detectPlatformVersion, evaluateGate, fauxLlmFromEnv, type LlmPort } from '../dsh-adapter'
 import { composeSteeringPrompt } from '../steering/index'
 import type { SteeringFile } from '../steering/loader'
 import { contextWindowOf } from './model-catalog'
@@ -321,7 +319,15 @@ async function mount(ctx: Context, startup: KiroStartup): Promise<void> {
   })
   // faux 供应商产的是**内核块**（LlmPort 契约），必须绕过翻译层——否则
   // tool-call 会被当未知块吃掉（双重翻译 bug）。faux 直接顶替整个 llmPort。
-  const llmPort: LlmPort = fauxLlm ?? adapter.llm
+  // A3 自动降级：平台 llm 缺失时整机切 headless 子进程通道（无流式/无审批
+  // 面板，如实提示）；递归护栏：headless 子进程内禁止再次降级。
+  const platformLlmMissing = platformLLm === undefined
+  const headlessSuppressed = process.env.DSH_KIRO_HEADLESS_ACTIVE === '1'
+  const headlessLlm = platformLlmMissing && !headlessSuppressed ? createHeadlessLlmPort() : undefined
+  if (headlessLlm !== undefined) {
+    controller.pushSystem('⚠ 平台 llm 服务不可用——已自动降级为 headless 子进程通道（无流式输出、无审批面板交互；修复平台后重启恢复完整模式）。')
+  }
+  const llmPort: LlmPort = fauxLlm ?? headlessLlm ?? adapter.llm
   // P3.2 启动契约探针：适配器不健康时如实降级提示（不静默）。
   {
     const probe = adapterHealthProbe({ llm: fauxLlm ?? (ctx as unknown as { llm?: never }).llm, tools: (ctx as unknown as { tools?: never }).tools })
@@ -403,6 +409,7 @@ async function mount(ctx: Context, startup: KiroStartup): Promise<void> {
   // P3: kiro-loop owned tools (todo checklist + thinking scratchpad), wired
   // straight into the controller so BOTH loops get the kiro-cli tool surface.
   const disposeLoopTools = registerLoopTools(ctx, {
+    dialogPort: adapter.dialog,
     controller: { ingestEvent: (event: never) => controller.ingestEvent(event) },
   })
   ctx.on('dispose' as never, (() => disposeLoopTools()) as never)
@@ -614,21 +621,16 @@ async function mount(ctx: Context, startup: KiroStartup): Promise<void> {
   // sessionQuery.readSession). The runtime-scope capture calls cleanly.
   ctx.provide('kiroEffortProbe', {
     async probe(provider: string, model: string): Promise<string> {
-      const llm = (ctx as { llm?: { stream?: (options: unknown) => AsyncIterable<unknown> } }).llm
-      const runtime = llm as { stream: (options: unknown) => AsyncIterable<unknown> } | undefined
-      if (runtime === undefined || typeof runtime.stream !== 'function') return '/effort probe: llm 服务不可用'
+      // A2: probe 走适配器 Port（内核块形状；faux 时也天然可用）。
+      const runtime: LlmPort | undefined = llmPort
       const attempt = async (effort?: string): Promise<string> => {
-        const options = {
-          provider,
-          model,
-          system: 'probe',
-          maxTokens: 16,
-          messages: [createUserMessage({ content: [{ type: 'text', text: 'hi' }], source: { kind: 'user' } })],
-          ...(effort !== undefined ? { reasoningEffort: effort } : {}),
-          signal: AbortSignal.timeout(30000),
-        }
+        const messages = [createUserMessage({ content: [{ type: 'text', text: 'hi' }], source: { kind: 'user' } })]
         try {
-          for await (const _chunk of runtime.stream(options)) break
+          for await (const _chunk of runtime.stream({
+            provider, model, system: 'probe', messages,
+            ...(effort !== undefined ? { reasoningEffort: effort } : {}),
+            signal: AbortSignal.timeout(30000),
+          })) break
           return 'ok'
         } catch (error) {
           return error instanceof Error ? error.message : String(error)

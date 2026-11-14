@@ -13,6 +13,7 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import type { Context } from '@deepseek-ai/cordis'
+import { createSessionPort } from '../dsh-adapter'
 import type { SessionEvent } from '@deepseek-ai/dsh-session'
 import type { Agent } from '@deepseek-ai/dsh-agent'
 export type { ApprovalPattern } from './trust-store'
@@ -207,9 +208,15 @@ export class SessionController {
     }
     this.refreshPermissionPreset()
     this.publish()
-    this.unsubscribe = ctx.on('session/event', (session, event) => {
-      if (session !== agent.session) return
-      this.applyEvent(event)
+    // A2: 会话事件经 SessionPort（dsh-adapter）订阅——通道名等平台细节
+    // 收敛在适配层。回调仍带原 session 以便过滤本 agent 的事件。
+    // Preserve the agent filter: the port hides the session object, so the
+    // filter rides inside the channel wrapper (kernel keeps the semantics,
+    // the adapter owns the channel name).
+    const port = createSessionPort((channel: 'session/event', handler: (session: unknown, event: unknown) => void) =>
+      ctx.on(channel, handler))
+    this.unsubscribe = port.subscribe((event) => {
+      this.applyEvent(event as Parameters<SessionController['applyEvent']>[0])
     })
     // Streaming chunks arrive on the Cordis 'agent/assistant-stream' channel,
     // NOT through session/event — the agent-loop dispatches live frames here

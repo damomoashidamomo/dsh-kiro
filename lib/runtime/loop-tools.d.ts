@@ -17,6 +17,8 @@ export interface LoopToolDeps {
     readonly controller: {
         ingestEvent(event: unknown): void;
     };
+    /** A2: ask_user 经 DialogPort（内核自有通道）；缺省回落平台 userQuestions。 */
+    readonly dialogPort?: import('../dsh-adapter/ports').DialogPort;
 }
 /** Register both tools; returns the dispose pair. */
 export declare function registerLoopTools(ctx: Context, deps: LoopToolDeps): () => void;

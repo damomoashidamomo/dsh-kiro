@@ -19,7 +19,7 @@ import type { Context } from '@deepseek-ai/cordis'
 import {
   parseCmdline,
   type AppExit,
-} from '@deepseek-ai/dsh-cmdline'
+} from './dsh-adapter/platform'
 import { readFileSync, statSync } from 'node:fs'
 import { join, resolve } from 'node:path'
 import { banner, resetPalette, colorLevel } from './theme/palette'

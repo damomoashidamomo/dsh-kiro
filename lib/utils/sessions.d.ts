@@ -10,7 +10,7 @@
  *
  * @module @damomoashidamomo/dsh-kiro/utils/sessions
  */
-import { SessionId } from '@deepseek-ai/dsh-session';
+import { SessionId } from '../dsh-adapter/platform';
 /** Header summary extracted from one session file. */
 export interface SessionSummary {
     /** Raw session id (with the `session-` prefix). */

@@ -9,7 +9,7 @@
  * @module @damomoashidamomo/dsh-kiro/runtime/question-answerer
  */
 
-import { UserQuestionError } from '@deepseek-ai/dsh-user-questions'
+import { UserQuestionError } from '../dsh-adapter/platform'
 import type { QuestionRequestUi } from './types'
 import type { QuestionChoice } from './types'
 

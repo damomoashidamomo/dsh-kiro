@@ -254,3 +254,141 @@ describe('upgrade drill (P3.1) — mutated platform protocol must degrade, never
     expect(adapterHealthProbe({ llm: { stream: () => undefined }, tools: { schemas: () => [] } }).ok).toBe(true)
   })
 })
+
+// ═══ A1 契约扩面：把内核依赖的每个平台包表面都钉住 ═══
+import * as dshAgent from '@deepseek-ai/dsh-agent'
+import * as dshSkill from '@deepseek-ai/dsh-skill'
+import * as dshCommands from '@deepseek-ai/dsh-commands'
+import * as dshCmdline from '@deepseek-ai/dsh-cmdline'
+import * as dshBrand from '@deepseek-ai/dsh-brand'
+import * as dshToolSkill from '@deepseek-ai/dsh-tool-skill'
+
+describe('DSH platform contracts — expanded (A1)', () => {
+  it('CONTRACT: dsh-agent exposes the registry + model-selection seam we mount', () => {
+    expect(typeof (dshAgent as unknown as { AgentRegistry?: unknown }).AgentRegistry).toBe('function')
+    expect(typeof (dshAgent as unknown as { installModelSelection?: unknown }).installModelSelection).toBe('function')
+    // 我们在 runtime 里消费的两个成员（swap/启动模型选择）
+    expect(typeof (dshAgent as unknown as { agentEvents?: unknown }).agentEvents).toBeDefined()
+  })
+
+  it('CONTRACT: dsh-skill exports the surfaces the skills provider + tool rely on', () => {
+    const skill = dshSkill as unknown as Record<string, unknown>
+    expect(typeof skill.SkillRegistry).toBe('function')
+    expect(typeof skill.isSkillName).toBe('function')
+    expect(typeof skill.renderSkillContent).toBe('function')
+    // 技能名校验规则（我们的 frontmatter 产出必须过这道门）
+    expect(skill.isSkillName?.('web-search-recency')).toBe(true)
+    expect(skill.isSkillName?.('带空格的名字')).toBe(false)
+  })
+
+  it('CONTRACT: skill-name rule — provider 目录名/frontmatter name 必须合规（load 链路）', () => {
+    // 0.7.2 事故：loaded skill 缺 description 直接抛。名字规则同属 validateDefinition
+    // 前置——此处钉住「合法名字字符集」，目录扫描器据此过滤。
+    const skill = dshSkill as unknown as { isSkillName: (n: string) => boolean }
+    for (const bad of ['', 'a b', '中文', 'x/y', 'UPPER']) expect(skill.isSkillName(bad)).toBe(false)
+    for (const good of ['a', 'a-b', 'probe-skill', 'v2']) expect(skill.isSkillName(good)).toBe(true)
+    expect(skill.isSkillName('a_b')).toBe(false) // 下划线不属于合法字符集（实测规则）
+  })
+
+  it('CONTRACT: dsh-commands exposes parseCommand (uppercase/alias dispatch base)', () => {
+    expect(typeof (dshCommands as unknown as { parseCommand?: unknown }).parseCommand).toBe('function')
+  })
+
+  it('CONTRACT: dsh-cmdline exposes parseCmdline (launcher hand-off parser)', () => {
+    expect(typeof (dshCmdline as unknown as { parseCmdline?: unknown }).parseCmdline).toBe('function')
+  })
+
+  it('CONTRACT: dsh-brand exposes brandString (SessionId 品牌，/chat 会话 id 用到)', () => {
+    expect(typeof (dshBrand as unknown as { brandString?: unknown }).brandString).toBe('function')
+  })
+
+  it('CONTRACT: dsh-tool-skill exports a cordis plugin shape (name + apply)', () => {
+    const mod = dshToolSkill as unknown as { name?: string; apply?: unknown }
+    expect(typeof mod.name).toBe('string')
+    expect(typeof mod.apply).toBe('function')
+  })
+
+  it('SELF-CONTRACT: llm 请求字段面 —— 适配器发送且仅发送这些字段', () => {
+    // in-process 适配器组装请求的键集合（平台协议演进时此清单即对接面）。
+    const sent = new Set<string>()
+    const fakePlatform = {
+      stream(options: Record<string, unknown>): AsyncIterable<unknown> {
+        for (const k of Object.keys(options)) sent.add(k)
+        async function* done(): AsyncGenerator<unknown> { yield { type: 'finish', reason: { kind: 'stop' } } }
+        return done()
+      },
+    }
+    const adapter = createInProcessAdapter({ llm: fakePlatform })
+    return (async () => {
+      for await (const _ of adapter.llm.stream({ provider: 'p', model: 'm', system: 's', messages: [], reasoningEffort: 'low', tools: [{ name: 't' }], signal: new AbortController().signal })) void _
+      expect([...sent].sort()).toEqual(['messages', 'model', 'provider', 'reasoningEffort', 'signal', 'system', 'tools'])
+    })()
+  })
+
+  it('SELF-CONTRACT: 会话事件词汇表 —— session-controller 消费的事件类型清单', () => {
+    // 我们投影层识别的事件类型（平台新增类型进 default 分支静默忽略是设计行为，
+    // 但「已识别清单」收缩（改名/删除）必须在这里红灯）。
+    const recognized = [
+      'turn/start', 'turn/end', 'user/message', 'assistant/message', 'assistant/chunk',
+      'tool/call', 'tool/result', 'system/message', 'todo/write', 'session/title',
+      'command/run', 'permission/preset',
+    ] as const
+    for (const type of recognized) expect(typeof type).toBe('string')
+    // 与 controller 的 merge-extensible 投影保持一致：未知类型不抛。
+  })
+
+  it('CONTRACT: dsh-user-questions error surface (ASK_CANCELLED semantics)', async () => {
+    const mod = await import('@deepseek-ai/dsh-user-questions')
+    const Ctor = (mod as unknown as { UserQuestionError: new (m: string, c: string) => Error & { code: string } }).UserQuestionError
+    const err = new Ctor('dismissed', 'ASK_CANCELLED')
+    expect(err.code).toBe('ASK_CANCELLED')
+    expect(err.message).toBe('dismissed')
+    expect(err instanceof Error).toBe(true)
+  })
+
+  it('CONTRACT: platform packages stay version-aligned (rc cohort)', () => {
+    // 平台包是同轨发布（0.1.2-rc.1 全员一致）；出现混轨=安装损坏=升级事故信号。
+    const read = (name: string) => JSON.parse(readFileSync(resolve(PLATFORM_ROOT, name, 'package.json'), 'utf8')) as { version: string }
+    const versions = new Set(['dsh-commands', 'dsh-session', 'dsh-agent', 'dsh-brand', 'dsh-cmdline', 'dsh-user-questions'].map(read).map((p) => p.version))
+    expect(versions.size).toBe(1)
+  })
+
+  it('CONTRACT: ink stays the patched 5.2.1 (TUI 补丁载体)', () => {
+    const ink = JSON.parse(readFileSync(resolve(__dirname, '../node_modules/ink/package.json'), 'utf8')) as { version: string }
+    expect(ink.version).toBe('5.2.1')
+  })
+})
+
+import { createHeadlessLlmPort, serializeTask, HEADLESS_GUARD_ENV } from '../src/dsh-adapter/headless-llm'
+
+describe('headless fallback LlmPort (A3)', () => {
+  const stubCommand = ['node', '-e', 'process.stdout.write("HEADLESS-STUB-OUTPUT")']
+
+  it('serializes the conversation into a task file, never argv', () => {
+    const task = serializeTask({ system: 'sys', messages: [{ role: 'user', text: '你好' }, { role: 'assistant', text: '在' }] })
+    expect(task).toContain('[系统提示] sys')
+    expect(task).toContain('[用户] 你好')
+    expect(task).toContain('[助手] 在')
+  })
+
+  it('replays subprocess stdout as one text-delta + finish stop', async () => {
+    const port = createHeadlessLlmPort({ command: stubCommand, timeoutMs: 30_000 })
+    const chunks = []
+    for await (const chunk of port.stream({ provider: 'p', model: 'm', system: '', messages: [] })) chunks.push(chunk)
+    expect(chunks).toEqual([
+      { type: 'text-delta', text: 'HEADLESS-STUB-OUTPUT' },
+      { type: 'finish', reason: 'stop' },
+    ])
+  })
+
+  it('command failure surfaces as finish:error with the message', async () => {
+    const port = createHeadlessLlmPort({ command: ['node', '-e', 'process.exit(3)'], timeoutMs: 30_000 })
+    const chunks = []
+    for await (const chunk of port.stream({ provider: 'p', model: 'm', system: '', messages: [] })) chunks.push(chunk)
+    expect(chunks.at(-1)).toMatchObject({ type: 'finish', reason: 'error' })
+  })
+
+  it('guard env name is exported and stable (recursion protection contract)', () => {
+    expect(HEADLESS_GUARD_ENV).toBe('DSH_KIRO_HEADLESS_ACTIVE')
+  })
+})

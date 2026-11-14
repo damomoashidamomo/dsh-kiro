@@ -68,6 +68,20 @@ describe('KnowledgeStore', () => {
     expect(store.list()).toEqual([])
   })
 
+  it('numeric refs resolve by 1-based index BEFORE uuid prefix (real deletion bug)', () => {
+    // UUID 十六进制，1/16 概率以数字开头——旧实现先按 id 前缀匹配，
+    // remove('2') 有概率删错条目。数字引用必须优先按序号。
+    const a = join(workDir, 'a.md'); writeFileSync(a, 'aaa')
+    const b = join(workDir, 'b.md'); writeFileSync(b, 'bbb')
+    const store = new KnowledgeStore(workDir)
+    store.addFile(a, 'Alpha')
+    store.addFile(b, 'Beta')
+    const resolved = store.resolveRef('2')
+    expect(resolved?.label).toBe('Beta')
+    expect(store.remove('2')).toBe(true)
+    expect(store.list().map((e) => e.label)).toEqual(['Alpha'])
+  })
+
   it('clears all entries', () => {
     const a = join(workDir, 'a.md'); writeFileSync(a, 'a')
     const b = join(workDir, 'b.md'); writeFileSync(b, 'b')

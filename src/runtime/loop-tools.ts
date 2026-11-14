@@ -24,6 +24,8 @@ export interface LoopToolDeps {
   readonly controller: {
     ingestEvent(event: unknown): void
   }
+  /** A2: ask_user 经 DialogPort（内核自有通道）；缺省回落平台 userQuestions。 */
+  readonly dialogPort?: import('../dsh-adapter/ports').DialogPort
 }
 
 const TODO_STATUSES = ['pending', 'in_progress', 'completed']
@@ -208,10 +210,14 @@ export function registerLoopTools(ctx: Context, deps: LoopToolDeps): () => void 
       if (questions.length === 0) {
         return { answered: false, error: 'question (or questions[]) is required' }
       }
-      const userQuestions = (ctx as unknown as { get?: (name: string) => unknown }).get?.('userQuestions') as
-        | { ask?: (request: unknown) => Promise<{ answers: { id: string; selected: string[]; custom?: string }[] }> }
-        | undefined
-      if (userQuestions?.ask === undefined) {
+      // A2: DialogPort first (kernel-owned); the platform userQuestions
+      // waterfall stays as the fallback so both loops keep working.
+      const ask = deps.dialogPort !== undefined
+        ? (request: unknown) => deps.dialogPort!.askQuestions(request as Parameters<import('../dsh-adapter/ports').DialogPort['askQuestions']>[0])
+        : ((ctx as unknown as { get?: (name: string) => unknown }).get?.('userQuestions') as
+            | { ask?: (request: unknown) => Promise<{ answers: { id: string; selected: string[]; custom?: string }[] }> }
+            | undefined)?.ask
+      if (ask === undefined) {
         return { answered: false, error: 'question service unavailable (userQuestions)' }
       }
       const request = {
@@ -223,9 +229,9 @@ export function registerLoopTools(ctx: Context, deps: LoopToolDeps): () => void 
           ...(q.options !== undefined && q.options.length > 0 ? { options: q.options } : {}),
         })),
       }
-      const answer = await userQuestions.ask(request)
+      const answer = await ask(request)
       const parts = request.questions.map((q, i) => {
-        const entry = answer.answers.find((a) => a.id === q.id) ?? answer.answers[i]
+        const entry = answer.answers.find((a: { id: string }) => a.id === q.id) ?? answer.answers[i]
         const chosen = entry ? entry.selected.join(' / ') : '（未回答）'
         const custom = entry?.custom !== undefined && entry.custom !== '' ? `（补充：${entry.custom}）` : ''
         return `${q.question} → ${chosen}${custom}`

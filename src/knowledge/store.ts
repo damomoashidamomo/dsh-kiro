@@ -346,13 +346,16 @@ export class KnowledgeStore {
   resolveRef(ref: string): KnowledgeEntry | undefined {
     const trimmed = ref.trim()
     if (trimmed === '') return undefined
-    const byId = this.index.entries.find((entry) => entry.id.startsWith(trimmed))
-    if (byId !== undefined) return byId
+    // 纯数字引用 = 1-based 序号，必须在 UUID 前缀匹配**之前**判定：
+    // UUID 每位是十六进制，1/16 概率以数字开头——旧顺序下 remove('2') 有
+    // 概率删掉"恰好以 2 开头的 UUID"条目而不是第 2 条（真实错删 bug）。
     if (/^\d+$/u.test(trimmed)) {
       const index = Number.parseInt(trimmed, 10)
       const entry = this.index.entries[index - 1]
       if (entry !== undefined) return entry
     }
+    const byId = this.index.entries.find((entry) => entry.id.startsWith(trimmed))
+    if (byId !== undefined) return byId
     const byLabel = this.index.entries.find((entry) => entry.label === trimmed)
     if (byLabel !== undefined) return byLabel
     return this.index.entries.find((entry) => entry.path === trimmed || entry.path.endsWith(trimmed))

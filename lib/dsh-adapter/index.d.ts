@@ -28,3 +28,4 @@ export declare function adapterHealthProbe(platform: {
     ok: boolean;
     problems: readonly string[];
 };
+export { createHeadlessLlmPort, serializeTask, HEADLESS_GUARD_ENV } from './headless-llm';

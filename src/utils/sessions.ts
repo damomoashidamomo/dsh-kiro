@@ -17,8 +17,7 @@ import { homedir } from 'node:os'
 import { isAbsolute, join, relative } from 'node:path'
 import { zstdDecompress, zstdDecompressSync } from 'node:zlib'
 import { promisify } from 'node:util'
-import { brandString } from '@deepseek-ai/dsh-brand'
-import { SessionId } from '@deepseek-ai/dsh-session'
+import { brandString, SessionId } from '../dsh-adapter/platform'
 
 /** Default `$DSH_HOME` when the env var is unset — `~/.dsh`. */
 function defaultHome(): string {

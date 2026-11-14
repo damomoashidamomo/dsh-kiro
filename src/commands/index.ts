@@ -12,6 +12,7 @@
  */
 
 import type { Context } from '@deepseek-ai/cordis'
+import { createCommandPort } from '../dsh-adapter'
 import { ALL_COMMANDS } from './registry'
 
 /** Stable Cordis plugin name. */
@@ -37,6 +38,7 @@ export function apply(ctx: Context): void {
   if (commands === undefined) {
     throw new Error('kiro-commands: ctx.commands is not available; the base layer must mount dsh-commands first')
   }
+  const port = createCommandPort(commands)
   let skipped = 0
   for (const command of ALL_COMMANDS) {
     if (BASE_OWNED_NAMES.has(command.name)) {
@@ -44,7 +46,7 @@ export function apply(ctx: Context): void {
       continue
     }
     try {
-      commands.register(command)
+      port.register(command as never)
     } catch {
       // Defensive: another row won the name first (e.g. a future base row).
       // Keep the already-registered implementation.

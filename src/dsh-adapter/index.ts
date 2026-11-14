@@ -62,3 +62,4 @@ export function adapterHealthProbe(platform: {
   }
   return { ok: problems.length === 0, problems }
 }
+export { createHeadlessLlmPort, serializeTask, HEADLESS_GUARD_ENV } from './headless-llm'
