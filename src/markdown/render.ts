@@ -94,6 +94,22 @@ export function displayWidth(text: string): number {
 }
 
 /** Break `text` into chunks of at most `width` display columns. */
+/** 超过此列数的表降级为行卡片渲染（方案 B 阈值）。 */
+const CARD_COLUMN_LIMIT = 6
+
+/** Slice by DISPLAY width (CJK = 2), keeping the leading columns. */
+function sliceByWidth(text: string, width: number): string {
+  let used = 0
+  let out = ''
+  for (const ch of text) {
+    const w = displayWidth(ch)
+    if (used + w > width) break
+    out += ch
+    used += w
+  }
+  return out
+}
+
 function chunkByWidth(text: string, width: number): string[] {
   const chunks: string[] = []
   let current = ''
@@ -335,6 +351,29 @@ function renderList(token: Tokens.List): string {
  * content into multiple physical lines.
  */
 function renderTable(token: Tokens.Table, maxWidth?: number): string {
+  // 0.9.4 方案 B：列数 > CARD_COLUMN_LIMIT 时整表降级为「行卡片」——
+  // 8 列 CJK 表在任何 ~100 列终端里数学上无解（均摊每列 ~8），与其碎片
+  // 化不如逐行卡片化（字段: 值 竖排），永不溢出。≤6 列走智能预算表格。
+  const columnCount = token.header.length
+  if (columnCount > CARD_COLUMN_LIMIT) return renderTableAsCards(token)
+  return renderTableGrid(token, maxWidth)
+}
+
+/** Wide-table fallback: one card per row, field-per-line. */
+function renderTableAsCards(token: Tokens.Table): string {
+  const header = token.header.map(cell => renderInline(cell.tokens))
+  const cards = token.rows.map((row, rowIdx) => {
+    const lines = row.map((cell, i) => {
+      const label = stripAnsi(header[i] ?? `列${i + 1}`).trim()
+      const value = renderInline(cell.tokens).replace(/\s+/gu, ' ').trim()
+      return `  ${palette.bold(label)}${palette.dim('：')}${value}`
+    })
+    return [`${palette.accent('▸')} ${palette.bold(`#${rowIdx + 1}`)}`, ...lines].join('\n')
+  })
+  return cards.join('\n\n')
+}
+
+function renderTableGrid(token: Tokens.Table, maxWidth?: number): string {
   const alignments = token.align
   const headerCells = token.header.map(cell => renderInline(cell.tokens))
   const rows = token.rows.map(row => row.map(cell => renderInline(cell.tokens)))
@@ -348,25 +387,60 @@ function renderTable(token: Tokens.Table, maxWidth?: number): string {
     ),
   )
 
-  // Scale columns to fit the pane (separator cost: 3 per column + 1).
+  // ── 0.9.4 智能列预算（方案 A）──────────────────────────────────────────
+  // 瘦列（✅/❌/短词/数字/价格）永不换行：按自然宽 + 2 预留，超宽截断加 …；
+  // 换行预算只留给最“胖”的 1-2 列（描述/链接类）。旧实现等比压缩全列换行，
+  // 8 列 CJK 表每格折 3-6 行——用户实测“表格碎片化不可读”的根源。
+  const THIN_MAX = 12          // 自然宽 ≤12 视为瘦列候选
+  const FAT_COUNT = 3          // 最多 3 个胖列吸收全部换行预算
+  const MID_MIN = 8            // 中列下限（低于此宁可整表更窄）
   const overhead = natural.length * 3 + 1
   const cap = Math.max(20, (maxWidth ?? renderWidth()) - 2)
+  const total = natural.reduce((a, b) => a + b, 0)
+
   const widths = (() => {
-    const total = natural.reduce((a, b) => a + b, 0)
     if (total + overhead <= cap) return natural
-    const scale = (cap - overhead) / total
-    const scaled = natural.map(width => Math.max(4, Math.floor(width * scale)))
-    const stillOver = scaled.reduce((a, b) => a + b, 0) + overhead - cap
-    if (stillOver > 0) {
-      const widest = scaled.indexOf(Math.max(...scaled))
-      scaled[widest] = Math.max(4, scaled[widest]! - stillOver)
-    }
-    return scaled
+    // 瘦列集合：自然宽小且不含长词（无空格长串会被硬切，跳过）
+    const isThin = natural.map((w, i) => {
+      if (w > THIN_MAX) return false
+      const sample = [headerCells[i] ?? '', ...rows.slice(0, 3).map(r => r[i] ?? '')].join(' ')
+      const longestWord = Math.max(0, ...sample.split(/\s+/u).filter(Boolean).map(word => displayWidth(word)))
+      return longestWord <= THIN_MAX
+    })
+    // 胖列 = 非瘦列里自然宽最大的 FAT_COUNT 个；其余为“中列”（1-2 行封顶）
+    const fatCandidates = natural
+      .map((w, i) => ({ w, i, thin: isThin[i] ?? false }))
+      .filter(c => !c.thin)
+      .sort((a, b) => b.w - a.w)
+    const fatSet = new Set(fatCandidates.slice(0, FAT_COUNT).map(c => c.i))
+
+    // 预算分配（0.9.4 v2）：瘦列自然宽+1（不参与压缩）；中列 min(自然宽,14)
+    // 且 ≥ MID_MIN；剩余全部给胖列均分（下限 10，不够就从瘦列截断里扣）。
+    const thinTotal = natural.reduce((sum, w, i) => sum + ((isThin[i] ?? false) ? Math.min(w, THIN_MAX) + 1 : 0), 0)
+    const mids = natural.map((w, i) => ({ w, i, thin: isThin[i] ?? false }))
+      .filter(c => !c.thin && !fatSet.has(c.i))
+      .map(c => Math.max(MID_MIN, Math.min(c.w, 14)))
+    const midBudget = mids.reduce((a, b) => a + b, 0)
+    const fatBudget = Math.max(10, cap - overhead - thinTotal - midBudget)
+    const fatCountReal = Math.max(1, fatSet.size)
+    return natural.map((w, i) => {
+      if (isThin[i] ?? false) return Math.min(w, THIN_MAX) + 1
+      if (fatSet.has(i)) return Math.floor(fatBudget / fatCountReal)
+      return Math.max(MID_MIN, Math.min(w, 14))
+    })
   })()
 
+  /** 瘦列截断（单行 + …）；胖/中列正常换行。 */
   const wrapCell = (text: string, i: number): string[] => {
     const plain = stripAnsi(text)
     const width = Math.max(1, (widths[i] ?? 1))
+    const single = plain.replace(/\s+/gu, ' ').trim()
+    if (displayWidth(single) <= width) return [pad(single, width)]
+    if (width >= 4 && displayWidth(single) > width && natural[i] !== undefined && natural[i]! <= THIN_MAX) {
+      // 瘦列超宽：截断加 …（内容短但比分配宽——只在整体超宽时发生）
+      const clipped = sliceByWidth(single, width - 1)
+      return [pad(`${clipped}…`, width)]
+    }
     return chunkByWidth(plain, width).map(chunk => pad(chunk, width))
   }
 

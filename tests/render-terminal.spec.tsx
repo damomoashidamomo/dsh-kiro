@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest'
 import { Writable } from 'node:stream'
 import { render } from 'ink'
 import { Transcript } from '../src/ui/Transcript'
-import { displayWidth } from '../src/markdown/render'
+import { displayWidth, renderMarkdown } from '../src/markdown/render'
 import type { Message } from '../src/runtime/types'
 
 /**
@@ -208,5 +208,42 @@ describe('terminal screen after a wrapped stream', () => {
     // The full message survives as ONE contiguous run of characters: a stale
     // continuation row would split it and duplicate a fragment.
     expect(shown).toContain(plain(expected))
+  })
+})
+
+describe('smart column budget table rendering (0.9.4)', () => {
+  const md8 = [
+    '| 产品 | 发布时间 | 手电 | 激光 | 点火器 | 附加功能 | 体积/重量 | 价格 |',
+    '|---|---|---|---|---|---|---|---|',
+    '| Weltool K3 Ultra（ZDNET 评测） | 2025，目前在售 | 800 lm，USB-C | ✅ 红激光 | ✅ 电阻式点火器 | UV、RGB 补光、磁吸帽夹、营地灯、IP68 | 钥匙扣级，约 40 g | ~$30 / ¥200 内 |',
+    '| ARCTO 4-in-1（Kickstarter、iXBT 报道） | 2026-02 众筹，2026-03 发货 | 300 lm 无极变焦 | ❌ | ✅ 双电弧（弧温 2000°C） | 精密指南针、蜂鸣警报+频闪、IP67、3500 mAh | 160×20 mm 笔形，75 g | 众筹 $29 起 |',
+  ].join('\n')
+  const md5 = [
+    '| 产品 | 手电 | 激光 | 点火器 | 价格 |',
+    '|---|---|---|---|---|',
+    '| Weltool K3 Ultra | 800 lm，USB-C | ✅ 红激光 | ✅ 电阻式点火器 | ~$30 / ¥200 内 |',
+    '| ARCTO 4-in-1 | 300 lm 无极变焦 | ❌ | ✅ 双电弧 | 众筹 $29 起 |',
+  ].join('\n')
+
+  it('8-column tables degrade to per-row cards (never fragmented)', () => {
+    const out = renderMarkdown(md8)
+    // 卡片模式：字段整行、无表格竖线碎片
+    expect(out).toContain('产品：Weltool K3 Ultra')
+    expect(out).toContain('激光：✅ 红激光')
+    expect(out).toContain('附加功能：UV、RGB 补光、磁吸帽夹、营地灯、IP68')
+    expect(out).not.toContain('│')
+  })
+
+  it('≤6-column tables: thin cells stay single-line, table fits the pane', () => {
+    const out = renderMarkdown(md5)
+    const laser = out.split('\n').find(l => l.includes('红激光'))
+    expect(laser).toBeDefined()
+    expect(laser!.includes('✅ 红激光')).toBe(true)   // ✅ 与文字同线，不被拆碎
+    const widest = Math.max(...out.split('\n').map(l => displayWidth(l)))
+    expect(widest).toBeLessThanOrEqual(102)
+    // 数据行不换行（每产品 1 物理行）
+    // 表头 1 行 + 每产品 1 行（首行断言含表头，共 3）
+    const dataLines = out.split('\n').filter(l => l.includes('│') && !l.includes('─'))
+    expect(dataLines.length).toBeLessThanOrEqual(3)
   })
 })
