@@ -162,14 +162,20 @@ class CommandSweepTest(unittest.TestCase):
     def test_sweep(self):
         failures = []
         for probe_input, patterns, post_esc in PROBES:
-            before = self._visible()
+            # 0.9.5: banner 常驻 Static 头——从「新行」判定里剔除 banner 艺术行
+            # （它们永远在场，会污染 diff 与 got 样本）。
+            def is_banner(row: str) -> bool:
+                r = row.strip()
+                return ('██' in r) or ('╔' in r and '═' in r) or r.startswith('Kiro CLI')
+            before = '\n'.join(r for r in self._visible().split('\n') if not is_banner(r))
             self.tui.type(probe_input, delay=0.01)
             self.tui.drain(0.35)
             self.tui.write(b'\r')
             self.tui.drain(1.6)
             after = self._visible()
-            new_rows = [row.strip() for row in after.split('\n')
-                        if row.strip() and row.strip() not in before.split('\n')]
+            after_rows = [row for row in after.split('\n') if row.strip() and not is_banner(row)]
+            new_rows = [row.strip() for row in after_rows
+                        if row.strip() not in before.split('\n')]
             joined = '\n'.join(new_rows)
             # Pattern match on the RECENT screen (the last 12 non-empty rows):
             # with a long transcript, content diffs are unstable because old

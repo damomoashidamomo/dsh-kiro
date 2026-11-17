@@ -8,6 +8,13 @@ export const changelogCommand: CommandDefinition = {
       kind: 'success',
       text: [
         'dsh-kiro changelog:',
+        '  0.9.5 修「logo 显示两秒就没了」：',
+        '        - 根因：banner 闪烁 ~1.4s 后要从活动区搬进 Static 转录头，但系统',
+        '          消息（已切换到 kiro-loop）已先冲刷进 Static——header 被「前插」',
+        '          进已冲刷数组，Static 只打印新尾部 → banner 永不进静态区，活动',
+        '          区又把它擦掉',
+        '        - 修复：banner 从第一帧起就是 Static 转录头（永久驻留），退役易碎',
+        '          的活动区闪烁动画；实测启动 0.5s/5.5s/发消息后三个时点均在屏',
         '  0.9.4 表格可读性（方案 A+B+D，用户实测反馈）：',
         '        - A 智能列预算：瘦列（✅/❌/短词/价格）永不换行、超宽截断加…；',
         '          换行预算只留给最胖的 3 列——旧实现等比压缩全列导致 8 列表',

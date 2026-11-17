@@ -494,15 +494,13 @@ export function App({ controller, seedTask, activeAgentName, onSubmit, fileSearc
 
   return (
     <Box flexDirection="column" height="100%">
-      {splashSettled ? null : (
-        <Box flexDirection="column">
-          <Text>{liveSplash ?? splash}</Text>
-        </Box>
-      )}
+      {/* 0.9.5: banner 从第一帧起就是 Static 转录头，永久驻留。旧实现 settled
+          时把 header 前插进已冲刷的 Static 数组，Static 只打印新尾部 →
+          banner 被擦掉（"logo 显示两秒就没了"的根源）。 */}
       <Transcript
         expandTools={expandTools}
         messages={state.messages}
-        header={splashSettled ? { kind: 'splash', key: 'splash', content: splash } : undefined}
+        header={{ kind: 'splash', key: 'splash', content: splash }}
       />
       <ProgressOverlay
         toolName={activeToolName}
