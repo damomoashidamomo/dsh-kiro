@@ -11,6 +11,7 @@ import { helpCommand } from './help'
 import { clearCommand } from './clear'
 import { quitCommand } from './quit'
 import { chatCommand } from './chat'
+import { copyCommand } from './copy'
 import { contextCommand } from './context'
 import { agentCommand } from './agent'
 import { modelCommand } from './model'
@@ -47,6 +48,7 @@ import { loopCommand } from './loop'
 
 /** Catalog of all slash commands shipped with dsh-kiro. */
 export const ALL_COMMANDS: readonly CommandDefinition[] = [
+  copyCommand,
   helpCommand,
   clearCommand,
   quitCommand,

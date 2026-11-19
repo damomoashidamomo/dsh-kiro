@@ -7,6 +7,7 @@
  */
 
 import { Static, Box, Text } from 'ink'
+import { recordCodeBlock } from '../runtime/code-registry'
 import { Message } from './Message'
 import type { Message as MessageRecord } from '../runtime/types'
 
@@ -37,6 +38,8 @@ type StaticItem = SplashItem | (MessageRecord & { key: string })
  * app may only mount ONE `<Static>` subtree. The splash banner is therefore
  * passed in as a `header` item here instead of rendering its own `<Static>`.
  */
+const registeredKeys = new Set<string>()
+
 export function Transcript({ messages, header, expandTools = false }: TranscriptProps): JSX.Element {
   // Stable partition: a message is finished only once `streaming` clears.
   // Static takes the all-finished PREFIX — everything up to (exclusive) the
@@ -50,6 +53,20 @@ export function Transcript({ messages, header, expandTools = false }: Transcript
   const live = firstStreaming >= 0
     ? messages.slice(firstStreaming)
     : []
+  // B+C（0.9.6）：finished 消息里的围栏代码块登记一次（按 key 去重）——
+  // /copy 按编号取回；≥5 行的长块自动落盘 .dsh-kiro/commands/。
+  for (const m of finished) {
+    const key = m.id
+    if (registeredKeys.has(key)) continue
+    if (typeof m.text === 'string' && m.text.includes('```')) {
+      registeredKeys.add(key)
+      const fence = /```([A-Za-z0-9_+-]*)\n([\s\S]*?)```/gu
+      for (const match of m.text.matchAll(fence)) {
+        recordCodeBlock(match[1] ?? '', (match[2] ?? '').replace(/\n$/u, ''))
+      }
+
+    }
+  }
   const staticItems: StaticItem[] = [
     ...(header ? [header] : []),
     ...finished.map((m, i) => ({ ...m, key: `${m.id}-${i}` })),

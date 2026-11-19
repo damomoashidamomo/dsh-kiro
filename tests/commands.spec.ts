@@ -22,11 +22,12 @@ describe('renderMarkdown', () => {
     expect(out).toContain('italic')
   })
 
-  it('renders fenced code blocks with frame', () => {
+  it('renders fenced code blocks BORDERLESS (0.9.6: clean rectangle-select copy)', () => {
     const out = renderMarkdown('```ts\nconst x = 1\n```')
-    expect(out).toContain('╭')
-    expect(out).toContain('╰')
+    expect(out).toContain('▌ ts')            // 语言角标做分隔
     expect(out).toContain('const x = 1')
+    expect(out).not.toContain('╭')           // 盒子会污染终端选择
+    expect(out).not.toContain('│')
   })
 
   it('renders unordered lists', () => {
@@ -134,5 +135,37 @@ describe('parseModel', () => {
       provider: 'provider',
       model: 'model',
     })
+  })
+})
+
+describe('code-registry (0.9.6 B+C)', () => {
+  it('records blocks, numbers them, spills long ones to disk', async () => {
+    const { recordCodeBlock, recentCodeBlocks, codeBlockByN, resetCodeBlocks } = await import('../src/runtime/code-registry')
+    resetCodeBlocks()
+    const fs = await import('node:fs')
+    const path = await import('node:path')
+    const os = await import('node:os')
+    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'dsh-code-reg-'))
+    const a = recordCodeBlock('bash', 'kubectl get nodes', tmp)
+    expect(a.n).toBe(1)
+    expect(a.file).toBeUndefined()          // 1 行不落盘
+    const long = ['#!/bin/bash', 'set -e', 'echo one', 'echo two', 'echo three', 'echo four'].join('\n')
+    const b = recordCodeBlock('bash', long, tmp)
+    expect(b.n).toBe(2)
+    expect(b.file).toBeDefined()            // ≥5 行落盘
+    const { readFileSync } = fs
+    expect(readFileSync(b.file!, 'utf8')).toContain('#!/bin/bash')
+    expect(recentCodeBlocks(10)[0]!.n).toBe(2)  // 新→旧
+    expect(codeBlockByN(1)!.text).toBe('kubectl get nodes')
+    resetCodeBlocks()
+    fs.rmSync(tmp, { recursive: true, force: true })
+  })
+
+  it('osc52Sequence wraps base64 payload in the standard escape', async () => {
+    const { osc52Sequence } = await import('../src/runtime/code-registry')
+    const seq = osc52Sequence('ls')
+    expect(seq.startsWith('\x1b]52;c;')).toBe(true)
+    expect(seq.endsWith('\x07')).toBe(true)
+    expect(seq).toContain(Buffer.from('ls', 'utf8').toString('base64'))
   })
 })

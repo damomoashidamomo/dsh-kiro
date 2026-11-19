@@ -228,22 +228,15 @@ function renderCode(token: Tokens.Code, maxWidth?: number): string {
     return `${taken}…`
   }
   const lines = highlighted.split('\n').map(truncateToWidth)
-  // Box-drawing frame: top + body + bottom.
-  const visibleWidth = Math.min(
-    (maxWidth ?? renderWidth()) - 6,
-    Math.max(...lines.map(line => displayWidth(stripAnsi(line))), 1),
-  )
-  const frame = '─'.repeat(visibleWidth + 2)
-  const header = token.lang !== undefined && token.lang !== ''
-    ? palette.dim(` ╭─ ${token.lang} `) + palette.dim('─'.repeat(Math.max(0, visibleWidth + 2 - 5 - token.lang.length)))
-    : palette.dim(` ╭${frame}╮`)
-  const body = lines.map(line => {
-    const visible = displayWidth(stripAnsi(line))
-    const padLen = Math.max(0, visibleWidth - visible)
-    return palette.dim(' │ ') + line + ' '.repeat(padLen) + palette.dim(' │')
-  }).join('\n')
-  const footer = palette.dim(` ╰${frame}╯`)
-  return `${header}\n${body}\n${footer}`
+  // 0.9.6 方案 A：无边框代码块——语法高亮保留，语言角标做视觉分隔。
+  // 旧实现的 ╭─╮│╰ 盒子会污染终端矩形选择（复制命令带着 │ 前缀和框线，
+  // 用户工程场景"贴到目标终端"每次都要手动清理）。裸文本行 + 固定缩进，
+  // 矩形选择即得干净命令；角标 `▌ bash` 灰色低调不抢高亮。
+  const label = token.lang !== undefined && token.lang !== ''
+    ? palette.dim(`▌ ${token.lang}`)
+    : palette.dim('▌')
+  const body = lines.map(line => `  ${line}`).join('\n')
+  return `${label}\n${body}`
 }
 
 /** Render a heading with an underline. */
