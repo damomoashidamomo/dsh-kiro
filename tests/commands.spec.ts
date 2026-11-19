@@ -169,3 +169,28 @@ describe('code-registry (0.9.6 B+C)', () => {
     expect(seq).toContain(Buffer.from('ls', 'utf8').toString('base64'))
   })
 })
+
+describe('compact consecutive code runs (0.9.7)', () => {
+  it('merges same-language fences into one labeled unit with zero blank lines between commands', () => {
+    const md = ['```bash', 'kubectl get cs', '```', '', '```bash', 'kubectl top nodes', '```'].join('\n')
+    const out = renderMarkdown(md)
+    expect(out).toContain('▌ bash ×2')
+    expect(out).toContain('kubectl get cs')
+    expect(out).toContain('kubectl top nodes')
+    // 合并单元内命令之间无空行
+    const between = out.split('kubectl get cs')[1]?.split('kubectl top nodes')[0] ?? ''
+    expect(between.trim()).toBe('')
+  })
+
+  it('single code block keeps the plain label (no ×1)', () => {
+    const out = renderMarkdown('```bash\nls\n```')
+    expect(out).toContain('▌ bash')
+    expect(out).not.toContain('×1')
+  })
+
+  it('mixed languages still merge with a plain ×N label', () => {
+    const md = ['```bash\nls\n```', '', '```python\nprint(1)\n```'].join('\n')
+    const out = renderMarkdown(md)
+    expect(out).toContain('×2')
+  })
+})

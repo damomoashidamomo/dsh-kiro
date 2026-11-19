@@ -463,7 +463,52 @@ function renderTableGrid(token: Tokens.Table, maxWidth?: number): string {
 
 /** Render any sequence of block tokens. */
 function renderTokens(tokens: Tokens.Generic[], maxWidth?: number): string {
-  return tokens.map(token => renderBlock(token, maxWidth)).join('\n\n')
+  // 0.9.7 紧凑化：连续代码块合并渲染——单一角标 `▌ bash ×3`，命令行紧凑
+  // 排布（块间零空行）。模型常把 N 条命令拆成 N 个围栏，逐块空行+角标把
+  // 13 条命令拉成一屏多，用户实测过松。
+  const parts: string[] = []
+  let i = 0
+  while (i < tokens.length) {
+    const token = tokens[i]!
+    if (token.type === 'code') {
+      const run: Array<{ lang: string; text: string }> = []
+      let j = i
+      // 连续代码块之间夹的空白 token（空行）不切断合并——marked 会把
+      // 围栏间的空行产成 type:'space'。
+      while (j < tokens.length) {
+        const tok = tokens[j]!
+        if (tok.type === 'space') { j += 1; continue }
+        if (tok.type !== 'code') break
+        const code = tok as Tokens.Code
+        run.push({ lang: (code.lang ?? '').trim(), text: code.text ?? '' })
+        j += 1
+      }
+      if (run.length > 1) {
+        parts.push(renderCodeRun(run, maxWidth))
+        i = j
+        continue
+      }
+    }
+    parts.push(renderBlock(token, maxWidth))
+    i += 1
+  }
+  return parts.join('\n\n')
+}
+
+/** 渲染连续多个代码块为一个紧凑单元：单一角标 + 逐行命令。 */
+function renderCodeRun(run: readonly { lang: string; text: string }[], maxWidth?: number): string {
+  const lang0 = run[0]!.lang
+  const sameLang = run.every(r => r.lang === lang0)
+  const lines: string[] = []
+  for (const block of run) {
+    for (const line of block.text.split('\n')) lines.push(line)
+  }
+  const label = sameLang && lang0 !== '' ? `▌ ${lang0} ×${run.length}` : `▌ ×${run.length}`
+  const merged = renderCode({ type: 'code', raw: '', lang: lang0, text: lines.join('\n') } as unknown as Tokens.Code, maxWidth)
+  // renderCode 的角标在第一行（▌ lang）——替换成 ×N 版本
+  const firstNewline = merged.indexOf('\n')
+  const body = firstNewline >= 0 ? merged.slice(firstNewline + 1) : ''
+  return `${label}\n${body}`
 }
 
 /** Render a single block token. */
