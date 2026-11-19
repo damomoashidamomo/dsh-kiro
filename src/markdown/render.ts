@@ -232,11 +232,10 @@ function renderCode(token: Tokens.Code, maxWidth?: number): string {
   // 旧实现的 ╭─╮│╰ 盒子会污染终端矩形选择（复制命令带着 │ 前缀和框线，
   // 用户工程场景"贴到目标终端"每次都要手动清理）。裸文本行 + 固定缩进，
   // 矩形选择即得干净命令；角标 `▌ bash` 灰色低调不抢高亮。
-  const label = token.lang !== undefined && token.lang !== ''
-    ? palette.dim(`▌ ${token.lang}`)
-    : palette.dim('▌')
-  const body = lines.map(line => `  ${line}`).join('\n')
-  return `${label}\n${body}`
+  // 0.9.8：零装饰顶格——无角标、无缩进（用户全屏框选复制诉求：
+  // 粘贴产物要么 # 注释要么可执行命令，任何装饰行/前导空格都碍事）。
+  // 语法高亮保留。
+  return lines.join('\n')
 }
 
 /** Render a heading with an underline. */
@@ -244,9 +243,9 @@ function renderHeading(token: Tokens.Heading): string {
   const level = Math.min(Math.max(token.depth, 1), 6)
   const text = renderInline(token.tokens ?? [])
   const hashes = '#'.repeat(level)
-  if (level <= 2) {
-    return palette.heading(`${hashes} ${text}`) + '\n' + palette.accent('─'.repeat(stripAnsi(text).length + level + 1))
-  }
+  void level
+  // 0.9.8：标题不再画下划线（横线是屏幕全选复制时的污染源）。
+  return palette.heading(`${hashes} ${text}`)
   return palette.heading(`${hashes} ${text}`)
 }
 
@@ -492,7 +491,27 @@ function renderTokens(tokens: Tokens.Generic[], maxWidth?: number): string {
     parts.push(renderBlock(token, maxWidth))
     i += 1
   }
-  return parts.join('\n\n')
+  // 0.9.8：标题块与后续代码块之间不留空行（工程清单场景：## 节 → 命令
+  // 紧贴，全屏框选复制时中间无空行）。其余块间保持单空行。
+  // space token 渲染成空 part——剔除（否则在标题与命令间顶出一个空行）。
+  const cleanParts = parts.filter(part => part.trim() !== '')
+  parts.length = 0
+  parts.push(...cleanParts)
+  let out = ''
+  for (let k = 0; k < parts.length; k += 1) {
+    const cur = parts[k]!
+    // 向前越过 space token 找真正的上一个块（marked 会在块间产 space）
+    void tokens
+    const prev = parts[k - 1] ?? ''
+    const prevIsHeading = /^#{1,6} /u.test(stripAnsi(prev).split('\n')[0] ?? '')
+    const curIsCode = true
+    if (k > 0 && prevIsHeading && curIsCode) {
+      out += '\n' + cur
+    } else {
+      out += (out === '' ? '' : '\n\n') + cur
+    }
+  }
+  return out
 }
 
 /** 渲染连续多个代码块为一个紧凑单元：单一角标 + 逐行命令。 */
@@ -503,12 +522,10 @@ function renderCodeRun(run: readonly { lang: string; text: string }[], maxWidth?
   for (const block of run) {
     for (const line of block.text.split('\n')) lines.push(line)
   }
-  const label = sameLang && lang0 !== '' ? `▌ ${lang0} ×${run.length}` : `▌ ×${run.length}`
-  const merged = renderCode({ type: 'code', raw: '', lang: lang0, text: lines.join('\n') } as unknown as Tokens.Code, maxWidth)
-  // renderCode 的角标在第一行（▌ lang）——替换成 ×N 版本
-  const firstNewline = merged.indexOf('\n')
-  const body = firstNewline >= 0 ? merged.slice(firstNewline + 1) : ''
-  return `${label}\n${body}`
+  void sameLang
+  void lang0
+  // 0.9.8：合并块走同一条零装饰管线（renderCode 已无角标/缩进）。
+  return renderCode({ type: 'code', raw: '', lang: lang0, text: lines.join('\n') } as unknown as Tokens.Code, maxWidth)
 }
 
 /** Render a single block token. */

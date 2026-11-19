@@ -10,24 +10,22 @@ import {
 } from '../src/runtime/input'
 
 describe('renderMarkdown', () => {
-  it('renders headings with underline', () => {
-    const out = renderMarkdown('# Title\n\nbody')
+  it('renders headings WITHOUT underline (0.9.8: rules pollute copy)', () => {
+    const out = renderMarkdown('# Title\nbody')
     expect(out).toContain('# Title')
-    expect(out).toContain('─')
+    expect(out).not.toContain('─')
   })
-
   it('renders bold and italic via ANSI', () => {
     const out = renderMarkdown('**bold** *italic*')
     expect(out).toContain('bold')
     expect(out).toContain('italic')
   })
 
-  it('renders fenced code blocks BORDERLESS (0.9.6: clean rectangle-select copy)', () => {
+  it('renders fenced code blocks ZERO-DECORATION (0.9.8: flush, no label)', () => {
     const out = renderMarkdown('```ts\nconst x = 1\n```')
-    expect(out).toContain('▌ ts')            // 语言角标做分隔
-    expect(out).toContain('const x = 1')
-    expect(out).not.toContain('╭')           // 盒子会污染终端选择
-    expect(out).not.toContain('│')
+    expect(out.trim()).toBe('const x = 1')   // 顶格、无角标、无缩进、无框
+    expect(out).not.toContain('▌')
+    expect(out).not.toContain('╭')
   })
 
   it('renders unordered lists', () => {
@@ -171,26 +169,56 @@ describe('code-registry (0.9.6 B+C)', () => {
 })
 
 describe('compact consecutive code runs (0.9.7)', () => {
-  it('merges same-language fences into one labeled unit with zero blank lines between commands', () => {
+  it('merges same-language fences flush with zero blank lines between commands', () => {
     const md = ['```bash', 'kubectl get cs', '```', '', '```bash', 'kubectl top nodes', '```'].join('\n')
     const out = renderMarkdown(md)
-    expect(out).toContain('▌ bash ×2')
     expect(out).toContain('kubectl get cs')
     expect(out).toContain('kubectl top nodes')
-    // 合并单元内命令之间无空行
     const between = out.split('kubectl get cs')[1]?.split('kubectl top nodes')[0] ?? ''
     expect(between.trim()).toBe('')
+    expect(out).not.toContain('▌')
   })
 
-  it('single code block keeps the plain label (no ×1)', () => {
+  it('single code block renders flush with no label at all', () => {
     const out = renderMarkdown('```bash\nls\n```')
-    expect(out).toContain('▌ bash')
+    expect(out.trim()).toBe('ls')
+    expect(out).not.toContain('▌')
     expect(out).not.toContain('×1')
   })
 
-  it('mixed languages still merge with a plain ×N label', () => {
+  it('mixed languages merge flush (commands adjacent, no labels)', () => {
     const md = ['```bash\nls\n```', '', '```python\nprint(1)\n```'].join('\n')
     const out = renderMarkdown(md)
-    expect(out).toContain('×2')
+    const lines = out.split('\n').filter(l => l.trim() !== '')
+    expect(lines).toEqual(['ls', 'print(1)'])
+  })
+})
+
+describe('copy-paste purity (0.9.8: full-screen rectangle select)', () => {
+  it('every rendered line is a bash comment or a flush command — no rules/labels/indents/blanks', () => {
+    const md = [
+      '## 1. 节点与系统状态', '',
+      '```bash', 'kubectl get nodes -o wide', '```', '',
+      '```bash', 'uptime', '```', '',
+      '## 4. VIP', '',
+      '```bash', 'systemctl is-active keepalived haproxy', '```',
+    ].join('\n')
+    const out = renderMarkdown(md)
+    const lines = out.split('\n')
+    // 全屏框选 → 粘贴产物：空行剔除后每行要么 # 开头要么顶格命令
+    for (const line of lines) {
+      if (line.trim() === '') continue
+      // 要么 # 注释（标题），要么顶格命令——绝无第三种（横线/角标/缩进）
+      const isComment = line.startsWith('#')
+      const isFlush = !line.startsWith(' ')
+      expect(isComment || isFlush).toBe(true)
+      expect(line).not.toContain('─')
+      expect(line).not.toContain('▌')
+    }
+    // 标题与命令之间无空行
+    const h1 = lines.findIndex(l => l.startsWith('## 1'))
+    expect(lines[h1 + 1]).toBe('kubectl get nodes -o wide')
+    const h4 = lines.findIndex(l => l.startsWith('## 4'))
+    expect(lines[h4 + 1]).toBe('systemctl is-active keepalived haproxy')
   })
 })
