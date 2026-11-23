@@ -67,8 +67,11 @@ dsh --profile kiro --resume-picker
 # Use a custom agent (lives under .dsh-kiro/agents/ or ~/.dsh-kiro/agents/)
 dsh --profile kiro --agent backend-specialist
 
-# Run non-interactively (CI-friendly)
+# Run non-interactively (CI-friendly): the answer goes to stdout
 dsh --profile kiro --no-interactive "refactor: extract a foo() helper"
+
+# Same, machine-readable (text + tool calls + failure) and script-friendly
+dsh --profile kiro --no-interactive "list the pods" -f json
 
 # List models and exit
 dsh --profile kiro --list-models
@@ -92,7 +95,7 @@ dsh --profile kiro --list-models
 | `--mode <vibe\|spec>` | Agent mode |
 | `-a, --trust-all-tools` | Pre-trust every built-in tool |
 | `--trust-tools <list>` | Pre-trust a comma-separated tool list |
-| `--no-interactive` | Run non-interactively, then exit |
+| `--no-interactive` | Run the task, print the answer to stdout, exit (`0` answered, `1` failed) |
 | `-f, --format <plain\|json\|json-pretty>` | Output format for non-interactive mode |
 | `--require-mcp-startup` | Fail boot if an MCP server does not start |
 | `--tui` / `--legacy` | TUI (default) or legacy surface |

@@ -135,6 +135,15 @@ export class KiroLoopDriver {
   private steering: string[] = []
   private traceLog: Array<{ at: number; text: string }> = []
 
+  /**
+   * 0.9.10: failure text from the most recent turn (`undefined` when it
+   * completed). The turn-enclosed catch used to swallow the reason into a
+   * system notice only — scripted (`--no-interactive`) callers then saw an
+   * empty answer with exit code 0, so `headless-llm`'s stdout contract looked
+   * like "the model said nothing" instead of "the provider refused".
+   */
+  lastTurnFailure: string | undefined
+
   /** T1: recent loop trace entries (newest last), for /loop trace. */
   trace(limit = 40): readonly { at: number; text: string }[] {
     return this.traceLog.slice(-limit)
@@ -181,6 +190,7 @@ export class KiroLoopDriver {
   /** Run one full turn (inner tool loop until the model stops calling tools). */
   async runTurn(userText: string): Promise<void> {
     if (this.abort !== undefined) return
+    this.lastTurnFailure = undefined
     const llm = this.llm
     if (llm === undefined) throw new Error('kiro-loop: llm 服务不可用')
     this.abort = new AbortController()
@@ -226,6 +236,8 @@ export class KiroLoopDriver {
       emit({ type: 'turn/end', seq: 9, data: { reason: { kind: 'completed' } } })
     } catch (error) {
       const aborted = this.abort?.signal.aborted === true
+      // Only real failures are recorded: a user cancellation is not one.
+      if (!aborted) this.lastTurnFailure = error instanceof Error ? error.message : String(error)
       emit({
         type: 'turn/end',
         seq: 9,

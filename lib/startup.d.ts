@@ -13,6 +13,7 @@
  *
  * @module @damomoashidamomo/dsh-kiro/startup
  */
+import { Command } from 'commander';
 import type { Context } from '@deepseek-ai/cordis';
 declare module '@deepseek-ai/cordis' {
     interface Context {
@@ -79,5 +80,18 @@ export interface KiroStartup {
     /** Workspace override (--cwd): chdir before the session is created. */
     readonly workspaceDir: string | undefined;
 }
+/** Construct the Kiro TUI commander program (exported for the parse tests). */
+export declare function kiroCommand(): Command;
+/**
+ * Parse one Commander program into a typed {@link KiroStartup}. Throws when
+ * a flag carries an invalid value; Commander handles help/version/rejection
+ * internally so we never see those here.
+ *
+ * Exported as the CLI-parse test seam (0.9.10): the `--no-interactive` flag
+ * mapping is exactly the kind of thing that silently rots.
+ */
+export declare function readStartup(program: Command): KiroStartup;
+/** Validate flag combinations before publishing (exported for the parse tests). */
+export declare function validate(startup: KiroStartup, program: Command): void;
 /** Mount the kiro-startup plugin. */
 export declare function apply(ctx: Context): void;

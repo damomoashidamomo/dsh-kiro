@@ -23,7 +23,13 @@ import { SessionController } from './session-controller'
 import type { KiroStartup } from '../startup'
 import { createApprovalAnswerer } from './approval-answerer'
 import { createQuestionAnswerer } from './question-answerer'
-import { GUARDRAIL_TEXT } from '../guardrail'
+import { composeKiroSystemPrompt } from './system-prompt'
+import {
+  collectNonInteractiveReport,
+  formatNonInteractiveReport,
+  nonInteractiveFailed,
+  nonInteractiveFailureLines,
+} from './non-interactive'
 import type { ApprovalOutcomeLike, ApprovalRequestLike } from './approval-answerer'
 import { routeTurnInput } from './turn-input'
 import { detectEffortHint, resolveAutoEffort } from './effort-keywords'
@@ -355,28 +361,20 @@ async function mount(ctx: Context, startup: KiroStartup): Promise<void> {
         | { applicable?: readonly SteeringFile[] }
         | undefined
       const steeringText = composeSteeringPrompt(steering?.applicable ?? [])
-      const persona = personaRef.current
-      const personaPrompt = persona?.prompt !== undefined && persona.prompt.trim() !== ''
-        ? ['', `## 当前智能体预设：${persona.name ?? 'custom'}`, persona.prompt.trim()]
-        : []
       // 启用技能目录常驻系统提示（业界标准做法）：模型每回合都看得到有哪些
       // 技能、何时加载；正文仍按需经 skill 工具加载；禁用技能不出现。
       const skillsCatalog = (ctx as unknown as { get?: <T>(k: string) => T }).get?.('kiroSkillSelection') as
         | { list?: () => readonly { name: string; description: string; enabled: boolean }[] }
         | undefined
       const enabledSkills = (skillsCatalog?.list?.() ?? []).filter((skill) => skill.enabled)
-      const skillsSection = enabledSkills.length > 0
-        ? ['', '## 可用技能目录（凡任务/检索匹配时，先用 skill 工具加载对应技能再行动）',
-           ...enabledSkills.map((skill) => `- ${skill.name}：${skill.description}`)]
-        : []
-      return [
-        'You are a coding agent running inside the Kiro TUI for DeepSeek Harness.',
-        `Your working directory is ${process.cwd()}.`,
-        ...personaPrompt,
-        ...skillsSection,
-        '', GUARDRAIL_TEXT,
-        ...(steeringText !== '' ? ['', steeringText] : []),
-      ].join('\n')
+      // 0.9.10：装配与顺序抽到 composeKiroSystemPrompt（顺序由单测钉死）：
+      // 身份两行 → 内置护栏 → persona → 技能目录 → steering。
+      return composeKiroSystemPrompt({
+        cwd: process.cwd(),
+        persona: personaRef.current,
+        skills: enabledSkills,
+        steering: steeringText,
+      })
     },
     selection: () => ({
       provider: selected.current?.provider ?? 'deepseek',
@@ -769,6 +767,10 @@ async function mount(ctx: Context, startup: KiroStartup): Promise<void> {
     },
   })
 
+  // 0.9.10：非交互模式需要"等回合真的跑完"。kiro 循环不走平台 agent loop，
+  // 所以 agent.whenIdle() 会立刻返回、什么都还没产出——回合 promise 在这里留一手。
+  let pendingTurn: Promise<void> | undefined
+
   // Slash command dispatch: every text submission routes through the parser.
   const submit = (text: string): void => {
     const trimmed = text.trim()
@@ -902,7 +904,7 @@ async function mount(ctx: Context, startup: KiroStartup): Promise<void> {
         loopDriver.steer(trimmed)
         return
       }
-      void loopDriver.runTurn(trimmed)
+      pendingTurn = loopDriver.runTurn(trimmed)
       return
     }
     const message = createUserMessage({
@@ -928,8 +930,21 @@ async function mount(ctx: Context, startup: KiroStartup): Promise<void> {
       process.exit(2)
     }
     submit(startup.task)
-    await agentRef.current?.whenIdle()
-    process.exit(0)
+    if (pendingTurn !== undefined) await pendingTurn
+    else await agentRef.current?.whenIdle()
+    // 0.9.10：非交互模式原先直接 exit(0)、什么都不打印——`-f plain` 永远是
+    // 空输出，A3 headless 兜底（靠 stdout 取回答）因此完全不可用。现在把
+    // 助手回答按格式写到 stdout；失败回合写 stderr 并以非零码退出。
+    const report = collectNonInteractiveReport(controller.getState().messages, loopDriver.lastTurnFailure)
+    const formatted = formatNonInteractiveReport(report, startup.format ?? 'plain')
+    if (formatted !== '') process.stdout.write(formatted)
+    const failed = nonInteractiveFailed(report)
+    if (failed) {
+      const lines = nonInteractiveFailureLines(report)
+      process.stderr.write(`${lines.length > 0 ? lines.join('\n') : 'non-interactive turn produced no answer'}\n`)
+    }
+    // stdout 是管道时 exit() 会丢数据：回调里再退出。
+    process.stdout.write('', () => { process.exit(failed ? 1 : 0) })
     return
   }
 

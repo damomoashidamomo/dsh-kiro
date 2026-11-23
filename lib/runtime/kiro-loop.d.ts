@@ -107,6 +107,14 @@ export declare class KiroLoopDriver {
     }[]): void;
     private steering;
     private traceLog;
+    /**
+     * 0.9.10: failure text from the most recent turn (`undefined` when it
+     * completed). The turn-enclosed catch used to swallow the reason into a
+     * system notice only — scripted (`--no-interactive`) callers then saw an
+     * empty answer with exit code 0, so `headless-llm`'s stdout contract looked
+     * like "the model said nothing" instead of "the provider refused".
+     */
+    lastTurnFailure: string | undefined;
     /** T1: recent loop trace entries (newest last), for /loop trace. */
     trace(limit?: number): readonly {
         at: number;

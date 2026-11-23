@@ -66,8 +66,11 @@ dsh --profile kiro --resume-picker
 # 用自定义 agent(在 .dsh-kiro/agents/ 或 ~/.dsh-kiro/agents/ 下)
 dsh --profile kiro --agent backend-specialist
 
-# 非交互(CI 友好)
+# 非交互(CI 友好):回答写到 stdout
 dsh --profile kiro --no-interactive "重构:提取 foo() 辅助函数"
+
+# 机器可读(回答 + 工具调用 + 失败原因),便于脚本消费
+dsh --profile kiro --no-interactive "列出所有 pod" -f json
 
 # 列出模型后退出
 dsh --profile kiro --list-models

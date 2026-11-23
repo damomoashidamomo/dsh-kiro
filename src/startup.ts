@@ -97,8 +97,8 @@ export interface KiroStartup {
   readonly workspaceDir: string | undefined
 }
 
-/** Construct the Kiro TUI commander program. */
-function kiroCommand(): Command {
+/** Construct the Kiro TUI commander program (exported for the parse tests). */
+export function kiroCommand(): Command {
   const cmd = new Command()
     .name('dsh --profile kiro')
     .description('Launch the dsh-kiro TUI — Kiro-CLI-compatible agent for DeepSeek Harness.')
@@ -144,8 +144,11 @@ Examples:
  * Parse one Commander program into a typed {@link KiroStartup}. Throws when
  * a flag carries an invalid value; Commander handles help/version/rejection
  * internally so we never see those here.
+ *
+ * Exported as the CLI-parse test seam (0.9.10): the `--no-interactive` flag
+ * mapping is exactly the kind of thing that silently rots.
  */
-function readStartup(program: Command): KiroStartup {
+export function readStartup(program: Command): KiroStartup {
   const opts = program.opts<{
     resume?: boolean
     resumeId?: string
@@ -163,6 +166,13 @@ function readStartup(program: Command): KiroStartup {
     trustAllTools?: boolean
     trustTools?: string
     noInteractive?: boolean
+    /**
+     * `--no-interactive` is declared as a negatable flag, so Commander records
+     * it as `interactive: false` — `noInteractive` itself is never set (0.9.10
+     * fix: reading only `noInteractive` silently made the whole non-interactive
+     * path dead code, and `-f/--format` always failed its validation).
+     */
+    interactive?: boolean
     format?: 'plain' | 'json' | 'json-pretty'
     requireMcpStartup?: boolean
     tui?: boolean
@@ -219,7 +229,9 @@ function readDefaultAgent(cwd: string): string | undefined {
     mode: opts.mode,
     trustAllTools: opts.trustAllTools === true,
     trustTools: trustList,
-    noInteractive: opts.noInteractive === true,
+    // 0.9.10：`--no-interactive` 是负向 flag（Commander → interactive:false），
+    // 只读 opts.noInteractive 会让非交互模式永远不生效（-f 校验必然报错）。
+    noInteractive: opts.noInteractive === true || opts.interactive === false,
     format: opts.format,
     requireMcpStartup: opts.requireMcpStartup === true,
     tui: opts.tui !== false,
@@ -229,8 +241,8 @@ function readDefaultAgent(cwd: string): string | undefined {
   }
 }
 
-/** Validate flag combinations before publishing. */
-function validate(startup: KiroStartup, program: Command): void {
+/** Validate flag combinations before publishing (exported for the parse tests). */
+export function validate(startup: KiroStartup, program: Command): void {
   if (startup.resume && startup.resumeId !== undefined) {
     program.error('error: --resume and --resume-id are mutually exclusive')
   }
