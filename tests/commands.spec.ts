@@ -222,3 +222,29 @@ describe('copy-paste purity (0.9.8: full-screen rectangle select)', () => {
     expect(lines[h4 + 1]).toBe('systemctl is-active keepalived haproxy')
   })
 })
+
+describe('oversize-spill (0.9.9: >100-col single lines spill to disk)', () => {
+  it('a >100-col one-liner spills even though it is only 1 line', async () => {
+    const { recordCodeBlock, resetCodeBlocks } = await import('../src/runtime/code-registry')
+    const fs = await import('node:fs')
+    const path = await import('node:path')
+    const os = await import('node:os')
+    resetCodeBlocks()
+    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'dsh-spill-'))
+    const long = `helm get values difyaas -n difyaas -a -o json | python3 -c 'import json,sys;w=lambda o,p="":[w(v,p+"."+k if p else k) for k,v in o.items()] or [print(x) for x in w(json.load(sys.stdin))'`
+    expect(long.length).toBeGreaterThan(100)
+    const entry = recordCodeBlock('bash', long, tmp)
+    expect(entry.file).toBeDefined()
+    expect(fs.readFileSync(entry.file!, 'utf8')).toContain('helm get values')
+    fs.rmSync(tmp, { recursive: true, force: true })
+    resetCodeBlocks()
+  })
+
+  it('a short 1-liner does NOT spill', async () => {
+    const { recordCodeBlock, resetCodeBlocks } = await import('../src/runtime/code-registry')
+    resetCodeBlocks()
+    const entry = recordCodeBlock('bash', 'kubectl get nodes', '/tmp')
+    expect(entry.file).toBeUndefined()
+    resetCodeBlocks()
+  })
+})

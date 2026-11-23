@@ -25,6 +25,8 @@ export interface CodeBlockEntry {
 
 /** 触发落盘的最小行数（含）——短命令直接 /copy，长脚本才落盘。 */
 const SPILL_LINES = 5
+/** 触发落盘的单行宽度（显示列）——超宽单行屏幕必然截断，必须落盘兜底。 */
+const SPILL_WIDTH = 100
 
 /** OSC 52 剪贴板写入序列（base64 负载）。 */
 export function osc52Sequence(text: string): string {
@@ -41,8 +43,9 @@ export function recordCodeBlock(lang: string, text: string, cwd: string = proces
   const n = entries.length + 1
   const at = Date.now()
   const lines = text.split('\n')
+  const oversize = lines.some(line => line.length > SPILL_WIDTH)
   let file: string | undefined
-  if (lines.length >= SPILL_LINES) {
+  if (lines.length >= SPILL_LINES || oversize) {
     try {
       const dir = join(cwd, '.dsh-kiro', 'commands')
       mkdirSync(dir, { recursive: true })
