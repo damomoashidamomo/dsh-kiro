@@ -100,6 +100,8 @@ export declare class KiroLoopDriver {
     reloadSettings(): void;
     /** Whether the Rust engine binary is available right now. */
     engineAvailable(): boolean;
+    /** Conversation depth the model sees (user+assistant entries), for tests and /loop trace. */
+    get memoryDepth(): number;
     /** Seed the chat history from already-rendered transcript messages. */
     seed(messages: readonly {
         kind: string;
@@ -107,6 +109,13 @@ export declare class KiroLoopDriver {
     }[]): void;
     private steering;
     private traceLog;
+    /**
+     * 0.9.11: wipe conversation memory. `/chat new` swaps the live session but
+     * used to leave `history` (and pending steering) holding the PREVIOUS
+     * session's conversation — the fresh session's first turn sent that stale
+     * context to the model.
+     */
+    reset(): void;
     /**
      * 0.9.10: failure text from the most recent turn (`undefined` when it
      * completed). The turn-enclosed catch used to swallow the reason into a

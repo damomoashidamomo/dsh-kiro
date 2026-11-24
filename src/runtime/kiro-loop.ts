@@ -125,6 +125,11 @@ export class KiroLoopDriver {
     return engineBinary() !== undefined
   }
 
+  /** Conversation depth the model sees (user+assistant entries), for tests and /loop trace. */
+  get memoryDepth(): number {
+    return this.history.length
+  }
+
   /** Seed the chat history from already-rendered transcript messages. */
   seed(messages: readonly { kind: string; text: string }[]): void {
     this.history = messages
@@ -134,6 +139,19 @@ export class KiroLoopDriver {
 
   private steering: string[] = []
   private traceLog: Array<{ at: number; text: string }> = []
+
+  /**
+   * 0.9.11: wipe conversation memory. `/chat new` swaps the live session but
+   * used to leave `history` (and pending steering) holding the PREVIOUS
+   * session's conversation — the fresh session's first turn sent that stale
+   * context to the model.
+   */
+  reset(): void {
+    this.history = []
+    this.steering.splice(0)
+    this.traceLog.splice(0)
+    this.lastTurnFailure = undefined
+  }
 
   /**
    * 0.9.10: failure text from the most recent turn (`undefined` when it

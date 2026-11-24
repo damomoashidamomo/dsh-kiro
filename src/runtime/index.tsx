@@ -230,6 +230,12 @@ async function mount(ctx: Context, startup: KiroStartup): Promise<void> {
    * Replay a persisted session's events into the transcript (resume). The
    * tail is kept (300 events) — the transcript is a viewport, not an archive.
    */
+  // 0.9.11：会话恢复/切换后必须同步 kiro-loop 的模型对话记忆。seedHistory
+  // 在 mount 早期（boot --resume）就可能被调，而 loopDriver 声明在后 —— 用
+  // 晚绑定 hook，声明后回填。
+  let seedLoopFromTranscript: (() => void) | undefined
+  let resetLoopHistory: (() => void) | undefined
+
   const seedHistory = async (id: string): Promise<number> => {
     try {
       const query = (ctx as unknown as { get?: <T>(key: string) => unknown }).get?.('sessionQuery') as
@@ -244,6 +250,10 @@ async function mount(ctx: Context, startup: KiroStartup): Promise<void> {
       const sidecar = readSidecarEvents(process.cwd()) as never[]
       const merged = [...events, ...sidecar]
       controller.replayEvents(merged.slice(-300))
+      // 0.9.11 修「恢复会话后模型失忆」：回放只进了界面转录，kiro-loop 的
+      // history 仍是空/旧会话的——模型看到的对话没有恢复。把回放后的转录
+      // 灌进驱动（boot --resume 与 /chat resume 共用此路径）。
+      seedLoopFromTranscript?.()
       return merged.length
     } catch {
       return 0
@@ -400,6 +410,13 @@ async function mount(ctx: Context, startup: KiroStartup): Promise<void> {
     },
   })
   let loopMode: 'dsh' | 'kiro' = 'dsh'
+  // 0.9.11：晚绑定 hook 回填（见 seedHistory 上方的说明）。boot --resume 在
+  // loopDriver 声明前就已 await seedHistory，那时只能跳过；默认 kiro 引擎的
+  // boot 切换（kiroEngineSwitch）随后会补 seed，路径仍然完整。
+  seedLoopFromTranscript = (): void => {
+    loopDriver.seed(controller.getState().messages.map((m) => ({ kind: m.kind as string, text: m.text })))
+  }
+  resetLoopHistory = (): void => { loopDriver.reset() }
   // 0.9.2: 当前会话是否已写入自动标题（会话切换时重置）
   let titleEmitted = false
   if (startup.engine === 'kiro') {
@@ -727,6 +744,8 @@ async function mount(ctx: Context, startup: KiroStartup): Promise<void> {
         })
         titleEmitted = false
         if (target === undefined) {
+          // 0.9.11：新会话必须清掉上一段对话的记忆，否则首回合把旧上下文发给模型。
+          resetLoopHistory?.()
           controller.pushSystem('◇ 已开启新会话（原会话已存盘）。')
           return { ok: true, message: '已开启新会话。' }
         }
@@ -756,6 +775,7 @@ async function mount(ctx: Context, startup: KiroStartup): Promise<void> {
             contextLimitTokens: bootModelWindow ?? undefined,
           })
           titleEmitted = false
+          resetLoopHistory?.()
           controller.pushSystem(`✗ 会话切换失败：${message}\n◇ 已开启新会话保底，TUI 保持可用。`)
           return { ok: false, message: `切换失败（已开新会话保底）：${message}` }
         } catch (recoveryError) {
@@ -811,7 +831,11 @@ async function mount(ctx: Context, startup: KiroStartup): Promise<void> {
             return
           }
           // /clear additionally wipes the visible transcript.
-          if (parsed.name === 'clear') controller.clearTranscript()
+          if (parsed.name === 'clear') {
+            controller.clearTranscript()
+            // 0.9.11：界面清了，模型记忆也要清——否则下一回合旧对话仍随请求发出。
+            resetLoopHistory?.()
+          }
           if (outcome.result.kind === 'success' && outcome.result.text !== undefined) {
             controller.pushSystem(outcome.result.text)
           } else if (outcome.result.kind === 'error') {
